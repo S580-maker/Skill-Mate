@@ -1,7 +1,7 @@
 const adminClient = window.skillmateSupabase;
 const adminStatus = document.querySelector("#admin-auth-status");
 
-function showAdminGate(message, withLogin = false) {
+function showAdminGate(message, withLogin = false, withReload = false) {
   adminStatus.replaceChildren(document.createTextNode(message));
   if (withLogin) {
     const link = document.createElement("a");
@@ -9,6 +9,23 @@ function showAdminGate(message, withLogin = false) {
     link.textContent = "Sign in as an administrator";
     adminStatus.append(link);
   }
+  if (withReload) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Try again";
+    button.addEventListener("click", () => window.location.reload());
+    adminStatus.append(button);
+  }
+}
+
+function withAdminTimeout(promise, message, timeoutMs = 15000) {
+  let timeoutId;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]).finally(() => window.clearTimeout(timeoutId));
 }
 
 function initials(name) {
@@ -195,22 +212,38 @@ async function protectAdminDashboard() {
     return;
   }
   try {
-    const { data: sessionData, error: sessionError } = await adminClient.auth.getSession();
+    adminStatus.textContent = "Checking your sign-in session…";
+    const { data: sessionData, error: sessionError } = await withAdminTimeout(
+      adminClient.auth.getSession(),
+      "Checking your sign-in session timed out. Check your connection and try again.",
+    );
     if (sessionError) throw sessionError;
     if (!sessionData.session) {
       window.location.replace("login.html?next=admin");
       return;
     }
-    await window.syncSkillmateServerSession(sessionData.session);
-    const { data: profile, error: profileError } = await adminClient.from("profiles")
-      .select("id, full_name, role").eq("id", sessionData.session.user.id).single();
+    adminStatus.textContent = "Securing your session…";
+    await withAdminTimeout(
+      window.syncSkillmateServerSession(sessionData.session),
+      "Securing your session timed out. Check your connection and try again.",
+    );
+    adminStatus.textContent = "Verifying administrator role…";
+    const { data: profile, error: profileError } = await withAdminTimeout(
+      adminClient.from("profiles").select("id, full_name, role").eq("id", sessionData.session.user.id).single(),
+      "Verifying your administrator role timed out. Check your connection and try again.",
+    );
     if (profileError) throw profileError;
     if (profile.role !== "admin") {
       window.location.replace("index.html");
       return;
     }
     window.adminProfile = profile;
-    await fetchAdminDashboard();
+    adminStatus.textContent = "Loading administrator dashboard…";
+    await withAdminTimeout(
+      fetchAdminDashboard(),
+      "Loading administrator data timed out. Check your Supabase connection and try again.",
+      30000,
+    );
     document.body.classList.remove("admin-locked");
     document.body.classList.add("admin-ready");
     adminStatus.hidden = true;
@@ -297,7 +330,11 @@ async function protectAdminDashboard() {
     });
   } catch (error) {
     console.error("Administrator access check failed.", error);
-    showAdminGate("Could not verify administrator access. Check your Supabase connection, then reload.");
+    showAdminGate(
+      `Could not verify administrator access. ${error.message || "Check your Supabase connection, then try again."}`,
+      false,
+      true,
+    );
   }
 }
 

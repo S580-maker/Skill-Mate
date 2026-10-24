@@ -6,9 +6,13 @@ let authMode = "signin";
 function setAuthMode(mode) {
   authMode = mode;
   const signup = mode === "signup";
-  document.querySelector("#signin-tab").classList.toggle("active", !signup);
+  const recovery = mode === "recovery";
+  const signin = !signup && !recovery;
+  document.title = signup ? "Create account | Skillmate" : recovery ? "Reset password | Skillmate" : "Sign in | Skillmate";
+  document.querySelector("#auth-tabs").hidden = recovery;
+  document.querySelector("#signin-tab").classList.toggle("active", signin);
   document.querySelector("#signup-tab").classList.toggle("active", signup);
-  document.querySelector("#signin-tab").setAttribute("aria-selected", String(!signup));
+  document.querySelector("#signin-tab").setAttribute("aria-selected", String(signin));
   document.querySelector("#signup-tab").setAttribute("aria-selected", String(signup));
   document.querySelector("#name-field").hidden = !signup;
   document.querySelector("#university-field").hidden = !signup;
@@ -16,12 +20,17 @@ function setAuthMode(mode) {
   document.querySelector("#auth-name").required = signup;
   document.querySelector("#auth-university").required = signup;
   document.querySelector("#auth-student-id").required = signup;
-  document.querySelector("#auth-password").autocomplete = signup ? "new-password" : "current-password";
-  document.querySelector("#auth-title").textContent = signup ? "Create your account" : "Welcome to Skillmate";
-  document.querySelector("#auth-intro").textContent = signup
+  document.querySelector("#auth-password").autocomplete = signin ? "current-password" : "new-password";
+  document.querySelector("#password-label").textContent = recovery ? "New password" : "Password";
+  document.querySelector("#auth-title").textContent = signup ? "Create your account" : recovery ? "Choose a new password" : "Welcome to Skillmate";
+  document.querySelector("#auth-intro").textContent = recovery
+    ? "Enter a new password for your Skillmate account."
+    : signup
     ? "Create one account to find services and offer your own skills. Add your university and student ID number; it will be stored privately but is not automatically verified."
     : "Sign in to find services, manage bookings, or earn with your skills.";
-  document.querySelector("#auth-submit-label").textContent = signup ? "Create account" : "Sign in";
+  document.querySelector("#auth-submit-label").textContent = signup ? "Create account" : recovery ? "Save new password" : "Sign in";
+  document.querySelector("#forgot-password").hidden = !signin;
+  document.querySelector("#return-to-signin").hidden = !recovery;
   authMessage.textContent = "";
   authMessage.classList.remove("success");
 }
@@ -59,7 +68,40 @@ async function loadGhanaianUniversities() {
 
 document.querySelector("#signin-tab").addEventListener("click", () => setAuthMode("signin"));
 document.querySelector("#signup-tab").addEventListener("click", () => setAuthMode("signup"));
+document.querySelector("#return-to-signin").addEventListener("click", () => {
+  window.history.replaceState(null, "", window.location.pathname);
+  setAuthMode("signin");
+});
+document.querySelector("#forgot-password").addEventListener("click", async () => {
+  const emailInput = document.querySelector("#auth-email");
+  if (!emailInput.reportValidity()) return;
+  if (!authClient) {
+    authMessage.textContent = window.skillmateSupabaseError || "Password recovery is unavailable because Supabase is not connected.";
+    return;
+  }
+
+  const button = document.querySelector("#forgot-password");
+  button.disabled = true;
+  button.textContent = "Sending reset link…";
+  authMessage.textContent = "";
+  authMessage.classList.remove("success");
+  try {
+    const { error } = await authClient.auth.resetPasswordForEmail(emailInput.value.trim(), {
+      redirectTo: new URL("login.html?mode=recovery", window.location.href).href,
+    });
+    if (error) throw error;
+    authMessage.textContent = "If an account uses this email, a password reset link has been sent. Check your inbox.";
+    authMessage.classList.add("success");
+  } catch (error) {
+    console.error("Could not send a Skillmate password reset email.", error);
+    authMessage.textContent = error.message || "Could not send a password reset email. Please try again.";
+  } finally {
+    button.disabled = false;
+    button.textContent = "Forgot password?";
+  }
+});
 loadGhanaianUniversities();
+setAuthMode(new URLSearchParams(window.location.search).get("mode") === "recovery" ? "recovery" : "signin");
 
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -78,7 +120,9 @@ authForm.addEventListener("submit", async (event) => {
   submit.disabled = true;
   submit.setAttribute("aria-busy", "true");
   submitSpinner.hidden = false;
-  submitLabel.textContent = authMode === "signup" ? "Creating your account…" : "Signing you in…";
+  submitLabel.textContent = authMode === "signup"
+    ? "Creating your account…"
+    : authMode === "recovery" ? "Saving your password…" : "Signing you in…";
   authMessage.textContent = "";
 
   try {
@@ -108,6 +152,16 @@ authForm.addEventListener("submit", async (event) => {
         await window.syncSkillmateServerSession(data.session);
         window.location.assign("index.html");
       }
+    } else if (authMode === "recovery") {
+      const { data: sessionData, error: sessionError } = await authClient.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!sessionData.session) throw new Error("This reset link is invalid or expired. Request a new password reset link.");
+      const { error } = await authClient.auth.updateUser({ password });
+      if (error) throw error;
+      const { data: refreshedSession, error: refreshedSessionError } = await authClient.auth.getSession();
+      if (refreshedSessionError) throw refreshedSessionError;
+      await window.syncSkillmateServerSession(refreshedSession.session);
+      window.location.assign("index.html");
     } else {
       const { data, error } = await authClient.auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -122,7 +176,9 @@ authForm.addEventListener("submit", async (event) => {
     submit.disabled = false;
     submit.removeAttribute("aria-busy");
     submitSpinner.hidden = true;
-    submitLabel.textContent = authMode === "signup" ? "Create account" : "Sign in";
+    submitLabel.textContent = authMode === "signup"
+      ? "Create account"
+      : authMode === "recovery" ? "Save new password" : "Sign in";
   }
 });
 

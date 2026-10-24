@@ -50,12 +50,19 @@ Add the corresponding callback URL, for example:
 http://localhost:3000/index.html
 ```
 
+Add this password-recovery redirect URL as well:
+
+```text
+http://localhost:3000/login.html?mode=recovery
+```
+
 For deployment, set the Site URL to your production HTTPS domain and add the corresponding callback URL, for example:
 
 ```text
 https://your-skillmate-domain.vercel.app
 https://your-skillmate-domain.vercel.app/index.html
 https://your-skillmate-domain.vercel.app/login.html
+https://your-skillmate-domain.vercel.app/login.html?mode=recovery
 ```
 
 Configure email/password sign-in and decide whether email confirmation is required. If confirmation is enabled, use the email link before signing in.

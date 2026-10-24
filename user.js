@@ -1,4 +1,15 @@
 const storageKey = "skillmate-student-demo-v1";
+const sidebar = document.querySelector("#sidebar");
+const menuToggle = document.querySelector("#menu-toggle");
+const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
+function closeSidebar(restoreFocus = false) {
+  sidebar.classList.remove("open");
+  document.body.classList.remove("sidebar-open");
+  sidebarBackdrop.hidden = true;
+  menuToggle.setAttribute("aria-expanded", "false");
+  menuToggle.setAttribute("aria-label", "Open navigation");
+  if (restoreFocus) menuToggle.focus();
+}
 const seedProviders = [
   { id: "daniel", name: "Daniel Owusu", initials: "DO", campus: "University of Ghana", course: "Computer Science · Level 300", category: "Tech help", service: "Laptop clean & tune-up", description: "A proper clean, fan check and a little tune-up to get your laptop running smoothly again.", price: 45, rating: 4.9, reviews: 28, bookings: 74, color: "blue", verified: true, available: "Today · 2 spots left", groups: true, portfolio: ["Laptop refresh", "Student tech clinic"] },
   { id: "akosua", name: "Akosua Appiah", initials: "AA", campus: "University of Ghana", course: "Business · Level 200", category: "Hair & beauty", service: "Braids & protective styling", description: "Neat, comfortable braids in my Legon hostel studio. Bring a friend and book together.", price: 120, rating: 5.0, reviews: 19, bookings: 51, color: "rose", verified: true, available: "Tomorrow · 3 spots left", groups: true, portfolio: ["Knotless braids", "Protective twists"] },
@@ -412,6 +423,12 @@ function renderBookingActivity() {
   );
 }
 function renderAll() {
+  document.querySelector("#marketplace-date").textContent = new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date()).toUpperCase();
   document.querySelector("#provider-setup-banner").hidden = state.services.length > 0;
   renderMarketplace();
   renderGroups();
@@ -694,8 +711,9 @@ function initializeDashboard() {
   const modeSwitch = document.querySelector("#mode-switch");
   const syncModeSwitchLabel = () => {
     const offering = modeSwitch.getAttribute("aria-pressed") === "true";
-    modeSwitch.setAttribute("aria-label", offering ? "Switch to student mode" : "Switch to provider mode");
-    modeSwitch.title = offering ? "Switch to student mode" : "Switch to provider mode";
+    const label = offering ? "Switch to finding services" : "Switch to offering services";
+    modeSwitch.setAttribute("aria-label", label);
+    modeSwitch.title = label;
   };
   document.querySelector(".demo-pill").textContent = appSupabase ? "CONNECTED ACCOUNT" : "DEMO · LOCAL DATA";
   document.querySelector("#signout-button").hidden = !appSupabase;
@@ -711,6 +729,7 @@ function initializeDashboard() {
   if (state.mode === "offer") {
     modeSwitch.setAttribute("aria-pressed", "true");
     document.querySelector("#mode-switch-label").textContent = "Find services";
+    document.querySelector("#mode-switch-short").textContent = "Find";
     document.querySelector("#mode-heading").textContent = "Need a hand with something on campus?";
     document.querySelector("#mode-description").textContent = "Browse student services, compare prices, and find someone to help.";
     document.querySelector("#banner-mode-button").textContent = "Browse services →";
@@ -775,8 +794,7 @@ function showPage(page) {
   document.querySelector("#breadcrumb-title").textContent = {
     home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers", provider: "My services", earnings: "Earnings",
   }[page];
-  document.querySelector("#sidebar").classList.remove("open");
-  document.querySelector("#menu-toggle").setAttribute("aria-expanded", "false");
+  closeSidebar(sidebar.contains(document.activeElement));
   if (page === "saved") renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders).filter((provider) => state.saved.includes(provider.id)));
   if (page === "messages") renderConversations();
   if (page === "provider") { renderListings(); renderPortfolio(); renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true }); }
@@ -978,16 +996,23 @@ document.querySelector("#search-suggestions").addEventListener("click", (event) 
   globalSearch.dispatchEvent(new Event("input", { bubbles: true }));
   globalSearch.focus();
 });
-document.querySelector("#menu-toggle").addEventListener("click", () => {
-  const isOpen = document.querySelector("#sidebar").classList.toggle("open");
-  document.querySelector("#menu-toggle").setAttribute("aria-expanded", String(isOpen));
+menuToggle.addEventListener("click", () => {
+  const isOpen = sidebar.classList.toggle("open");
+  document.body.classList.toggle("sidebar-open", isOpen);
+  sidebarBackdrop.hidden = !isOpen;
+  menuToggle.setAttribute("aria-expanded", String(isOpen));
+  menuToggle.setAttribute("aria-label", isOpen ? "Close navigation" : "Open navigation");
+  if (isOpen) sidebar.querySelector(".side-nav .nav-link").focus();
 });
+sidebarBackdrop.addEventListener("click", () => closeSidebar(true));
 document.querySelector("#mode-switch").addEventListener("click", () => {
   state.mode = state.mode === "find" ? "offer" : "find";
   saveState();
   const offer = state.mode === "offer";
   document.querySelector("#mode-switch").setAttribute("aria-pressed", String(offer));
   document.querySelector("#mode-switch-label").textContent = offer ? "Find services" : "Earn with skills";
+  document.querySelector("#mode-switch-short").textContent = offer ? "Find" : "Earn";
+  document.querySelector("#mode-switch").setAttribute("aria-label", offer ? "Switch to finding services" : "Switch to offering services");
   document.querySelector("#mode-heading").textContent = offer ? "Need a hand with something on campus?" : "Good at something? Make it your side hustle.";
   document.querySelector("#mode-description").textContent = offer ? "Browse student services, compare prices, and find someone to help." : "Create a profile, list your service, and accept bookings from other students.";
   document.querySelector("#banner-mode-button").textContent = offer ? "Browse services →" : "Set up your profile →";
@@ -1710,7 +1735,7 @@ document.addEventListener("keydown", (event) => {
     globalSearch.setAttribute("aria-expanded", "false");
     return;
   }
-  if (event.key === "Escape") { document.querySelector("#sidebar").classList.remove("open"); document.querySelector("#menu-toggle").setAttribute("aria-expanded", "false"); }
+  if (event.key === "Escape" && sidebar.classList.contains("open")) closeSidebar(true);
 });
 
 document.querySelector("#group-service").addEventListener("change", updateGroupPrice);

@@ -8,7 +8,7 @@
     <title>Skillmate | Student marketplace</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="user.css" />
     <script src="theme.js"></script>
   </head>
@@ -38,6 +38,7 @@
           <div class="profile"><div class="profile-avatar">AM</div><span class="profile-copy"><strong>Alex Morgan</strong><small>Student · University of Ghana</small></span><button class="icon-button" id="profile-menu" type="button" aria-label="Edit profile">⋯</button></div>
         </div>
       </aside>
+      <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close navigation" hidden></button>
       <main class="main-content">
         <header class="topbar">
           <button class="icon-button menu-toggle" id="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg></button>
@@ -47,7 +48,7 @@
             <div class="search-suggestions" id="search-suggestions" role="group" aria-label="Search suggestions" hidden></div>
             <button class="icon-button notification-button" id="notifications-button" type="button" aria-label="Notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></svg><span class="notification-dot"></span></button>
             <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to dark mode"><span data-theme-icon aria-hidden="true">☾</span></button>
-            <button class="mode-switch" id="mode-switch" type="button" aria-pressed="false"><span class="mode-switch-dot"></span><span id="mode-switch-label">Earn with skills</span></button>
+            <button class="mode-switch" id="mode-switch" type="button" aria-label="Switch to offering services" aria-pressed="false"><span class="mode-switch-dot"></span><span id="mode-switch-label">Earn with skills</span><span id="mode-switch-short" aria-hidden="true">Earn</span></button>
             <div class="topbar-avatar" aria-label="Alex Morgan">AM</div>
           </div>
         </header>
@@ -55,7 +56,7 @@
         <div class="page-content">
           <section class="view active-view" id="view-home" data-view="home">
             <div class="welcome-row">
-              <div><p class="eyebrow">SATURDAY, OCTOBER 24, 2026 <span class="demo-pill">STUDENT MARKETPLACE</span></p><h1>Good morning, Alex <span aria-hidden="true">✦</span></h1><p class="welcome-copy">Find your next campus go-to, or turn what you know into extra income.</p></div>
+              <div><p class="eyebrow"><time id="marketplace-date"></time> <span class="demo-pill">STUDENT MARKETPLACE</span></p><h1>Good morning, Alex <span aria-hidden="true">✦</span></h1><p class="welcome-copy">Find your next campus go-to, or turn what you know into extra income.</p></div>
               <button class="button button-primary" type="button" data-open="service-modal"><span aria-hidden="true">＋</span> Offer a skill</button>
             </div>
             <div class="mode-banner" id="provider-setup-banner" hidden><div class="mode-banner-icon">✦</div><div class="mode-banner-copy"><strong id="mode-heading">Have a skill? Earn money on campus.</strong><span id="mode-description">Create a profile, list your service, and accept bookings from other students.</span></div><button class="mode-banner-button" type="button" id="banner-mode-button">Set up your profile <span>→</span></button></div>

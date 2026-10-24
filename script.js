@@ -1,6 +1,7 @@
 const sidebar = document.querySelector("#sidebar");
 const menuToggle = document.querySelector("#menu-toggle");
 const sidebarClose = document.querySelector("#sidebar-close");
+const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
 const globalSearch = document.querySelector("#global-search");
 function getBookingRows() {
   return [...document.querySelectorAll("#booking-rows tr")];
@@ -18,20 +19,30 @@ function showToast(message) {
 
 menuToggle.addEventListener("click", () => {
   const isOpen = sidebar.classList.toggle("open");
+  document.body.classList.toggle("sidebar-open", isOpen);
+  sidebarBackdrop.hidden = !isOpen;
   menuToggle.setAttribute("aria-expanded", String(isOpen));
+  menuToggle.setAttribute("aria-label", isOpen ? "Close navigation" : "Open navigation");
+  if (isOpen) sidebar.querySelector(".side-nav .nav-link").focus();
 });
 
-sidebarClose.addEventListener("click", () => {
+function closeSidebar(restoreFocus = false) {
   sidebar.classList.remove("open");
+  document.body.classList.remove("sidebar-open");
+  sidebarBackdrop.hidden = true;
   menuToggle.setAttribute("aria-expanded", "false");
-});
+  menuToggle.setAttribute("aria-label", "Open navigation");
+  if (restoreFocus) menuToggle.focus();
+}
+
+sidebarClose.addEventListener("click", () => closeSidebar(true));
+sidebarBackdrop.addEventListener("click", () => closeSidebar(true));
 
 document.querySelectorAll(".side-nav .nav-link").forEach((link) => {
   link.addEventListener("click", () => {
     document.querySelectorAll(".side-nav .nav-link").forEach((item) => item.classList.remove("active"));
     link.classList.add("active");
-    sidebar.classList.remove("open");
-    menuToggle.setAttribute("aria-expanded", "false");
+    closeSidebar(true);
   });
 });
 
@@ -97,7 +108,6 @@ document.addEventListener("keydown", (event) => {
     globalSearch.focus();
   }
   if (event.key === "Escape") {
-    sidebar.classList.remove("open");
-    menuToggle.setAttribute("aria-expanded", "false");
+    if (sidebar.classList.contains("open")) closeSidebar(true);
   }
 });
