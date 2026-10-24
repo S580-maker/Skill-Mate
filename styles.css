@@ -386,6 +386,7 @@ th { color: #6d8090; font-size: 9px; }
 body.admin-locked .app-shell { visibility: hidden; }
 body.admin-ready .app-shell { visibility: visible; }
 body.admin-locked .auth-screen { display: grid; }
+.auth-screen[hidden] { display: none; }
 .auth-screen { position: fixed; z-index: 10000; inset: 0; display: grid; place-content: center; gap: 14px; padding: 24px; background: #f4f7fb; color: #36536b; font-size: 15px; font-weight: 600; text-align: center; }
 .auth-screen button, .auth-screen a { justify-self: center; }
 .auth-screen button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 7px; color: #fff; background: #22788c; font: inherit; cursor: pointer; }
