@@ -33,7 +33,7 @@
           <label id="student-id-field" hidden>Student ID number<input id="auth-student-id" autocomplete="off" minlength="3" maxlength="80" placeholder="Enter your student ID number" /><small class="auth-field-note">Your ID is stored privately with your account. It is not automatically verified.</small></label>
           <label>Email address<input id="auth-email" type="email" autocomplete="email" required placeholder="you@university.edu" /></label>
           <label>Password<input id="auth-password" type="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters" /></label>
-          <button class="button button-primary auth-submit" id="auth-submit" type="submit">Sign in</button>
+          <button class="button button-primary auth-submit" id="auth-submit" type="submit"><span class="auth-submit-spinner" aria-hidden="true" hidden></span><span id="auth-submit-label">Sign in</span></button>
           <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
         </form>
         <p class="auth-note">Use an email address you can access. We’ll send a confirmation email when you create an account.</p>

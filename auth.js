@@ -21,7 +21,7 @@ function setAuthMode(mode) {
   document.querySelector("#auth-intro").textContent = signup
     ? "Create one account to find services and offer your own skills. Add your university and student ID number; it will be stored privately but is not automatically verified."
     : "Sign in to find services, manage bookings, or earn with your skills.";
-  document.querySelector("#auth-submit").textContent = signup ? "Create account" : "Sign in";
+  document.querySelector("#auth-submit-label").textContent = signup ? "Create account" : "Sign in";
   authMessage.textContent = "";
   authMessage.classList.remove("success");
 }
@@ -73,7 +73,12 @@ authForm.addEventListener("submit", async (event) => {
   const university = document.querySelector("#auth-university").value.trim();
   const studentIdNumber = document.querySelector("#auth-student-id").value.trim();
   const submit = document.querySelector("#auth-submit");
+  const submitLabel = document.querySelector("#auth-submit-label");
+  const submitSpinner = submit.querySelector(".auth-submit-spinner");
   submit.disabled = true;
+  submit.setAttribute("aria-busy", "true");
+  submitSpinner.hidden = false;
+  submitLabel.textContent = authMode === "signup" ? "Creating your account…" : "Signing you in…";
   authMessage.textContent = "";
 
   try {
@@ -115,6 +120,9 @@ authForm.addEventListener("submit", async (event) => {
     authMessage.textContent = error.message || "We couldn’t sign you in. Check your details and try again.";
   } finally {
     submit.disabled = false;
+    submit.removeAttribute("aria-busy");
+    submitSpinner.hidden = true;
+    submitLabel.textContent = authMode === "signup" ? "Create account" : "Sign in";
   }
 });
 

@@ -90,8 +90,10 @@ let connectedProviders = [];
 let connectedServices = [];
 let selectedCategory = "All";
 let activeConversationId = null;
+let activeBookingFilter = "all";
 let toastTimer;
 let pendingActionCount = 0;
+let activityRefreshInProgress = false;
 const pendingProviderSaves = new Set();
 const ownProviderId = () => appUser?.id || "alex";
 const isOwnBooking = (booking) => booking.providerId === ownProviderId();
@@ -297,24 +299,46 @@ function formatDate(dateString) {
   if (!dateString) return "Date to be arranged";
   return new Date(`${dateString}T12:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }
+function localDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function parseLocalAppointment(dateValue, timeValue) {
+  const dateParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
+  const timeParts = /^(\d{2}):(\d{2})$/.exec(timeValue);
+  if (!dateParts || !timeParts) return null;
+  const [, year, month, day] = dateParts.map(Number);
+  const [, hour, minute] = timeParts.map(Number);
+  if (month < 1 || month > 12 || hour > 23 || minute > 59) return null;
+  const appointment = new Date(year, month - 1, day, hour, minute, 0, 0);
+  if (appointment.getFullYear() !== year || appointment.getMonth() !== month - 1
+    || appointment.getDate() !== day || appointment.getHours() !== hour || appointment.getMinutes() !== minute) {
+    return null;
+  }
+  return appointment;
+}
 function renderBookingList(targetId, list, options = {}) {
   const target = document.getElementById(targetId);
   if (!target) return;
   target.innerHTML = list.length ? list.map((booking) => {
     const provider = getProvider(booking.providerId);
     const status = booking.status;
-    const actions = options.provider
+    const providerView = options.provider || isOwnBooking(booking);
+    const actions = providerView
       ? `${booking.status === "Pending" ? `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button><button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : booking.status === "Confirmed" ? `<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : `<span class="status status-${status.toLowerCase()}">${escapeHTML(status)}</span>`}<button class="subtle-button" data-message="customer:${escapeHTML(booking.id)}">Message student</button>`
       : `${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-outline" data-review="${escapeHTML(booking.id)}">Leave a review</button>` : `<span class="status status-${status.toLowerCase()}">${escapeHTML(status)}</span>`}${!booking.groupId && ["Pending", "Confirmed"].includes(status) ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
     const location = status === "Confirmed" && booking.otherLocation
-      ? `<div class="booking-location"><strong>${options.provider ? "Customer" : "Provider"}’s hostel or campus: ${escapeHTML(booking.otherLocation)}</strong><small>Shared for this confirmed booking. Approximate distance isn’t available without map pins.</small></div>`
+      ? `<div class="booking-location"><strong>${providerView ? "Customer" : "Provider"}’s hostel or campus: ${escapeHTML(booking.otherLocation)}</strong><small>Shared for this confirmed booking. Approximate distance isn’t available without map pins.</small></div>`
       : "";
-    return `<article class="booking-card"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span></div><span>${options.provider ? `Requested by ${escapeHTML(booking.customer || state.profile.name)}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${booking.note ? `<small class="booking-note">“${escapeHTML(booking.note)}”</small>` : ""}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${!options.provider && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
+    return `<article class="booking-card"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${booking.note ? `<small class="booking-note">“${escapeHTML(booking.note)}”</small>` : ""}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
   }).join("") : '<div class="empty-card"><span>◷</span><strong>Nothing here just yet</strong><small>Your bookings and requests will appear here.</small></div>';
 }
-function renderConversations() {
+function renderConversations(options = {}) {
   const target = document.querySelector("#conversation-list");
   const conversations = state.messages.filter((chat) => !state.blocked.includes(chat.providerId));
+  document.querySelector("#message-count").textContent = String(conversations.length);
   if (!conversations.length) {
     target.innerHTML = '<div class="empty-card"><strong>No conversations yet</strong><small>Message a provider from Discover to get started.</small></div>';
     document.querySelector("#chat-panel").innerHTML = "";
@@ -326,16 +350,27 @@ function renderConversations() {
     const latest = chat.messages.at(-1);
     return `<button class="conversation-item ${chat.id === activeConversationId ? "conversation-active" : ""}" type="button" data-chat="${escapeHTML(chat.id)}"><span class="person-avatar avatar-${escapeHTML(provider?.color || "blue")}">${escapeHTML(provider?.initials || "SM")}</span><span class="conversation-copy"><strong>${escapeHTML(provider?.name || "Student")}</strong><small>${escapeHTML(latest?.text || "Start a conversation")}</small></span><span class="conversation-time">${escapeHTML(latest?.time || "")}</span></button>`;
   }).join("")}`;
-  renderChat();
+  renderChat(options);
 }
-function renderChat() {
+function renderChat(options = {}) {
   const chat = state.messages.find((item) => item.id === activeConversationId);
   const provider = chat && getProvider(chat.providerId);
   const target = document.querySelector("#chat-panel");
   if (!chat || !provider) { target.innerHTML = '<div class="empty-card"><strong>Choose a conversation</strong><small>Your student-to-student messages appear here.</small></div>'; return; }
+  const previousInput = options.preserveChatState ? target.querySelector('[name="message"]') : null;
+  const draft = previousInput?.value || "";
+  const hadFocus = previousInput === document.activeElement;
+  const previousMessages = options.preserveChatState ? target.querySelector("#chat-messages") : null;
+  const wasNearBottom = previousMessages
+    ? previousMessages.scrollHeight - previousMessages.scrollTop - previousMessages.clientHeight < 48
+    : true;
+  const previousScrollTop = previousMessages?.scrollTop || 0;
   target.innerHTML = `<div class="chat-header"><span class="person-avatar avatar-${escapeHTML(provider.color || "blue")}">${escapeHTML(provider.initials)}</span><span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? "✓ Campus verified" : escapeHTML(provider.campus)}</small></span><button class="subtle-button" type="button" data-report="${escapeHTML(provider.id)}">Safety</button></div><div class="chat-messages" id="chat-messages">${chat.messages.map((message) => `<div class="chat-message ${message.sender === "You" ? "chat-outgoing" : ""}"><span>${escapeHTML(message.text)}</span><small>${escapeHTML(message.time)}</small></div>`).join("")}</div><form class="chat-compose" id="chat-compose"><input name="message" maxlength="500" required placeholder="Write a message..." aria-label="Message" /><button class="button button-primary button-small" type="submit">Send</button></form>`;
+  const input = target.querySelector('[name="message"]');
+  input.value = draft;
+  if (hadFocus) input.focus({ preventScroll: true });
   const messages = document.querySelector("#chat-messages");
-  messages.scrollTop = messages.scrollHeight;
+  messages.scrollTop = wasNearBottom ? messages.scrollHeight : previousScrollTop;
 }
 function renderListings() {
   const target = document.querySelector("#listing-list");
@@ -352,19 +387,43 @@ function renderEarnings() {
   document.querySelector("#provider-earnings").textContent = currency(total);
   renderBookingList("earnings-list", completed, { provider: true });
 }
+function bookingsForActiveFilter() {
+  return state.bookings.filter((booking) => {
+    if (activeBookingFilter === "upcoming") return ["Confirmed", "Pending"].includes(booking.status);
+    if (activeBookingFilter === "requests") return booking.status === "Pending";
+    if (activeBookingFilter === "completed") return booking.status === "Completed";
+    return true;
+  });
+}
+function renderBookingActivity() {
+  renderBookingList("user-booking-list", bookingsForActiveFilter());
+  renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true });
+  renderEarnings();
+  const completedThisMonth = state.bookings.filter((booking) => isOwnBooking(booking)
+    && booking.status === "Completed" && booking.date?.slice(0, 7) === new Date().toISOString().slice(0, 7))
+    .reduce((sum, booking) => sum + Number(booking.price), 0);
+  document.querySelector("#provider-earnings").textContent = currency(completedThisMonth);
+  document.querySelector("#booking-count").textContent = String(
+    state.bookings.filter((booking) => !["Declined", "Cancelled", "Completed"].includes(booking.status)).length,
+  );
+  document.querySelector("#all-booking-count").textContent = String(state.bookings.length);
+  document.querySelector("#provider-request-count").textContent = String(
+    state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Pending").length,
+  );
+}
 function renderAll() {
   document.querySelector("#provider-setup-banner").hidden = state.services.length > 0;
   renderMarketplace();
   renderGroups();
-  renderBookingList("user-booking-list", state.bookings.filter((booking) => !isOwnBooking(booking)));
+  renderBookingList("user-booking-list", bookingsForActiveFilter());
   renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true });
   renderListings();
   renderPortfolio();
   renderConversations();
   renderEarnings();
-  const count = state.bookings.filter((booking) => !isOwnBooking(booking) && booking.status !== "Declined").length;
+  const count = state.bookings.filter((booking) => !["Declined", "Cancelled", "Completed"].includes(booking.status)).length;
   document.querySelector("#booking-count").textContent = count;
-  document.querySelector("#all-booking-count").textContent = state.bookings.filter((booking) => !isOwnBooking(booking)).length;
+  document.querySelector("#all-booking-count").textContent = state.bookings.length;
   document.querySelector("#provider-request-count").textContent = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Pending").length;
   document.querySelector("#active-listings-count").textContent = state.services.filter((service) => service.active).length;
   const verified = state.profile.verified;
@@ -532,6 +591,68 @@ async function refreshSupabaseState() {
     .filter((provider) => provider.id !== appUser.id)
     .map((provider) => `<option value="${escapeHTML(provider.id)}">${escapeHTML(provider.name)}</option>`).join("");
 }
+async function refreshLiveBookings() {
+  const [bookings, userLocations, ownReviews] = await Promise.all([
+    appSupabase.from("booking_directory").select("*").order("scheduled_at", { ascending: true }),
+    appSupabase.from("user_locations").select("user_id, location_name"),
+    appSupabase.from("reviews").select("booking_id"),
+  ]);
+  for (const result of [bookings, userLocations, ownReviews]) {
+    if (result.error) throw result.error;
+  }
+  state.bookings = (bookings.data || []).map((booking) => {
+    const otherUserId = booking.customer_id === appUser.id ? booking.provider_id : booking.customer_id;
+    const status = toLocalStatus(booking.status);
+    return {
+      id: booking.id, providerId: booking.provider_id, customerId: booking.customer_id,
+      customer: booking.customer_name || "Student", service: booking.service_title || "Service",
+      category: booking.category || "Other", price: Number(booking.agreed_price),
+      currency: booking.currency, date: booking.scheduled_at.slice(0, 10),
+      time: new Date(booking.scheduled_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      status, otherLocation: status === "Confirmed"
+        ? (userLocations.data || []).find((item) => item.user_id === otherUserId)?.location_name || ""
+        : "",
+      type: booking.group_booking_id ? "Group booking" : "Individual",
+      groupId: booking.group_booking_id, note: booking.note,
+      reviewed: (ownReviews.data || []).some((review) => review.booking_id === booking.id),
+    };
+  });
+  renderBookingActivity();
+}
+async function refreshLiveMessages() {
+  const { data: conversations, error: conversationsError } = await appSupabase
+    .from("conversation_directory")
+    .select("conversation_id, other_user_id, other_user_name");
+  if (conversationsError) throw conversationsError;
+  state.messages = await Promise.all((conversations || []).map(async (conversation) => {
+    const { data, error } = await appSupabase.from("messages")
+      .select("id, sender_id, body, created_at")
+      .eq("conversation_id", conversation.conversation_id)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return {
+      id: conversation.conversation_id,
+      providerId: conversation.other_user_id,
+      name: conversation.other_user_name,
+      messages: (data || []).map((message) => ({
+        sender: message.sender_id === appUser.id ? "You" : conversation.other_user_name,
+        text: message.body,
+        time: new Date(message.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      })),
+    };
+  }));
+  renderConversations({ preserveChatState: true });
+}
+async function refreshLiveActivity() {
+  if (!appSupabase || !appUser || document.hidden || pendingActionCount || activityRefreshInProgress) return;
+  activityRefreshInProgress = true;
+  try {
+    await refreshLiveBookings();
+    if (state.activePage === "messages") await refreshLiveMessages();
+  } finally {
+    activityRefreshInProgress = false;
+  }
+}
 function initialsFor(name = "Student") {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
@@ -586,7 +707,6 @@ function initializeDashboard() {
   populateServiceSelects();
   updateGroupPrice();
   renderAll();
-  document.querySelector("#booking-count").textContent = String(state.bookings.filter((booking) => !isOwnBooking(booking)).length);
   if (state.activePage && state.activePage !== "home") showPage(state.activePage);
   if (state.mode === "offer") {
     modeSwitch.setAttribute("aria-pressed", "true");
@@ -619,7 +739,9 @@ async function bootstrapStudentApp() {
   document.querySelector("#profile-email").value = state.profile.email;
   document.querySelector(".campus-card strong").textContent = state.profile.university || "Your campus";
   document.querySelector(".campus-card small").textContent = state.profile.course || "Student account";
-  document.querySelector("#booking-count").textContent = String(state.bookings.filter((booking) => booking.customerId === appUser.id).length);
+  document.querySelector("#booking-count").textContent = String(
+    state.bookings.filter((booking) => !["Declined", "Cancelled", "Completed"].includes(booking.status)).length,
+  );
   document.querySelector("#message-count").textContent = String(state.messages.length);
   showConnectedApp();
   appSupabase.auth.onAuthStateChange((event, session) => {
@@ -632,6 +754,14 @@ async function bootstrapStudentApp() {
       window.syncSkillmateServerSession(session).catch((syncError) => {
         console.error("Could not refresh the secure Skillmate session.", syncError);
       });
+    }
+  });
+  window.setInterval(() => {
+    refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate messages and bookings.", error));
+  }, 15000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate messages and bookings.", error));
     }
   });
 }
@@ -661,8 +791,8 @@ function openBooking(providerId) {
   document.querySelector("#booking-description").textContent = `Choose a service from ${provider.name}. You can confirm the details together in messages.`;
   document.querySelector("#booking-service").innerHTML = services.map((service) => `<option value="${escapeHTML(service.id)}">${escapeHTML(service.title)} · ${currency(service.price)}</option>`).join("");
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-  document.querySelector("#booking-date").min = new Date().toISOString().slice(0, 10);
-  document.querySelector("#booking-date").value = tomorrow.toISOString().slice(0, 10);
+  document.querySelector("#booking-date").min = localDateInputValue();
+  document.querySelector("#booking-date").value = localDateInputValue(tomorrow);
   openModal("booking-modal");
 }
 function openProviderProfile(providerId) {
@@ -788,9 +918,11 @@ document.addEventListener("click", (event) => {
   }
   if (modalId === "group-modal") {
     const date = document.querySelector("#group-date");
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateInputValue();
     date.min = today;
-    date.value = today;
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    date.value = localDateInputValue(tomorrow);
     updateGroupPrice();
   }
   openModal(modalId);
@@ -981,10 +1113,15 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
   const providerId = document.querySelector("#booking-provider-id").value;
   const service = providerServices(providerId).find((item) => item.id === document.querySelector("#booking-service").value);
   if (!service) { showToast("Choose an available service first."); return; }
+  const appointmentDate = document.querySelector("#booking-date").value;
+  const appointmentTime = document.querySelector("#booking-time").value;
+  const scheduledAt = parseLocalAppointment(appointmentDate, appointmentTime);
+  if (!scheduledAt || scheduledAt <= new Date()) {
+    showToast("Choose a future appointment date and time.");
+    return;
+  }
   if (appSupabase) {
     runAction(async () => {
-      const scheduledAt = new Date(`${document.querySelector("#booking-date").value}T${document.querySelector("#booking-time").value}`);
-      if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= new Date()) throw new Error("Choose a future appointment date and time.");
       const { error } = await appSupabase.from("bookings").insert({
         service_id: service.id, customer_id: appUser.id, provider_id: providerId,
         scheduled_at: scheduledAt.toISOString(), note: document.querySelector("#booking-note").value.trim(),
@@ -1001,7 +1138,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
   }
   state.bookings.unshift({
     id: `booking-${Date.now()}`, providerId, service: service.title, price: Number(service.price),
-    date: document.querySelector("#booking-date").value, time: document.querySelector("#booking-time").value,
+    date: appointmentDate, time: scheduledAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
     status: "Pending", type: "Individual", note: document.querySelector("#booking-note").value.trim(), reviewed: false, customer: state.profile.name,
   });
   saveState();
@@ -1020,12 +1157,15 @@ document.querySelector("#group-form").addEventListener("submit", (event) => {
   const provider = getProvider(providerId);
   const date = document.querySelector("#group-date").value;
   if (!provider || !service || !date) return;
+  const scheduledAt = parseLocalAppointment(date, "12:00");
+  if (!scheduledAt || scheduledAt <= new Date()) {
+    showToast("Choose a future group booking date.");
+    return;
+  }
   const groupPrice = Number(document.querySelector("#group-price").value);
   if (!Number.isFinite(groupPrice) || groupPrice < 1) { showToast("Enter a valid proposed price per student."); return; }
   if (appSupabase) {
     runAction(async () => {
-      const scheduledAt = new Date(`${date}T12:00:00`);
-      if (scheduledAt <= new Date()) throw new Error("Choose a future group booking date.");
       const { error } = await appSupabase.rpc("create_group_booking", {
         p_service_id: service.id, p_title: document.querySelector("#group-message").value.trim() || `${service.title} group booking`,
         p_invite_message: document.querySelector("#group-message").value.trim(),
@@ -1402,7 +1542,11 @@ document.querySelector("#blocked-list").addEventListener("click", (event) => {
 document.querySelector("#user-booking-list").addEventListener("click", (event) => {
   const messageButton = event.target.closest("[data-message]");
   if (messageButton) {
-    openMessage(messageButton.dataset.message, "customer");
+    const bookingId = messageButton.dataset.message.startsWith("customer:")
+      ? messageButton.dataset.message.slice("customer:".length)
+      : "";
+    const booking = state.bookings.find((item) => item.id === bookingId);
+    openMessage(messageButton.dataset.message, booking && isOwnBooking(booking) ? "customer" : "provider");
     return;
   }
   const decision = event.target.closest("[data-decision]");
@@ -1412,13 +1556,25 @@ document.querySelector("#user-booking-list").addEventListener("click", (event) =
     if (appSupabase) {
       runAction(async () => {
         await persistBookingStatus(booking.id, decision.dataset.decision);
-        showToast("Booking cancelled.");
-      }, "Could not cancel this booking.");
+        showToast(decision.dataset.decision === "Confirmed"
+          ? "Booking accepted. The student can see the confirmation."
+          : decision.dataset.decision === "Declined"
+            ? "Booking request declined."
+            : decision.dataset.decision === "Completed"
+              ? "Booking marked as completed."
+              : "Booking cancelled.");
+      }, "Could not update this booking.");
     } else {
-      booking.status = "Cancelled";
+      booking.status = decision.dataset.decision;
       saveState();
       renderAll();
-      showToast("Booking cancelled.");
+      showToast(decision.dataset.decision === "Confirmed"
+        ? "Booking accepted. The student can see the confirmation."
+        : decision.dataset.decision === "Declined"
+          ? "Booking request declined."
+          : decision.dataset.decision === "Completed"
+            ? "Booking marked as completed."
+            : "Booking cancelled.");
     }
     return;
   }
@@ -1504,15 +1660,8 @@ document.querySelector("#booking-tabs").addEventListener("click", (event) => {
   const button = event.target.closest("[data-booking-filter]");
   if (!button) return;
   document.querySelectorAll(".tab-button").forEach((tab) => tab.classList.toggle("active", tab === button));
-  const filter = button.dataset.bookingFilter;
-  const bookings = state.bookings.filter((booking) => {
-    if (isOwnBooking(booking)) return false;
-    if (filter === "upcoming") return ["Confirmed", "Pending"].includes(booking.status);
-    if (filter === "requests") return booking.status === "Pending";
-    if (filter === "completed") return booking.status === "Completed";
-    return true;
-  });
-  renderBookingList("user-booking-list", bookings);
+  activeBookingFilter = button.dataset.bookingFilter;
+  renderBookingList("user-booking-list", bookingsForActiveFilter());
 });
 document.querySelector("#earnings-export").addEventListener("click", () => {
   const completed = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Completed");
