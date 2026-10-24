@@ -62,7 +62,7 @@ Configure email/password sign-in and decide whether email confirmation is requir
 
 ## 5. Deploy to Vercel
 
-1. Import the GitHub repository into Vercel and leave the framework preset as **Other**. The static HTML, CSS, and JavaScript are served directly; no frontend build command or output directory is required.
+1. Import the GitHub repository into Vercel. `vercel.json` explicitly sets the framework preset to **Other**, so Vercel uses the static assets and root `api/` functions rather than treating the local Express development server as the deployed backend. The static HTML, CSS, and JavaScript are served directly; no frontend build command or output directory is required.
 2. In **Project Settings → Environment Variables**, add the following variables for Production (and Preview if you want preview deployments to connect to Supabase):
 
    ```text
