@@ -1,0 +1,73 @@
+(function initializeSkillmateSupabase() {
+  const config = window.SKILLMATE_SUPABASE_CONFIG;
+  if (!config?.url && !config?.anonKey) {
+    window.skillmateSupabase = null;
+    window.skillmateSupabaseError = "";
+    return;
+  }
+
+  if (!config.url || !config.anonKey) {
+    window.skillmateSupabase = null;
+    window.skillmateSupabaseError = "Set both SUPABASE_URL and SUPABASE_ANON_KEY in the server's .env file.";
+    return;
+  }
+
+  let projectUrl;
+  try {
+    projectUrl = new URL(config.url);
+  } catch {
+    window.skillmateSupabase = null;
+    window.skillmateSupabaseError = "The Supabase URL is invalid. Use the Project URL from Project Settings → API, not the database connection string.";
+    return;
+  }
+  const apiPath = projectUrl.pathname.replace(/\/+$/, "");
+  if (!["https:", "http:"].includes(projectUrl.protocol)
+    || projectUrl.hostname.includes("pooler")
+    || (apiPath !== "" && apiPath !== "/rest/v1")
+    || projectUrl.search
+    || projectUrl.hash) {
+    window.skillmateSupabase = null;
+    window.skillmateSupabaseError = "The Supabase URL must be the HTTPS Project URL from Project Settings → API, not a database pooler URL.";
+    return;
+  }
+
+  if (!window.supabase?.createClient) {
+    console.error("Supabase JS did not load. Check the network connection and script source.");
+    window.skillmateSupabase = null;
+    window.skillmateSupabaseError = "Supabase’s browser library did not load. Check your internet connection, then reload.";
+    return;
+  }
+
+  try {
+    window.skillmateSupabase = window.supabase.createClient(projectUrl.origin, config.anonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+      },
+    });
+    window.skillmateSupabaseError = "";
+  } catch (error) {
+    console.error("Could not initialize the Skillmate Supabase client.", error);
+    window.skillmateSupabase = null;
+    window.skillmateSupabaseError = "Could not initialize Supabase. Check that the Project URL and public key belong to the same project.";
+  }
+})();
+
+window.syncSkillmateServerSession = async function syncSkillmateServerSession(session) {
+  if (!session?.access_token) throw new Error("Sign in again to continue.");
+  const response = await fetch("/api/session", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.error || "Could not establish a secure Skillmate session.");
+  }
+};
+
+window.clearSkillmateServerSession = async function clearSkillmateServerSession() {
+  const response = await fetch("/api/session", { method: "DELETE", credentials: "same-origin" });
+  if (!response.ok) throw new Error("Could not clear the secure Skillmate session.");
+};

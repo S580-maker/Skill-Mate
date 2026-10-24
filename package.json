@@ -1,0 +1,21 @@
+{
+  "name": "skillmate",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Student services marketplace powered by Express and Supabase",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0"
+  }
+}

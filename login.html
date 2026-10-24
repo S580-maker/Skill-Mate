@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f7fb" />
+    <title>Sign in | Skillmate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="user.css" />
+    <link rel="stylesheet" href="auth.css" />
+    <script src="theme.js"></script>
+  </head>
+  <body>
+    <main class="auth-layout">
+      <button class="theme-toggle auth-theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to dark mode"><span data-theme-icon aria-hidden="true">☾</span></button>
+      <a class="brand auth-brand" href="index.html">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M8 16.2 13.1 21 24 10.5" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" /><path d="M16 2.8 27.5 9.4v13.2L16 29.2 4.5 22.6V9.4L16 2.8Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg></span>
+        <span class="brand-name">skillmate<span>.</span></span>
+      </a>
+      <section class="auth-card">
+        <p class="eyebrow">YOUR CAMPUS MARKETPLACE</p>
+        <h1 id="auth-title">Welcome to Skillmate</h1>
+        <p class="auth-intro" id="auth-intro">Sign in to find services, manage bookings, or earn with your skills.</p>
+        <div class="auth-tabs" role="tablist" aria-label="Sign in or create an account">
+          <button class="auth-tab active" id="signin-tab" type="button" role="tab" aria-selected="true">Sign in</button>
+          <button class="auth-tab" id="signup-tab" type="button" role="tab" aria-selected="false">Create account</button>
+        </div>
+        <form id="auth-form">
+          <label id="name-field" hidden>Your name<input id="auth-name" autocomplete="name" maxlength="80" placeholder="e.g. Alex Morgan" /></label>
+          <label id="university-field" hidden>Your university<input id="auth-university" autocomplete="organization" list="ghana-university-options" maxlength="120" placeholder="Start typing your university" /><datalist id="ghana-university-options"></datalist><small class="auth-field-note" id="university-directory-status">Type to search Ghanaian universities, or enter your school if it is not listed.</small></label>
+          <label id="student-id-field" hidden>Student ID number<input id="auth-student-id" autocomplete="off" minlength="3" maxlength="80" placeholder="Enter your student ID number" /><small class="auth-field-note">Your ID is stored privately with your account. It is not automatically verified.</small></label>
+          <label>Email address<input id="auth-email" type="email" autocomplete="email" required placeholder="you@university.edu" /></label>
+          <label>Password<input id="auth-password" type="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters" /></label>
+          <button class="button button-primary auth-submit" id="auth-submit" type="submit">Sign in</button>
+          <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
+        </form>
+        <p class="auth-note">Use an email address you can access. We’ll send a confirmation email when you create an account.</p>
+      </section>
+      <p class="auth-footer">For students, by students. <a href="index.html">Back to Skillmate</a></p>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="supabase-client.js"></script>
+    <script src="ghana-universities.js"></script>
+    <script src="auth.js"></script>
+  </body>
+</html>
