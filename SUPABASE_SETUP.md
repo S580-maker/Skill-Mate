@@ -1,6 +1,6 @@
 # Skillmate setup
 
-Skillmate runs as a Node.js/Express application. Supabase provides authentication, the database, and portfolio image storage; Express serves the app, loads configuration from `.env`, synchronizes authenticated sessions, and protects the administrator page server-side.
+Skillmate runs locally as a Node.js/Express application and can be deployed to Vercel with serverless API functions. Supabase provides authentication, the database, and portfolio image storage. Both hosting options load configuration from server-side environment variables, synchronize authenticated sessions, and protect the administrator page server-side.
 
 ## 1. Create a Supabase project
 
@@ -50,9 +50,34 @@ Add the corresponding callback URL, for example:
 http://localhost:3000/index.html
 ```
 
-For deployment, replace these with the real HTTPS domain and callback URL. Configure email/password sign-in and decide whether email confirmation is required. If confirmation is enabled, use the email link before signing in.
+For deployment, set the Site URL to your production HTTPS domain and add the corresponding callback URL, for example:
 
-## 5. Promote the first administrator
+```text
+https://your-skillmate-domain.vercel.app
+https://your-skillmate-domain.vercel.app/index.html
+https://your-skillmate-domain.vercel.app/login.html
+```
+
+Configure email/password sign-in and decide whether email confirmation is required. If confirmation is enabled, use the email link before signing in.
+
+## 5. Deploy to Vercel
+
+1. Import the GitHub repository into Vercel and leave the framework preset as **Other**. The static HTML, CSS, and JavaScript are served directly; no frontend build command or output directory is required.
+2. In **Project Settings → Environment Variables**, add the following variables for Production (and Preview if you want preview deployments to connect to Supabase):
+
+   ```text
+   SUPABASE_URL=https://your-project-id.supabase.co
+   SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
+   ```
+
+   Use the Supabase **Project URL** and public **anon/publishable** key. Do not add a service-role key. The app does not need a `PORT` variable on Vercel.
+3. Deploy the project. `vercel.json` routes the runtime Supabase configuration and session endpoints to Vercel Functions, and routes `/admin.html` through a server-side administrator-role check. The admin function includes the HTML file in its deployment bundle.
+4. Copy the final production domain from Vercel and add it to Supabase **Authentication → URL Configuration** as the Site URL. Add the exact production callback URLs shown above using your domain.
+5. Visit the Vercel URL, create/sign in to an account, and test the main marketplace and administrator route. Promote the intended admin account using the SQL in the next section.
+
+The repository includes Vercel configuration and does not include `.env` or local dependency files in Git. Changing Vercel environment variables requires a new deployment to take effect. Local development remains available with `npm start`.
+
+## 6. Promote the first administrator
 
 Create the intended administrator account through the app first. Then run this statement in the trusted Supabase SQL Editor, replacing the address:
 
@@ -66,12 +91,12 @@ where id = (
 );
 ```
 
-Sign in using **Admin dashboard** from the student app or visit `login.html?next=admin`. Express validates the Supabase session and checks the profile role before returning `admin.html`; the browser also checks the role before loading dashboard data. Never assign that role from browser-side code.
+Sign in using **Admin dashboard** from the student app or visit `login.html?next=admin`. The Express server locally and the Vercel function in production validate the Supabase session and check the profile role before returning `admin.html`; the browser also checks the role before loading dashboard data. Never assign that role from browser-side code.
 
 ## Security notes
 
-- The browser uses only the public anon key, served from the Express environment configuration. Row-level security is the data-access boundary for browser queries.
-- The administrator HTML route is not served to unauthenticated users or non-admin accounts. The server validates the Supabase access token and reads the account role using that user's token; no service-role key is needed.
+- The browser uses only the public anon key, served from Express locally or the Vercel configuration function in production. Row-level security is the data-access boundary for browser queries.
+- The administrator HTML route is not served to unauthenticated users or non-admin accounts. Express locally and the Vercel function validate the Supabase access token and read the account role using that user's token; no service-role key is needed.
 - Database rules verify that bookings match an active provider service, reviews match a completed booking, and blocks apply across discovery, booking, and messaging. Leaving a group as its host cancels the group and its pending appointments.
 - University suggestions are loaded from the public Hipolabs university directory, with a built-in Ghana list if the directory is unavailable. The school name can also be entered manually. The directory is for suggestions only and is not an accreditation or student-enrollment verification service.
 - Deploy the Express server behind HTTPS. Set `NODE_ENV=production` so the session cookie is Secure; if a trusted reverse proxy terminates TLS, set `TRUST_PROXY=1`.

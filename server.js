@@ -170,7 +170,7 @@ app.get("/admin.html", async (request, response) => {
     if (role !== "admin") return response.redirect(302, "/index.html");
 
     response.set("Cache-Control", "private, no-store");
-    return response.sendFile(path.join(projectRoot, "admin.html"));
+    return response.sendFile(path.join(projectRoot, "api", "_lib", "admin.html"));
   } catch (error) {
     console.error("Could not verify administrator access.", error);
     return response.status(503).send("Administrator access could not be verified. Please reload shortly.");
@@ -181,7 +181,7 @@ app.get("/", (_request, response) => response.redirect(302, "/login.html"));
 
 app.use((request, response, next) => {
   const pathname = decodeURIComponent(request.path);
-  if (/^\/(?:server\.js|package(?:-lock)?\.json|\.env(?:\..*)?|\.git(?:\/|$)|node_modules(?:\/|$)|supabase(?:\/|$))/i.test(pathname)) {
+  if (/^\/(?:api(?:\/|$)|server\.js|package(?:-lock)?\.json|\.env(?:\..*)?|\.git(?:\/|$)|node_modules(?:\/|$)|supabase(?:\/|$))/i.test(pathname)) {
     return response.sendStatus(404);
   }
   return next();
