@@ -410,6 +410,9 @@ textarea:focus-visible, summary:focus-visible {
   .conversation-item:hover { transform: translateX(2px); }
 }
 .view.active-view { animation: polish-view-in var(--base) var(--ease) both; }
+@media (max-width: 767px) {
+  .view.active-view:has(.messages-layout[data-chat-open="true"]) { animation: none; }
+}
 @keyframes polish-view-in {
   from { transform: translateY(8px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
