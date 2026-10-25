@@ -120,13 +120,43 @@ app.get("/supabase-config.js", (_request, response, next) => {
   }
 });
 
-app.get("/api/health", (_request, response, next) => {
+app.get("/api/health", async (_request, response) => {
+  let config;
   try {
-    getSupabaseConfig();
-    response.json({ status: "ok", supabaseConfigured: true });
-  } catch (error) {
-    next(error);
+    config = getSupabaseConfig();
+  } catch {
+    response.set("Cache-Control", "no-store");
+    return response.status(503).json({
+      status: "unavailable",
+      supabaseConfigured: false,
+      services: { auth: "unavailable", database: "unavailable" },
+    });
   }
+
+  const checkService = async (url) => {
+    try {
+      const result = await fetch(url, {
+        headers: { apikey: config.anonKey },
+        signal: AbortSignal.timeout(5000),
+      });
+      return result.ok ? "ok" : "unavailable";
+    } catch {
+      return "unavailable";
+    }
+  };
+  const [auth, database] = await Promise.all([
+    checkService(`${config.url}/auth/v1/health`),
+    checkService(`${config.url}/rest/v1/profiles?select=id&limit=0`),
+  ]);
+  const healthy = auth === "ok" && database === "ok";
+  response
+    .set("Cache-Control", "no-store")
+    .status(healthy ? 200 : 503)
+    .json({
+      status: healthy ? "ok" : "degraded",
+      supabaseConfigured: true,
+      services: { auth, database },
+    });
 });
 
 app.post(

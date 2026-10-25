@@ -136,7 +136,10 @@ async function loadOnboarding() {
 }
 
 async function saveOnboarding(skip = false) {
-  if (!currentUser || !onboardingClient) return;
+  if (!currentUser || !onboardingClient) {
+    setOnboardingError("Your session is unavailable. Sign in again before saving your profile.");
+    return;
+  }
   if (!skip && (!onboardingName.value.trim() || onboardingCampus.value.trim().length < 2)) {
     setOnboardingError("Enter your name and university or campus, or skip this step for now.");
     return;
@@ -204,5 +207,7 @@ loadOnboarding().catch((error) => {
     return;
   }
   onboardingSubmit.disabled = true;
+  document.querySelector("#onboarding-skip").disabled = true;
+  document.querySelector("#onboarding-skip-mobile").disabled = true;
   setOnboardingError(error.message || "Could not load your profile. Check your connection and try again.");
 });

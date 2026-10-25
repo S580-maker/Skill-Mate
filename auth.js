@@ -100,6 +100,14 @@ async function loadGhanaianUniversities() {
   const options = document.querySelector("#ghana-university-options");
   const status = document.querySelector("#university-directory-status");
   let universities = directory.fallback;
+  const renderOptions = () => {
+    options.replaceChildren(...universities.map((university) => {
+      const option = document.createElement("option");
+      option.value = university;
+      return option;
+    }));
+  };
+  renderOptions();
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 5000);
   try {
@@ -113,16 +121,12 @@ async function loadGhanaianUniversities() {
     if (!fetched.length) throw new Error("University directory returned no Ghanaian institutions.");
     universities = [...new Set([...fetched, ...directory.fallback])].sort((a, b) => a.localeCompare(b));
     status.textContent = "Search the Ghana university directory. If your school is missing, enter its name.";
-  } catch (error) {
-    console.warn("Could not load the live Ghana university directory; using the built-in list.", error);
+  } catch {
+    console.info("Using the built-in Ghana university list because the live directory is unavailable.");
     status.textContent = "Live school search is unavailable. Choose a suggestion or type your university name.";
   } finally {
     window.clearTimeout(timeout);
-    options.replaceChildren(...universities.map((university) => {
-      const option = document.createElement("option");
-      option.value = university;
-      return option;
-    }));
+    renderOptions();
   }
 }
 

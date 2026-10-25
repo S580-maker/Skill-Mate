@@ -49,6 +49,35 @@ function showAdminToast(message) {
   window.setTimeout(() => toast.classList.remove("visible"), 3000);
 }
 
+async function refreshAdminSystemStatus() {
+  const status = document.querySelector("#system-status");
+  const label = status.querySelector("span");
+  try {
+    const response = await fetch("/api/health", { cache: "no-store" });
+    const result = await response.json();
+    const authReady = result.services?.auth === "ok";
+    const databaseReady = result.services?.database === "ok";
+    if (response.ok && result.status === "ok" && authReady && databaseReady) {
+      status.dataset.status = "ok";
+      label.textContent = "All systems operational";
+      return;
+    }
+    status.dataset.status = "degraded";
+    const unavailable = [
+      !authReady && "authentication",
+      !databaseReady && "database",
+      !result.supabaseConfigured && "Supabase configuration",
+    ].filter(Boolean);
+    label.textContent = unavailable.length
+      ? `Service issue: ${unavailable.join(" and ")} unavailable`
+      : "Some services are unavailable";
+  } catch (error) {
+    console.error("Could not check Skillmate system status.", error);
+    status.dataset.status = "unavailable";
+    label.textContent = "System status unavailable";
+  }
+}
+
 async function fetchAdminDashboard() {
   const ninetyDaysAgo = new Date();
   const activityStart = new Date();
@@ -91,8 +120,6 @@ async function fetchAdminDashboard() {
   document.querySelector(".welcome-row h1").innerHTML = `Welcome, ${escapeAdminText(window.adminProfile.full_name)} <span aria-hidden="true">✦</span>`;
   document.querySelector(".profile-copy strong").textContent = window.adminProfile.full_name;
   document.querySelector(".profile-avatar").textContent = initials(window.adminProfile.full_name);
-  document.querySelector(".page-footer > span:last-child").lastChild.textContent = " Supabase account connected";
-
   const rows = bookings.data || [];
   document.querySelector("#booking-rows").innerHTML = rows.length ? rows.map((booking) => {
     const customer = booking.customer?.full_name || "Student account";
@@ -249,6 +276,8 @@ async function protectAdminDashboard() {
     document.body.classList.remove("admin-locked");
     document.body.classList.add("admin-ready");
     adminStatus.hidden = true;
+    refreshAdminSystemStatus();
+    window.setInterval(refreshAdminSystemStatus, 60000);
     const studentDashboardLink = document.createElement("a");
     studentDashboardLink.href = "index.html";
     studentDashboardLink.className = "student-dashboard-link";

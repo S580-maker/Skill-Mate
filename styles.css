@@ -275,6 +275,10 @@ td { padding: 10px 11px; border-top: 1px solid var(--border); color: var(--dark)
 .page-footer { display: flex; justify-content: space-between; padding: 3px 1px 0; color: var(--muted); font-size: 9px; }
 .page-footer > span:last-child { display: inline-flex; align-items: center; gap: 6px; }
 .online-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--main-soft); }
+#system-status { display: inline-flex; align-items: center; gap: 6px; }
+#system-status[data-status="ok"] .online-dot { background: var(--success); }
+#system-status[data-status="degraded"] .online-dot { background: var(--warning); }
+#system-status[data-status="unavailable"] .online-dot { background: var(--danger); }
 .toast { position: fixed; z-index: 50; right: 22px; bottom: 22px; max-width: calc(100vw - 32px); padding: 11px 15px; transform: translateY(15px); border: 1px solid var(--border); border-radius: 8px; color: var(--dark); background: var(--surface); box-shadow: 0 8px 30px color-mix(in srgb, var(--shadow-color) 12%, transparent); font-size: 11px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
 .toast.visible { transform: translateY(0); opacity: 1; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; clip-path: inset(50%); }
@@ -310,7 +314,7 @@ td { padding: 10px 11px; border-top: 1px solid var(--border); color: var(--dark)
 @media (max-width: 680px) {
   .topbar { height: 59px; padding: 0 15px; }
   .topbar-actions { gap: 8px; }
-  .search-box { width: 36px; justify-content: center; padding: 0; border-color: transparent; background: transparent; }
+  .search-box { width: 36px; min-width: 36px; flex: 0 0 36px; justify-content: center; padding: 0; border-color: transparent; background: transparent; }
   .search-box input, .search-box kbd { display: none; }
   .search-box > svg { width: 18px; }
   .search-box:focus-within { position: absolute; right: 102px; left: 56px; width: auto; justify-content: flex-start; padding: 0 9px; border-color: var(--border); background: var(--surface); }

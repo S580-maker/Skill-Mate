@@ -348,11 +348,13 @@ function renderBookingList(targetId, list, options = {}) {
 }
 function renderConversations(options = {}) {
   const target = document.querySelector("#conversation-list");
+  const layout = document.querySelector("#messages-layout");
   const conversations = state.messages.filter((chat) => !state.blocked.includes(chat.providerId));
   document.querySelector("#message-count").textContent = String(conversations.length);
   if (!conversations.length) {
+    layout.removeAttribute("data-chat-open");
     target.innerHTML = '<div class="empty-card"><strong>No conversations yet</strong><small>Message a provider from Discover to get started.</small></div>';
-    document.querySelector("#chat-panel").innerHTML = "";
+    document.querySelector("#chat-panel").innerHTML = '<div class="chat-empty-state" aria-live="polite">No messages yet 👋 Say hi!</div>';
     return;
   }
   if (!conversations.some((chat) => chat.id === activeConversationId)) activeConversationId = conversations[0].id;
@@ -376,7 +378,10 @@ function renderChat(options = {}) {
     ? previousMessages.scrollHeight - previousMessages.scrollTop - previousMessages.clientHeight < 48
     : true;
   const previousScrollTop = previousMessages?.scrollTop || 0;
-  target.innerHTML = `<div class="chat-header"><span class="person-avatar avatar-${escapeHTML(provider.color || "blue")}">${escapeHTML(provider.initials)}</span><span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? "✓ Campus verified" : escapeHTML(provider.campus)}</small></span><button class="subtle-button" type="button" data-report="${escapeHTML(provider.id)}">Safety</button></div><div class="chat-messages" id="chat-messages">${chat.messages.map((message) => `<div class="chat-message ${message.sender === "You" ? "chat-outgoing" : ""}"><span>${escapeHTML(message.text)}</span><small>${escapeHTML(message.time)}</small></div>`).join("")}</div><form class="chat-compose" id="chat-compose"><input name="message" maxlength="500" required placeholder="Write a message..." aria-label="Message" /><button class="button button-primary button-small" type="submit">Send</button></form>`;
+  const messageContent = chat.messages.length
+    ? chat.messages.map((message) => `<div class="chat-message ${message.sender === "You" ? "chat-outgoing" : ""}"><div class="chat-bubble"><span class="chat-message-text">${escapeHTML(message.text)}</span><small class="chat-time">${escapeHTML(message.time)}</small></div></div>`).join("")
+    : '<div class="chat-empty-state">No messages yet 👋 Say hi!</div>';
+  target.innerHTML = `<div class="chat-header"><button class="chat-back" type="button" data-chat-back aria-label="Back to conversations">←</button><span class="person-avatar avatar-${escapeHTML(provider.color || "blue")}">${escapeHTML(provider.initials)}</span><span class="chat-contact"><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? "✓ Campus verified" : "Campus verification pending"}</small></span><button class="subtle-button" type="button" data-report="${escapeHTML(provider.id)}">Safety</button></div><div class="chat-messages" id="chat-messages" aria-live="polite" aria-relevant="additions text"><div class="chat-date-row"><span class="chat-date-pill">Today</span></div>${messageContent}</div><form class="chat-compose" id="chat-compose"><input name="message" maxlength="500" required placeholder="Write a message..." aria-label="Message" /><button class="chat-send" type="submit" aria-label="Send message">↑</button></form>`;
   const input = target.querySelector('[name="message"]');
   input.value = draft;
   if (hadFocus) input.focus({ preventScroll: true });
@@ -1263,6 +1268,7 @@ document.querySelector("#message-form").addEventListener("submit", (event) => {
   runAction(async () => {
     await startConversation(document.querySelector("#message-provider-id").value, document.querySelector("#message-first-text").value.trim());
     event.target.closest("dialog").close();
+    document.querySelector("#messages-layout").dataset.chatOpen = "true";
     renderConversations();
     showPage("messages");
     showToast("Conversation started.");
@@ -1272,9 +1278,14 @@ document.querySelector("#conversation-list").addEventListener("click", (event) =
   const button = event.target.closest("[data-chat]");
   if (!button) return;
   activeConversationId = button.dataset.chat;
+  document.querySelector("#messages-layout").dataset.chatOpen = "true";
   renderConversations();
 });
 document.querySelector("#chat-panel").addEventListener("click", (event) => {
+  if (event.target.closest("[data-chat-back]")) {
+    document.querySelector("#messages-layout").removeAttribute("data-chat-open");
+    return;
+  }
   const button = event.target.closest("[data-report]");
   if (button) openReport(button.dataset.report);
 });
@@ -1739,7 +1750,8 @@ document.querySelector("#earnings-export").addEventListener("click", () => {
   const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
-  link.href = url; link.download = "skillmate-earnings.csv"; link.click(); URL.revokeObjectURL(url);
+  link.href = url; link.download = "skillmate-earnings.csv"; link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   showToast(appSupabase ? "Your completed earnings were exported." : "Your completed demo earnings were exported.");
 });
 document.querySelector("#notifications-button").addEventListener("click", () => {

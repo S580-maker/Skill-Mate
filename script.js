@@ -85,14 +85,8 @@ document.querySelector("#export-button").addEventListener("click", () => {
   downloadLink.href = downloadUrl;
   downloadLink.download = "skillmate-bookings.csv";
   downloadLink.click();
-  URL.revokeObjectURL(downloadUrl);
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
   showToast("Bookings report exported.");
-});
-
-document.querySelectorAll(".review-button").forEach((button) => {
-  button.addEventListener("click", () => {
-    showToast(`Verification review for ${button.previousElementSibling.previousElementSibling.textContent} is coming soon.`);
-  });
 });
 
 document.querySelector("#period-select").addEventListener("change", (event) => {
