@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="user.css" />
+    <link rel="stylesheet" href="user.css?v=2" />
     <script src="theme.js"></script>
   </head>
   <body class="app-auth-pending">
@@ -79,8 +79,14 @@
           </section>
 
           <section class="view" id="view-messages" data-view="messages">
-            <div class="view-heading"><div><p class="eyebrow">KEEP IT ON CAMPUS</p><h1>Messages</h1><p>Coordinate with students and service providers.</p></div></div>
-            <div class="messages-layout" id="messages-layout"><div class="conversation-list" id="conversation-list"></div><div class="chat-panel" id="chat-panel"></div></div>
+            <div class="view-heading messages-page-heading"><div><p class="eyebrow">KEEP IT ON CAMPUS</p><h1>Messages</h1><p>Coordinate with students and service providers.</p></div></div>
+            <div class="messages-layout" id="messages-layout">
+              <aside class="conversation-sidebar" aria-label="Conversations">
+                <label class="conversation-search"><span aria-hidden="true">⌕</span><input id="conversation-search" type="search" placeholder="Search chats" aria-label="Search conversations" /></label>
+                <div class="conversation-list" id="conversation-list"></div>
+              </aside>
+              <div class="chat-panel" id="chat-panel"></div>
+            </div>
           </section>
 
           <section class="view" id="view-saved" data-view="saved">
@@ -124,11 +130,11 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="supabase-client.js"></script>
+    <script src="supabase-client.js?v=4"></script>
     <script src="smart-search.js"></script>
     <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
     <script src="profile-completeness.js"></script>
-    <script src="user.js"></script>
+    <script src="user.js?v=3"></script>
   </body>
 </html>

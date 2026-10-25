@@ -102,12 +102,53 @@ let connectedServices = [];
 let selectedCategory = "All";
 let activeConversationId = null;
 let activeBookingFilter = "all";
+let pendingReplyId = null;
+let messageMetadataAvailable = null;
+let messageMetadataWarningShown = false;
+let typingTimeoutId = null;
+let longPressTimeoutId = null;
+let pendingLongPressId = null;
+const messageChannels = new Map();
+const messagePresence = new Map();
+const hiddenMessageIds = new Set();
+const readUpdatesInProgress = new Set();
+const presenceTypingTimers = new Map();
 let toastTimer;
 let pendingActionCount = 0;
 let activityRefreshInProgress = false;
 const pendingProviderSaves = new Set();
 const ownProviderId = () => appUser?.id || "alex";
 const isOwnBooking = (booking) => booking.providerId === ownProviderId();
+const messageColumns = "id, sender_id, body, created_at, read_at, delivered_at, reply_to";
+const legacyMessageColumns = "id, sender_id, body, created_at, read_at";
+
+function isMissingMessageMetadata(error) {
+  return ["42703", "PGRST204"].includes(error?.code)
+    && /delivered_at|reply_to/i.test(`${error.message || ""} ${error.details || ""}`);
+}
+
+async function loadConversationMessages(chatId) {
+  const selectMessages = (columns) => appSupabase.from("messages")
+    .select(columns)
+    .eq("conversation_id", chatId)
+    .order("created_at", { ascending: true });
+  let { data, error } = await selectMessages(
+    messageMetadataAvailable === false ? legacyMessageColumns : messageColumns,
+  );
+  if (error && isMissingMessageMetadata(error)) {
+    messageMetadataAvailable = false;
+    if (!messageMetadataWarningShown) {
+      messageMetadataWarningShown = true;
+      console.warn("Chat metadata columns are missing. Apply the messaging migration to enable delivery receipts and replies.");
+      showToast("Messages are available; apply the messaging migration to enable replies and delivery receipts.");
+    }
+    ({ data, error } = await selectMessages(legacyMessageColumns));
+  } else if (!error && messageMetadataAvailable === null) {
+    messageMetadataAvailable = true;
+  }
+  if (error) throw error;
+  return data || [];
+}
 
 function loadState() {
   try {
@@ -136,6 +177,8 @@ function escapeHTML(value = "") {
 function getProvider(id) {
   if (appSupabase) {
     if (id === appUser?.id) {
+      const ownListing = connectedProviders.find((item) => item.id === id);
+      if (ownListing) return ownListing;
       return {
         id: appUser.id, name: state.profile.name,
         initials: state.profile.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
@@ -188,6 +231,222 @@ function showToast(message) {
   window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 3000);
 }
+function syncChatVisualViewport() {
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+  const root = document.documentElement;
+  root.style.setProperty("--chat-visual-height", `${Math.round(viewport.height)}px`);
+  root.style.setProperty("--chat-visual-top", `${Math.round(viewport.offsetTop)}px`);
+}
+syncChatVisualViewport();
+window.addEventListener("resize", syncChatVisualViewport);
+window.visualViewport?.addEventListener("resize", syncChatVisualViewport);
+window.visualViewport?.addEventListener("scroll", syncChatVisualViewport);
+function hiddenMessageStorageKey() {
+  return `skillmate-hidden-messages:${appUser?.id || "demo"}`;
+}
+function loadHiddenMessages() {
+  hiddenMessageIds.clear();
+  try {
+    const saved = JSON.parse(localStorage.getItem(hiddenMessageStorageKey()) || "[]");
+    if (Array.isArray(saved)) saved.forEach((id) => hiddenMessageIds.add(String(id)));
+  } catch (error) {
+    console.error("Could not load locally hidden Skillmate messages.", error);
+  }
+}
+function saveHiddenMessages() {
+  try {
+    localStorage.setItem(hiddenMessageStorageKey(), JSON.stringify([...hiddenMessageIds]));
+  } catch (error) {
+    console.error("Could not save locally hidden Skillmate messages.", error);
+    showToast("This message could not be hidden on this device.");
+  }
+}
+function formatChatTime(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+function formatChatDate(value) {
+  const date = new Date(value);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const key = (item) => `${item.getFullYear()}-${item.getMonth()}-${item.getDate()}`;
+  if (key(date) === key(today)) return "Today";
+  if (key(date) === key(yesterday)) return "Yesterday";
+  return date.toLocaleDateString([], { day: "numeric", month: "short", year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined });
+}
+function formatConversationTime(message) {
+  if (!message?.createdAt) return message?.time || "";
+  const label = formatChatDate(message.createdAt);
+  return label === "Today" ? formatChatTime(message.createdAt) : label;
+}
+function isHiddenMessage(message) {
+  return hiddenMessageIds.has(String(message.id));
+}
+function visibleMessageCount(chat) {
+  return chat.messages.filter((message) => !isHiddenMessage(message)).length;
+}
+function latestVisibleMessage(chat) {
+  return [...chat.messages].reverse().find((message) => !isHiddenMessage(message));
+}
+function normalizeMessageRow(message, otherName) {
+  return {
+    id: message.id,
+    sender: message.sender_id === appUser.id ? "You" : otherName,
+    senderId: message.sender_id,
+    text: message.body,
+    createdAt: message.created_at,
+    time: formatChatTime(message.created_at),
+    readAt: message.read_at,
+    deliveredAt: message.delivered_at,
+    replyTo: message.reply_to,
+  };
+}
+function linkMessageReplies(messages) {
+  const byId = new Map(messages.map((message) => [String(message.id), message]));
+  for (const message of messages) {
+    const reply = message.replyTo && byId.get(String(message.replyTo));
+    message.replyText = reply?.text || "";
+    message.replySender = reply?.sender || "";
+  }
+  return messages;
+}
+function unreadMessageCount(chat) {
+  return chat.messages.filter((message) => message.sender !== "You" && message.senderId && message.senderId !== appUser?.id && !message.readAt && !isHiddenMessage(message)).length;
+}
+function currentChatStatus(chat) {
+  const presence = messagePresence.get(chat.id);
+  if (presence?.typing) return "typing…";
+  if (presence?.online) return "online";
+  const lastSeen = [...chat.messages].reverse().find((message) => message.senderId && message.senderId !== appUser?.id)?.createdAt;
+  return `last seen at ${formatChatTime(lastSeen || new Date())}`;
+}
+function setChatPresenceStatus(chatId, status) {
+  messagePresence.set(chatId, { ...(messagePresence.get(chatId) || {}), ...status });
+  if (activeConversationId === chatId && state.activePage === "messages") renderChatHeaderStatus();
+}
+function renderChatHeaderStatus() {
+  const chat = state.messages.find((item) => item.id === activeConversationId);
+  const status = document.querySelector("#chat-status");
+  if (!chat || !status) return;
+  const presence = messagePresence.get(chat.id);
+  status.textContent = currentChatStatus(chat);
+  status.dataset.status = presence?.online ? "online" : presence?.typing ? "typing" : "offline";
+}
+function syncMessageChannels() {
+  if (!appSupabase || !appUser) return;
+  const conversations = state.messages.filter((chat) => !state.blocked.includes(chat.providerId));
+  const activeIds = new Set(conversations.map((chat) => chat.id));
+  for (const [id, channel] of messageChannels) {
+    if (!activeIds.has(id)) {
+      appSupabase.removeChannel(channel);
+      messageChannels.delete(id);
+      messagePresence.delete(id);
+    }
+  }
+  for (const chat of conversations) {
+    if (messageChannels.has(chat.id)) continue;
+    const channel = appSupabase.channel(`skillmate-chat:${chat.id}`, { config: { private: true, presence: { key: appUser.id } } })
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${chat.id}` }, () => {
+        markConversationMessagesDelivered(chat.id)
+          .then(() => refreshConversationMessages(chat.id))
+          .catch((error) => console.error("Could not refresh a realtime Skillmate conversation.", error));
+      })
+      .on("presence", { event: "sync" }, () => {
+        const members = Object.values(channel.presenceState()).flat();
+        const otherOnline = members.some((member) => member.user_id === chat.providerId);
+        setChatPresenceStatus(chat.id, { online: otherOnline });
+      })
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload?.sender_id !== chat.providerId) return;
+        const typing = Boolean(payload.typing);
+        window.clearTimeout(presenceTypingTimers.get(chat.id));
+        setChatPresenceStatus(chat.id, { typing });
+        if (typing) {
+          presenceTypingTimers.set(chat.id, window.setTimeout(() => {
+            setChatPresenceStatus(chat.id, { typing: false });
+            presenceTypingTimers.delete(chat.id);
+          }, 2500));
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          const { error } = await channel.track({ user_id: appUser.id, typing: false, online_at: new Date().toISOString() });
+          if (error) console.error("Could not publish Skillmate chat presence.", error);
+          try {
+            await markConversationMessagesDelivered(chat.id);
+          } catch (deliveryError) {
+            console.error("Could not mark existing Skillmate messages delivered.", deliveryError);
+          }
+          if (activeConversationId === chat.id && state.activePage === "messages" && !document.hidden) {
+            markConversationMessagesRead(chat.id).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
+          }
+        } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+          console.error(`Skillmate chat realtime channel ${status.toLowerCase()}.`, chat.id);
+        }
+      });
+    messageChannels.set(chat.id, channel);
+  }
+}
+async function broadcastTyping(chatId, typing) {
+  const channel = messageChannels.get(chatId);
+  if (!channel) return;
+  const status = await channel.send({ type: "broadcast", event: "typing", payload: { sender_id: appUser.id, typing } });
+  if (status !== "ok") console.error("Could not update Skillmate typing status.", status);
+}
+async function markConversationMessagesDelivered(chatId) {
+  if (!appSupabase || !appUser || messageMetadataAvailable === false) return;
+  const deliveredAt = new Date().toISOString();
+  const { error } = await appSupabase.from("messages")
+    .update({ delivered_at: deliveredAt })
+    .eq("conversation_id", chatId).neq("sender_id", appUser.id).is("delivered_at", null);
+  if (error) throw error;
+  const chat = state.messages.find((item) => item.id === chatId);
+  chat?.messages.forEach((message) => {
+    if (message.senderId && message.senderId !== appUser.id && !message.deliveredAt) message.deliveredAt = deliveredAt;
+  });
+}
+async function markConversationMessagesRead(chatId) {
+  if (!appSupabase || !appUser || readUpdatesInProgress.has(chatId) || document.hidden || state.activePage !== "messages" || activeConversationId !== chatId) return;
+  readUpdatesInProgress.add(chatId);
+  try {
+    const readAt = new Date().toISOString();
+    const updates = messageMetadataAvailable === false
+      ? { read_at: readAt }
+      : { delivered_at: readAt, read_at: readAt };
+    const { error } = await appSupabase.from("messages")
+      .update(updates)
+      .eq("conversation_id", chatId).neq("sender_id", appUser.id).is("read_at", null);
+    if (error) throw error;
+    const chat = state.messages.find((item) => item.id === chatId);
+    if (chat) {
+      chat.messages.forEach((message) => {
+        if (message.senderId && message.senderId !== appUser.id && !message.readAt) {
+          message.deliveredAt = readAt;
+          message.readAt = readAt;
+        }
+      });
+      renderConversations({ preserveChatState: true });
+    }
+  } finally {
+    readUpdatesInProgress.delete(chatId);
+  }
+}
+async function refreshConversationMessages(chatId) {
+  if (!appSupabase || !appUser) return;
+  const chat = state.messages.find((item) => item.id === chatId);
+  if (!chat) {
+    await refreshLiveMessages();
+    return;
+  }
+  const data = await loadConversationMessages(chatId);
+  chat.messages = linkMessageReplies(data.map((message) => normalizeMessageRow(message, chat.name || getProvider(chat.providerId)?.name || "Student")));
+  renderConversations({ preserveChatState: true });
+  if (activeConversationId === chatId && state.activePage === "messages" && !document.hidden) {
+    await markConversationMessagesRead(chatId);
+  }
+}
 function openModal(id) {
   const modal = document.getElementById(id);
   if (modal && !modal.open) modal.showModal();
@@ -231,7 +490,6 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   if (!target) return;
   const query = document.querySelector("#global-search").value.trim();
   const matching = providers.filter((provider) => {
-    if (appUser && provider.id === appUser.id) return false;
     if (state.blocked.includes(provider.id)) return false;
     if (selectedCategory !== "All" && provider.category !== selectedCategory) return false;
     return window.skillmateSmartSearch.matches(provider, query);
@@ -259,12 +517,12 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   }
   target.innerHTML = visible.length ? visible.map((provider) => `
     <article class="provider-card">
-      <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><span class="cover-symbol">${getCategoryIcon(provider.category)}</span><button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button></div>
+      <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><span class="cover-symbol">${getCategoryIcon(provider.category)}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
       <div class="provider-card-body">
         <div class="provider-card-person"><span class="provider-avatar avatar-${escapeHTML(provider.color)}">${escapeHTML(provider.initials)}</span>        <span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? '<i class="verified-dot">✓</i> Campus verified' : escapeHTML(provider.campus)}</small></span><span class="rating">★ ${providerReviewSummary(provider).rating}<small> (${providerReviewSummary(provider).count})</small></span></div>
         <p class="service-category">${escapeHTML(provider.category)}</p><h3>${escapeHTML(provider.service)}</h3><p class="provider-description">${escapeHTML(provider.description)}</p>
-        <div class="provider-card-footer"><span class="price">${currency(provider.price)} <small>/ session</small></span><span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" aria-label="Message ${escapeHTML(provider.name)}">▤</button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}">Request booking</button></span></div>
-        <div class="provider-card-tools"><button type="button" data-profile="${escapeHTML(provider.id)}">View provider details <span aria-hidden="true">→</span></button></div>
+        <div class="provider-card-footer"><span class="price">${currency(provider.price)} <small>/ session</small></span>${provider.id === appUser?.id ? "" : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" aria-label="Message ${escapeHTML(provider.name)}">▤</button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}">Request booking</button></span>`}</div>
+        ${provider.id === appUser?.id ? "" : `<div class="provider-card-tools"><button type="button" data-profile="${escapeHTML(provider.id)}">View provider details <span aria-hidden="true">→</span></button></div>`}
       </div>
     </article>`).join("") : `<div class="empty-card"><span>⌕</span><strong>No services found</strong><small>Try another search or choose a different category.</small></div>`;
 }
@@ -279,8 +537,7 @@ function renderSearchSuggestions() {
 
   const providers = appSupabase ? connectedProviders : seedProviders;
   const matches = providers
-    .filter((provider) => (!appUser || provider.id !== appUser.id)
-      && !state.blocked.includes(provider.id)
+    .filter((provider) => !state.blocked.includes(provider.id)
       && (selectedCategory === "All" || provider.category === selectedCategory)
       && window.skillmateSmartSearch.matches(provider, query))
     .slice(0, 6);
@@ -346,47 +603,314 @@ function renderBookingList(targetId, list, options = {}) {
     return `<article class="booking-card"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${booking.note ? `<small class="booking-note">“${escapeHTML(booking.note)}”</small>` : ""}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
   }).join("") : '<div class="empty-card"><span>◷</span><strong>Nothing here just yet</strong><small>Your bookings and requests will appear here.</small></div>';
 }
+function resizeChatInput(input) {
+  input.style.height = "auto";
+  input.style.height = `${Math.min(input.scrollHeight, 104)}px`;
+}
+function closeMessageContextMenu() {
+  document.querySelector(".chat-context-menu")?.remove();
+  pendingLongPressId = null;
+}
+function openMessageContextMenu(message, x, y) {
+  closeMessageContextMenu();
+  const menu = document.createElement("div");
+  menu.className = "chat-context-menu";
+  menu.setAttribute("role", "menu");
+  menu.dataset.contextMessage = String(message.id);
+  for (const [action, label] of [["reply", "Reply"], ["copy", "Copy"], ["delete", "Delete for me"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.messageAction = action;
+    button.setAttribute("role", "menuitem");
+    button.textContent = label;
+    menu.append(button);
+  }
+  document.body.append(menu);
+  const left = Math.max(8, Math.min(x, innerWidth - menu.offsetWidth - 8));
+  const top = Math.max(8, Math.min(y, innerHeight - menu.offsetHeight - 8));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  menu.querySelector("button")?.focus();
+}
 function renderConversations(options = {}) {
   const target = document.querySelector("#conversation-list");
   const layout = document.querySelector("#messages-layout");
-  const conversations = state.messages.filter((chat) => !state.blocked.includes(chat.providerId));
-  document.querySelector("#message-count").textContent = String(conversations.length);
-  if (!conversations.length) {
-    layout.removeAttribute("data-chat-open");
-    target.innerHTML = '<div class="empty-card"><strong>No conversations yet</strong><small>Message a provider from Discover to get started.</small></div>';
-    document.querySelector("#chat-panel").innerHTML = '<div class="chat-empty-state" aria-live="polite">No messages yet 👋 Say hi!</div>';
-    return;
-  }
-  if (!conversations.some((chat) => chat.id === activeConversationId)) activeConversationId = conversations[0].id;
-  target.innerHTML = `<div class="conversation-heading">YOUR CONVERSATIONS</div>${conversations.map((chat) => {
+  state.messages.forEach((chat) => chat.messages.forEach((message, index) => {
+    if (!message.id) message.id = `legacy-${chat.id}-${index}`;
+  }));
+  const search = document.querySelector("#conversation-search").value.trim().toLocaleLowerCase();
+  const conversations = state.messages
+    .filter((chat) => !state.blocked.includes(chat.providerId))
+    .sort((a, b) => new Date(b.messages.at(-1)?.createdAt || 0) - new Date(a.messages.at(-1)?.createdAt || 0));
+  const selectedChatExists = conversations.some((chat) => chat.id === activeConversationId);
+  if (activeConversationId && !selectedChatExists) activeConversationId = null;
+  if (activeConversationId) layout.dataset.chatOpen = "true";
+  else layout.removeAttribute("data-chat-open");
+  const totalUnread = conversations.reduce((total, chat) => total + unreadMessageCount(chat), 0);
+  const messageCountBadge = document.querySelector("#message-count");
+  messageCountBadge.textContent = String(totalUnread);
+  messageCountBadge.classList.toggle("has-unread", totalUnread > 0);
+  target.replaceChildren();
+  const matching = conversations.filter((chat) => {
     const provider = getProvider(chat.providerId);
-    const latest = chat.messages.at(-1);
-    return `<button class="conversation-item ${chat.id === activeConversationId ? "conversation-active" : ""}" type="button" data-chat="${escapeHTML(chat.id)}"><span class="person-avatar avatar-${escapeHTML(provider?.color || "blue")}">${escapeHTML(provider?.initials || "SM")}</span><span class="conversation-copy"><strong>${escapeHTML(provider?.name || "Student")}</strong><small>${escapeHTML(latest?.text || "Start a conversation")}</small></span><span class="conversation-time">${escapeHTML(latest?.time || "")}</span></button>`;
-  }).join("")}`;
-  renderChat(options);
+    return !search || `${chat.name || provider?.name || ""} ${latestVisibleMessage(chat)?.text || ""}`.toLocaleLowerCase().includes(search);
+  });
+  if (!matching.length) {
+    const empty = document.createElement("div");
+    empty.className = "conversation-list-empty";
+    empty.textContent = conversations.length ? "No chats match your search." : "No conversations yet. Message a student to start chatting.";
+    target.append(empty);
+  } else {
+    for (const chat of matching) {
+      const provider = getProvider(chat.providerId);
+      const latest = latestVisibleMessage(chat);
+      const unread = unreadMessageCount(chat);
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = `conversation-item${chat.id === activeConversationId ? " conversation-active" : ""}${unread ? " conversation-item-unread" : ""}`;
+      row.dataset.chat = chat.id;
+      const avatar = document.createElement("span");
+      avatar.className = `person-avatar avatar-${provider?.color || "blue"}`;
+      avatar.textContent = provider?.initials || initialsFor(chat.name || provider?.name || "Student");
+      const copy = document.createElement("span");
+      copy.className = "conversation-copy";
+      const top = document.createElement("span");
+      top.className = "conversation-row-top";
+      const name = document.createElement("strong");
+      name.textContent = chat.name || provider?.name || "Student";
+      const time = document.createElement("time");
+      time.className = "conversation-time";
+      time.textContent = formatConversationTime(latest);
+      top.append(name, time);
+      const bottom = document.createElement("span");
+      bottom.className = "conversation-row-bottom";
+      const preview = document.createElement("small");
+      preview.textContent = latest?.text || "Start a conversation";
+      bottom.append(preview);
+      if (unread) {
+        const badge = document.createElement("span");
+        badge.className = "unread-badge";
+        badge.textContent = String(unread);
+        badge.setAttribute("aria-label", `${unread} unread ${unread === 1 ? "message" : "messages"}`);
+        bottom.append(badge);
+      }
+      copy.append(top, bottom);
+      row.append(avatar, copy);
+      target.append(row);
+    }
+  }
+  if (activeConversationId) renderChat(options);
+  else renderEmptyChat();
+}
+function renderEmptyChat() {
+  const target = document.querySelector("#chat-panel");
+  target.replaceChildren();
+  const empty = document.createElement("div");
+  empty.className = "chat-panel-empty";
+  const icon = document.createElement("span");
+  icon.className = "chat-panel-empty-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = "✉";
+  const heading = document.createElement("strong");
+  heading.textContent = "Your campus conversations";
+  const description = document.createElement("p");
+  description.textContent = "Choose a chat to pick up where you left off, or message a student to start a new conversation.";
+  empty.append(icon, heading, description);
+  target.append(empty);
 }
 function renderChat(options = {}) {
   const chat = state.messages.find((item) => item.id === activeConversationId);
   const provider = chat && getProvider(chat.providerId);
   const target = document.querySelector("#chat-panel");
-  if (!chat || !provider) { target.innerHTML = '<div class="empty-card"><strong>Choose a conversation</strong><small>Your student-to-student messages appear here.</small></div>'; return; }
+  if (!chat || !provider) { renderEmptyChat(); return; }
   const previousInput = options.preserveChatState ? target.querySelector('[name="message"]') : null;
   const draft = previousInput?.value || "";
   const hadFocus = previousInput === document.activeElement;
   const previousMessages = options.preserveChatState ? target.querySelector("#chat-messages") : null;
+  const previousNewMessages = options.preserveChatState ? target.querySelector(".chat-new-messages") : null;
   const wasNearBottom = previousMessages
     ? previousMessages.scrollHeight - previousMessages.scrollTop - previousMessages.clientHeight < 48
     : true;
   const previousScrollTop = previousMessages?.scrollTop || 0;
-  const messageContent = chat.messages.length
-    ? chat.messages.map((message) => `<div class="chat-message ${message.sender === "You" ? "chat-outgoing" : ""}"><div class="chat-bubble"><span class="chat-message-text">${escapeHTML(message.text)}</span><small class="chat-time">${escapeHTML(message.time)}</small></div></div>`).join("")
-    : '<div class="chat-empty-state">No messages yet 👋 Say hi!</div>';
-  target.innerHTML = `<div class="chat-header"><button class="chat-back" type="button" data-chat-back aria-label="Back to conversations">←</button><span class="person-avatar avatar-${escapeHTML(provider.color || "blue")}">${escapeHTML(provider.initials)}</span><span class="chat-contact"><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? "✓ Campus verified" : "Campus verification pending"}</small></span><button class="subtle-button" type="button" data-report="${escapeHTML(provider.id)}">Safety</button></div><div class="chat-messages" id="chat-messages" aria-live="polite" aria-relevant="additions text"><div class="chat-date-row"><span class="chat-date-pill">Today</span></div>${messageContent}</div><form class="chat-compose" id="chat-compose"><input name="message" maxlength="500" required placeholder="Write a message..." aria-label="Message" /><button class="chat-send" type="submit" aria-label="Send message">↑</button></form>`;
-  const input = target.querySelector('[name="message"]');
+  const previousMessageCount = previousMessages?.querySelectorAll("[data-message-id]").length || 0;
+  const hasNewMessages = visibleMessageCount(chat) > previousMessageCount;
+  const header = document.createElement("header");
+  header.className = "chat-header";
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "chat-back";
+  back.dataset.chatBack = "";
+  back.setAttribute("aria-label", "Back to conversations");
+  back.textContent = "←";
+  const avatar = document.createElement("span");
+  avatar.className = `person-avatar avatar-${provider.color || "blue"}`;
+  avatar.textContent = provider.initials || initialsFor(provider.name);
+  const contact = document.createElement("span");
+  contact.className = "chat-contact";
+  const name = document.createElement("strong");
+  name.textContent = chat.name || provider.name;
+  const status = document.createElement("small");
+  status.id = "chat-status";
+  status.textContent = currentChatStatus(chat);
+  status.dataset.status = messagePresence.get(chat.id)?.online ? "online" : "offline";
+  contact.append(name, status);
+  const menu = document.createElement("details");
+  menu.className = "chat-header-menu";
+  const menuTrigger = document.createElement("summary");
+  menuTrigger.className = "chat-menu-trigger";
+  menuTrigger.setAttribute("aria-label", "Chat options");
+  menuTrigger.textContent = "⋯";
+  const menuItems = document.createElement("span");
+  menuItems.className = "chat-menu-popover";
+  const report = document.createElement("button");
+  report.type = "button";
+  report.dataset.report = chat.providerId;
+  report.textContent = "Report student";
+  menuItems.append(report);
+  menu.append(menuTrigger, menuItems);
+  header.append(back, avatar, contact, menu);
+
+  const messages = document.createElement("div");
+  messages.className = "chat-messages";
+  messages.id = "chat-messages";
+  messages.setAttribute("aria-live", "polite");
+  messages.setAttribute("aria-relevant", "additions text");
+  let previousDate = "";
+  let previousMessage = null;
+  const visibleMessages = chat.messages.filter((message) => !isHiddenMessage(message));
+  for (const message of visibleMessages) {
+    const messageDate = message.createdAt ? new Date(message.createdAt).toDateString() : "Today";
+    if (messageDate !== previousDate) {
+      const dateRow = document.createElement("div");
+      dateRow.className = "chat-date-row";
+      const pill = document.createElement("span");
+      pill.className = "chat-date-pill";
+      pill.textContent = message.createdAt ? formatChatDate(message.createdAt) : "Today";
+      dateRow.append(pill);
+      messages.append(dateRow);
+      previousDate = messageDate;
+      previousMessage = null;
+    }
+    const sameSender = previousMessage && (previousMessage.senderId || previousMessage.sender) === (message.senderId || message.sender);
+    const grouped = sameSender
+      && new Date(message.createdAt || 0) - new Date(previousMessage.createdAt || 0) < 5 * 60 * 1000;
+    const row = document.createElement("article");
+    row.className = `chat-message${message.sender === "You" ? " chat-outgoing" : ""}${grouped ? " chat-message-grouped" : ""}`;
+    row.dataset.messageId = String(message.id);
+    const bubble = document.createElement("div");
+    bubble.className = "chat-bubble";
+    if (message.replyText) {
+      const quote = document.createElement("div");
+      quote.className = "chat-message-quote";
+      const quoteName = document.createElement("strong");
+      quoteName.textContent = message.replySender || "Message";
+      const quoteText = document.createElement("span");
+      quoteText.textContent = message.replyText;
+      quote.append(quoteName, quoteText);
+      bubble.append(quote);
+    }
+    const body = document.createElement("span");
+    body.className = "chat-message-text";
+    body.textContent = message.text;
+    const meta = document.createElement("span");
+    meta.className = "chat-message-meta";
+    const time = document.createElement("time");
+    time.className = "chat-time";
+    time.dateTime = message.createdAt || "";
+    time.textContent = message.createdAt ? formatChatTime(message.createdAt) : message.time || "";
+    meta.append(time);
+    if (message.sender === "You" && appSupabase) {
+      const ticks = document.createElement("span");
+      ticks.className = `chat-ticks${message.readAt ? " chat-ticks-read" : ""}`;
+      ticks.setAttribute("aria-label", message.readAt ? "Read" : message.deliveredAt ? "Delivered" : "Sent");
+      ticks.textContent = message.readAt || message.deliveredAt ? "✓✓" : "✓";
+      meta.append(ticks);
+    }
+    bubble.append(body, meta);
+    row.append(bubble);
+    messages.append(row);
+    previousMessage = message;
+  }
+  if (!visibleMessages.length) {
+    const empty = document.createElement("div");
+    empty.className = "chat-empty-state";
+    empty.textContent = "No messages yet 👋 Say hi!";
+    messages.append(empty);
+  }
+  const newMessages = document.createElement("button");
+  newMessages.type = "button";
+  newMessages.className = "chat-new-messages";
+  newMessages.hidden = true;
+  newMessages.textContent = "↓ New messages";
+  const form = document.createElement("form");
+  form.className = "chat-compose";
+  form.id = "chat-compose";
+  if (pendingReplyId) {
+    const repliedMessage = chat.messages.find((message) => String(message.id) === String(pendingReplyId));
+    if (repliedMessage) {
+      const preview = document.createElement("div");
+      preview.className = "chat-reply-preview";
+      const quote = document.createElement("span");
+      quote.className = "chat-reply-copy";
+      const quoteName = document.createElement("strong");
+      quoteName.textContent = repliedMessage.sender;
+      const quoteText = document.createElement("span");
+      quoteText.textContent = repliedMessage.text;
+      quote.append(quoteName, quoteText);
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "chat-reply-cancel";
+      cancel.dataset.cancelReply = "";
+      cancel.setAttribute("aria-label", "Cancel reply");
+      cancel.textContent = "×";
+      preview.append(quote, cancel);
+      form.append(preview);
+    } else pendingReplyId = null;
+  }
+  const emojiPicker = document.createElement("div");
+  emojiPicker.className = "emoji-picker";
+  emojiPicker.hidden = true;
+  emojiPicker.setAttribute("aria-label", "Choose an emoji");
+  for (const emoji of ["🙂", "😂", "🥰", "👍", "🙏", "👏", "🎉", "❤️", "✨", "😅", "💯", "👋"]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.emoji = emoji;
+    button.setAttribute("aria-label", emoji);
+    button.textContent = emoji;
+    emojiPicker.append(button);
+  }
+  const controls = document.createElement("span");
+  controls.className = "chat-compose-controls";
+  const emojiButton = document.createElement("button");
+  emojiButton.type = "button";
+  emojiButton.className = "chat-icon-button";
+  emojiButton.dataset.emojiToggle = "";
+  emojiButton.setAttribute("aria-label", "Choose emoji");
+  emojiButton.textContent = "☺";
+  const input = document.createElement("textarea");
+  input.name = "message";
+  input.maxLength = 500;
+  input.rows = 1;
+  input.required = true;
+  input.placeholder = "Write a message...";
+  input.setAttribute("aria-label", "Message");
+  const send = document.createElement("button");
+  send.type = "submit";
+  send.className = "chat-send";
+  send.setAttribute("aria-label", "Send message");
+  send.textContent = "↑";
+  controls.append(emojiButton, input, send);
+  form.append(emojiPicker, controls);
+  messages.append(newMessages);
+  target.replaceChildren(header, messages, form);
   input.value = draft;
+  resizeChatInput(input);
   if (hadFocus) input.focus({ preventScroll: true });
-  const messages = document.querySelector("#chat-messages");
   messages.scrollTop = wasNearBottom ? messages.scrollHeight : previousScrollTop;
+  newMessages.hidden = wasNearBottom || (!hasNewMessages && (previousNewMessages?.hidden ?? true));
+  if (activeConversationId === chat.id && state.activePage === "messages" && !document.hidden) {
+    markConversationMessagesRead(chat.id).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
+  }
 }
 function renderListings() {
   const target = document.querySelector("#listing-list");
@@ -559,6 +1083,18 @@ async function refreshSupabaseState() {
       available: "Message to ask", groups: row.accepts_groups, portfolio: [],
     });
   }
+  const ownActiveService = (ownServices.data || []).find((service) => service.is_active);
+  if (ownActiveService && !providerMap.has(appUser.id)) {
+    providerMap.set(appUser.id, {
+      id: appUser.id, name: profile.full_name, initials: initialsFor(profile.full_name),
+      campus: profile.university || "Campus not set", course: profile.course || "Student",
+      category: ownActiveService.category, service: ownActiveService.title,
+      description: ownActiveService.description, price: Number(ownActiveService.price),
+      currency: ownActiveService.currency, rating: 0, reviews: 0, bookings: 0,
+      color: "blue", verified: profile.campus_verified, available: "Message to ask",
+      groups: ownActiveService.accepts_groups, portfolio: [],
+    });
+  }
   connectedProviders = [...providerMap.values()];
   for (const item of portfolioDirectory.data || []) {
     const provider = providerMap.get(item.provider_id);
@@ -615,19 +1151,14 @@ async function refreshSupabaseState() {
 
   const conversations = conversationDirectory.data || [];
   const messages = await Promise.all(conversations.map(async (conversation) => {
-    const { data, error } = await appSupabase.from("messages").select("id, sender_id, body, created_at")
-      .eq("conversation_id", conversation.conversation_id).order("created_at", { ascending: true });
-    if (error) throw error;
+    const data = await loadConversationMessages(conversation.conversation_id);
     return {
       id: conversation.conversation_id, providerId: conversation.other_user_id, name: conversation.other_user_name,
-      messages: (data || []).map((message) => ({
-        sender: message.sender_id === appUser.id ? "You" : conversation.other_user_name,
-        text: message.body,
-        time: new Date(message.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-      })),
+      messages: linkMessageReplies(data.map((message) => normalizeMessageRow(message, conversation.other_user_name))),
     };
   }));
   state.messages = messages;
+  syncMessageChannels();
   const verificationButton = document.querySelector("#verification-open");
   verificationButton.dataset.requested = verification.data?.status || "";
   const reportTarget = document.querySelector("#report-target");
@@ -669,22 +1200,15 @@ async function refreshLiveMessages() {
     .select("conversation_id, other_user_id, other_user_name");
   if (conversationsError) throw conversationsError;
   state.messages = await Promise.all((conversations || []).map(async (conversation) => {
-    const { data, error } = await appSupabase.from("messages")
-      .select("id, sender_id, body, created_at")
-      .eq("conversation_id", conversation.conversation_id)
-      .order("created_at", { ascending: true });
-    if (error) throw error;
+    const data = await loadConversationMessages(conversation.conversation_id);
     return {
       id: conversation.conversation_id,
       providerId: conversation.other_user_id,
       name: conversation.other_user_name,
-      messages: (data || []).map((message) => ({
-        sender: message.sender_id === appUser.id ? "You" : conversation.other_user_name,
-        text: message.body,
-        time: new Date(message.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-      })),
+      messages: linkMessageReplies(data.map((message) => normalizeMessageRow(message, conversation.other_user_name))),
     };
   }));
+  syncMessageChannels();
   renderConversations({ preserveChatState: true });
 }
 async function refreshLiveActivity() {
@@ -803,6 +1327,7 @@ async function bootstrapStudentApp() {
   }
   await window.syncSkillmateServerSession(data.session);
   appUser = data.session.user;
+  loadHiddenMessages();
   await refreshSupabaseState();
   initializeDashboard();
   document.querySelector("#profile-name").value = state.profile.name;
@@ -1278,38 +1803,175 @@ document.querySelector("#conversation-list").addEventListener("click", (event) =
   const button = event.target.closest("[data-chat]");
   if (!button) return;
   activeConversationId = button.dataset.chat;
+  pendingReplyId = null;
   document.querySelector("#messages-layout").dataset.chatOpen = "true";
   renderConversations();
+  markConversationMessagesRead(activeConversationId).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
 });
+document.querySelector("#conversation-search").addEventListener("input", () => renderConversations({ preserveChatState: true }));
 document.querySelector("#chat-panel").addEventListener("click", (event) => {
   if (event.target.closest("[data-chat-back]")) {
+    activeConversationId = null;
+    pendingReplyId = null;
     document.querySelector("#messages-layout").removeAttribute("data-chat-open");
+    renderConversations();
+    return;
+  }
+  if (event.target.closest("[data-cancel-reply]")) {
+    pendingReplyId = null;
+    renderChat({ preserveChatState: true });
+    return;
+  }
+  if (event.target.closest("[data-emoji-toggle]")) {
+    const picker = document.querySelector(".emoji-picker");
+    picker.hidden = !picker.hidden;
+    return;
+  }
+  const emojiButton = event.target.closest("[data-emoji]");
+  if (emojiButton) {
+    const input = document.querySelector('#chat-compose [name="message"]');
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    input.setRangeText(emojiButton.dataset.emoji, start, end, "end");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.focus();
+    document.querySelector(".emoji-picker").hidden = true;
+    return;
+  }
+  if (event.target.closest(".chat-new-messages")) {
+    const messages = document.querySelector("#chat-messages");
+    messages.scrollTo({ top: messages.scrollHeight, behavior: "smooth" });
+    event.target.closest(".chat-new-messages").hidden = true;
     return;
   }
   const button = event.target.closest("[data-report]");
-  if (button) openReport(button.dataset.report);
+  if (button) {
+    button.closest("details")?.removeAttribute("open");
+    openReport(button.dataset.report);
+  }
+});
+document.querySelector("#chat-panel").addEventListener("input", (event) => {
+  if (event.target.name !== "message") return;
+  resizeChatInput(event.target);
+  const chat = state.messages.find((item) => item.id === activeConversationId);
+  if (!chat || !appSupabase) return;
+  broadcastTyping(chat.id, true).catch((error) => console.error("Could not send a typing event.", error));
+  window.clearTimeout(typingTimeoutId);
+  typingTimeoutId = window.setTimeout(() => {
+    broadcastTyping(chat.id, false).catch((error) => console.error("Could not clear the typing event.", error));
+  }, 2000);
+});
+document.querySelector("#chat-panel").addEventListener("keydown", (event) => {
+  if (event.target.name !== "message" || event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  event.target.closest("form").requestSubmit();
 });
 document.querySelector("#chat-panel").addEventListener("submit", (event) => {
   if (event.target.id !== "chat-compose") return;
   event.preventDefault();
-  const text = new FormData(event.target).get("message").toString().trim();
+  const input = event.target.querySelector('[name="message"]');
+  const text = input.value.trim();
   if (!text) return;
   const chat = state.messages.find((item) => item.id === activeConversationId);
   if (!chat) return;
+  const replyTo = pendingReplyId;
+  input.value = "";
+  pendingReplyId = null;
+  renderChat({ preserveChatState: true });
   if (appSupabase) {
     runAction(async () => {
-      const { error } = await appSupabase.from("messages").insert({
-        conversation_id: chat.id, sender_id: appUser.id, body: text,
-      });
+      const payload = { conversation_id: chat.id, sender_id: appUser.id, body: text };
+      if (replyTo && messageMetadataAvailable === true) payload.reply_to = replyTo;
+      else if (replyTo) showToast("Apply the messaging migration to save reply links.");
+      const { data, error } = await appSupabase.from("messages")
+        .insert(payload).select(
+          messageMetadataAvailable === true ? messageColumns : legacyMessageColumns,
+        ).single();
       if (error) throw error;
-      await refreshSupabaseState();
-      renderConversations();
+      chat.messages.push(normalizeMessageRow(data, chat.name || getProvider(chat.providerId)?.name || "Student"));
+      linkMessageReplies(chat.messages);
+      renderConversations({ preserveChatState: true });
+      broadcastTyping(chat.id, false).catch((typingError) => console.error("Could not clear the typing event.", typingError));
     }, "Could not send your message.");
     return;
   }
-  chat.messages.push({ sender: "You", text, time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) });
+  const message = {
+    id: `local-${Date.now()}`, sender: "You", senderId: "demo-self", text,
+    createdAt: new Date().toISOString(), time: formatChatTime(new Date()),
+    replyTo: replyTo || null,
+  };
+  chat.messages.push(message);
+  linkMessageReplies(chat.messages);
   saveState();
-  renderConversations();
+  renderConversations({ preserveChatState: true });
+});
+document.querySelector("#chat-panel").addEventListener("contextmenu", (event) => {
+  const row = event.target.closest("[data-message-id]");
+  if (!row) return;
+  event.preventDefault();
+  const chat = state.messages.find((item) => item.id === activeConversationId);
+  const message = chat?.messages.find((item) => String(item.id) === row.dataset.messageId);
+  if (message) openMessageContextMenu(message, event.clientX, event.clientY);
+});
+document.querySelector("#chat-panel").addEventListener("pointerdown", (event) => {
+  const row = event.target.closest("[data-message-id]");
+  if (!row || event.pointerType === "mouse") return;
+  const chat = state.messages.find((item) => item.id === activeConversationId);
+  const message = chat?.messages.find((item) => String(item.id) === row.dataset.messageId);
+  if (!message) return;
+  pendingLongPressId = message.id;
+  longPressTimeoutId = window.setTimeout(() => {
+    if (pendingLongPressId !== message.id) return;
+    openMessageContextMenu(message, event.clientX, event.clientY);
+  }, 550);
+});
+document.querySelector("#chat-panel").addEventListener("pointerup", () => {
+  window.clearTimeout(longPressTimeoutId);
+  pendingLongPressId = null;
+});
+document.querySelector("#chat-panel").addEventListener("pointercancel", () => {
+  window.clearTimeout(longPressTimeoutId);
+  pendingLongPressId = null;
+});
+document.querySelector("#chat-panel").addEventListener("scroll", (event) => {
+  if (event.target.id !== "chat-messages") return;
+  const nearBottom = event.target.scrollHeight - event.target.scrollTop - event.target.clientHeight < 48;
+  const button = document.querySelector(".chat-new-messages");
+  if (button && nearBottom) button.hidden = true;
+});
+document.addEventListener("click", (event) => {
+  const action = event.target.closest("[data-message-action]");
+  if (action) {
+    const menu = action.closest("[data-context-message]");
+    const chat = state.messages.find((item) => item.id === activeConversationId);
+    const message = chat?.messages.find((item) => String(item.id) === menu?.dataset.contextMessage);
+    closeMessageContextMenu();
+    if (!message) return;
+    if (action.dataset.messageAction === "reply") {
+      pendingReplyId = message.id;
+      renderChat({ preserveChatState: true });
+      document.querySelector('#chat-compose [name="message"]')?.focus({ preventScroll: true });
+    } else if (action.dataset.messageAction === "copy") {
+      if (!navigator.clipboard?.writeText) {
+        showToast("Copy is unavailable in this browser.");
+        return;
+      }
+      navigator.clipboard.writeText(message.text).then(
+        () => showToast("Message copied."),
+        (error) => {
+          console.error("Could not copy the Skillmate message.", error);
+          showToast("Could not copy this message.");
+        },
+      );
+    } else if (action.dataset.messageAction === "delete") {
+      hiddenMessageIds.add(String(message.id));
+      saveHiddenMessages();
+      renderConversations({ preserveChatState: true });
+      showToast("Message hidden on this device.");
+    }
+    return;
+  }
+  if (!event.target.closest(".chat-context-menu")) closeMessageContextMenu();
 });
 document.querySelector("#service-form").addEventListener("submit", (event) => {
   event.preventDefault();

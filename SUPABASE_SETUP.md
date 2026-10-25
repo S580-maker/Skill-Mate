@@ -21,6 +21,10 @@ New accounts must provide a university and student ID number. The ID number is s
 
 Users may optionally save a hostel or campus location in **Edit profile**. It is private by default and is shared with the other participant only while a booking is confirmed. The app currently collects place names, not coordinates, so it cannot calculate distance. On an existing project, apply `supabase/migrations/20261024_user_locations.sql` once in the SQL Editor; on a new project, the main schema already includes it.
 
+On existing projects, apply `supabase/migrations/20261025_public_provider_directory.sql` once in the SQL Editor to show every active service—including administrator-owned listings—to signed-in Skillmate users. The directory remains unavailable to anonymous visitors and continues to exclude listings hidden by a block. New projects include this directory definition in `supabase/schema.sql`.
+
+On existing projects, apply `supabase/migrations/20261025_whatsapp_style_messaging.sql` once in the SQL Editor before using the redesigned Messages page. It adds delivery and reply metadata, restricts message access and changes to conversation participants, permits recipients to update read/delivery timestamps, allows senders to delete their own messages, and adds messages to Supabase Realtime when that publication is available. The app uses `conversation_id` and `conversation_members` for recipient membership; it does not need a separate `receiver_id` column. New projects include the same fields, policies, and realtime publication setup in `supabase/schema.sql`.
+
 ## 3. Install and run Skillmate
 
 Install dependencies and start the Express server:

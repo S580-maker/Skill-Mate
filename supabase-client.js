@@ -56,14 +56,49 @@
 
 window.syncSkillmateServerSession = async function syncSkillmateServerSession(session) {
   if (!session?.access_token) throw new Error("Sign in again to continue.");
-  const response = await fetch("/api/session", {
+  const syncAccessToken = (accessToken) => fetch("/api/session", {
     method: "POST",
-    headers: { Authorization: `Bearer ${session.access_token}` },
+    headers: { Authorization: `Bearer ${accessToken}` },
     credentials: "same-origin",
   });
+  let response = await syncAccessToken(session.access_token);
+  if (response.status === 401 && session.refresh_token && window.skillmateSupabase) {
+    const { data, error } = await window.skillmateSupabase.auth.refreshSession({
+      refresh_token: session.refresh_token,
+    });
+    if (error) {
+      const message = error.message?.toLowerCase() || "";
+      const invalidRefreshToken = error.code === "refresh_token_not_found"
+        || message.includes("invalid refresh token")
+        || message.includes("refresh token not found");
+      if (invalidRefreshToken) {
+        await window.clearExpiredSkillmateSession();
+        throw new Error("Your sign-in session expired. Please sign in again.");
+      }
+      throw error;
+    }
+    if (!data.session?.access_token) throw new Error("Your sign-in session has expired. Please sign in again.");
+    response = await syncAccessToken(data.session.access_token);
+  }
   if (!response.ok) {
     const result = await response.json().catch(() => ({}));
     throw new Error(result.error || "Could not establish a secure Skillmate session.");
+  }
+};
+
+window.clearExpiredSkillmateSession = async function clearExpiredSkillmateSession() {
+  if (window.skillmateSupabase) {
+    try {
+      const { error } = await window.skillmateSupabase.auth.signOut({ scope: "local" });
+      if (error) console.error("Could not clear the expired local Skillmate session.", error);
+    } catch (error) {
+      console.error("Could not clear the expired local Skillmate session.", error);
+    }
+  }
+  try {
+    await window.clearSkillmateServerSession();
+  } catch (error) {
+    console.error("Could not clear the expired Skillmate server session.", error);
   }
 };
 

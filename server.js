@@ -168,7 +168,10 @@ app.post(
 
     try {
       const user = await getSupabaseUser(accessToken);
-      if (!user?.id) return response.status(401).json({ error: "Your sign-in session has expired. Please sign in again." });
+      if (!user?.id) {
+        response.clearCookie(sessionCookieName, sessionCookieOptions);
+        return response.status(401).json({ error: "Your sign-in session has expired. Please sign in again." });
+      }
       response.cookie(sessionCookieName, accessToken, {
         ...sessionCookieOptions,
         maxAge: getAccessTokenExpiry(accessToken),

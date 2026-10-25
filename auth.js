@@ -6,6 +6,14 @@ const passwordVisibility = document.querySelector("#password-visibility");
 let authMode = "signin";
 let authSubmitting = false;
 
+function isInvalidRefreshTokenError(error) {
+  const code = (error?.code || "").toLowerCase();
+  const message = (error?.message || "").toLowerCase();
+  return code === "refresh_token_not_found"
+    || message.includes("invalid refresh token")
+    || message.includes("refresh token not found");
+}
+
 function setPasswordVisibility(visible) {
   passwordInput.type = visible ? "text" : "password";
   passwordVisibility.setAttribute("aria-label", `${visible ? "Hide" : "Show"} password`);
@@ -18,6 +26,9 @@ function setPasswordVisibility(visible) {
 function friendlyAuthError(error, mode) {
   const code = (error?.code || "").toLowerCase();
   const message = (error?.message || "").toLowerCase();
+  if (isInvalidRefreshTokenError(error)) {
+    return "Your sign-in session expired. Please sign in again.";
+  }
   if (code === "email_not_confirmed" || message.includes("email not confirmed")) {
     return "Please confirm your email using the link we sent before signing in.";
   }
@@ -249,6 +260,9 @@ authForm.addEventListener("submit", async (event) => {
     }
   } catch (error) {
     console.error("Skillmate authentication failed.", error);
+    if (isInvalidRefreshTokenError(error)) {
+      await window.clearExpiredSkillmateSession();
+    }
     authMessage.textContent = friendlyAuthError(error, authMode);
   } finally {
     submit.disabled = false;

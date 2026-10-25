@@ -126,7 +126,9 @@ create table public.messages (
   sender_id uuid not null references public.profiles(id) on delete restrict,
   body text not null check (char_length(body) between 1 and 5000),
   created_at timestamptz not null default now(),
-  read_at timestamptz
+  delivered_at timestamptz,
+  read_at timestamptz,
+  reply_to uuid references public.messages(id) on delete set null
 );
 
 create table public.reviews (
@@ -248,6 +250,7 @@ create index bookings_customer_idx on public.bookings(customer_id, scheduled_at 
 create index bookings_provider_idx on public.bookings(provider_id, scheduled_at desc);
 create index group_bookings_open_idx on public.group_bookings(scheduled_at) where status = 'open';
 create index messages_conversation_created_idx on public.messages(conversation_id, created_at);
+create index messages_reply_to_idx on public.messages(reply_to) where reply_to is not null;
 create index reports_status_created_idx on public.reports(status, created_at desc);
 create index notifications_user_created_idx on public.notifications(user_id, created_at desc);
 
@@ -368,6 +371,23 @@ as $$
     where mine.conversation_id = p_conversation_id
       and mine.user_id = (select auth.uid())
       and public.is_blocked_between(other.user_id)
+  );
+$$;
+
+create function public.can_access_chat_realtime_topic()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.conversation_members member
+    where split_part(realtime.topic(), ':', 1) = 'skillmate-chat'
+      and member.conversation_id::text = split_part(realtime.topic(), ':', 2)
+      and member.user_id = (select auth.uid())
+      and not public.is_conversation_blocked(member.conversation_id)
   );
 $$;
 
@@ -714,7 +734,7 @@ select
   s.created_at as service_created_at
 from public.profiles p
 join public.services s on s.provider_id = p.id
-where s.is_active and p.role = 'student'
+where s.is_active
   and not public.is_blocked_between(p.id);
 
 create view public.group_directory
@@ -888,14 +908,11 @@ using (user_id = (select auth.uid()) or (select public.is_admin()));
 create policy "Conversation members read messages"
 on public.messages for select to authenticated
 using (
-  (
-    exists (
-      select 1 from public.conversation_members m
-      where m.conversation_id = messages.conversation_id and m.user_id = (select auth.uid())
-    )
-    and not public.is_conversation_blocked(messages.conversation_id)
+  exists (
+    select 1 from public.conversation_members m
+    where m.conversation_id = messages.conversation_id and m.user_id = (select auth.uid())
   )
-  or (select public.is_admin())
+  and not public.is_conversation_blocked(messages.conversation_id)
 );
 create policy "Conversation members send messages as themselves"
 on public.messages for insert to authenticated
@@ -906,7 +923,45 @@ with check (
     where m.conversation_id = messages.conversation_id and m.user_id = (select auth.uid())
   )
   and not public.is_conversation_blocked(messages.conversation_id)
+  and (
+    reply_to is null
+    or exists (
+      select 1 from public.messages replied
+      where replied.id = messages.reply_to and replied.conversation_id = messages.conversation_id
+    )
+  )
 );
+create policy "Message recipients mark messages delivered or read"
+on public.messages for update to authenticated
+using (
+  sender_id <> (select auth.uid())
+  and exists (
+    select 1 from public.conversation_members m
+    where m.conversation_id = messages.conversation_id and m.user_id = (select auth.uid())
+  )
+  and not public.is_conversation_blocked(messages.conversation_id)
+)
+with check (
+  sender_id <> (select auth.uid())
+  and exists (
+    select 1 from public.conversation_members m
+    where m.conversation_id = messages.conversation_id and m.user_id = (select auth.uid())
+  )
+  and not public.is_conversation_blocked(messages.conversation_id)
+);
+create policy "Message senders delete their own messages"
+on public.messages for delete to authenticated
+using (
+  sender_id = (select auth.uid())
+  and exists (
+    select 1 from public.conversation_members m
+    where m.conversation_id = messages.conversation_id and m.user_id = (select auth.uid())
+  )
+);
+create policy "Conversation members access private realtime chat channels"
+on realtime.messages for all to authenticated
+using ((select public.can_access_chat_realtime_topic()))
+with check ((select public.can_access_chat_realtime_topic()));
 create policy "Students read reviews"
 on public.reviews for select to authenticated
 using (true);
@@ -989,7 +1044,12 @@ grant select on public.group_bookings to authenticated;
 grant select on public.group_booking_members to authenticated;
 grant select on public.conversations to authenticated;
 grant select on public.conversation_members to authenticated;
-grant select, insert on public.messages to authenticated;
+revoke all on public.messages from anon, public;
+revoke update on public.messages from authenticated;
+revoke update (id, conversation_id, sender_id, body, created_at, read_at, delivered_at, reply_to)
+  on public.messages from authenticated;
+grant select, insert, delete on public.messages to authenticated;
+grant update (read_at, delivered_at) on public.messages to authenticated;
 grant select, insert, delete on public.reviews to authenticated;
 grant select, insert, update, delete on public.portfolio_items to authenticated;
 grant select, insert, delete on public.saved_services to authenticated;
@@ -998,6 +1058,17 @@ grant select, insert, update on public.reports to authenticated;
 grant select on public.notifications to authenticated;
 grant update (read_at) on public.notifications to authenticated;
 grant select, insert on public.verification_requests to authenticated;
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1 from pg_publication_tables
+       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'messages'
+     ) then
+    execute 'alter publication supabase_realtime add table public.messages';
+  end if;
+end;
+$$;
 insert into storage.buckets (id, name, public)
 values ('portfolio-images', 'portfolio-images', true)
 on conflict (id) do nothing;
@@ -1021,9 +1092,11 @@ revoke all on function public.update_booking_status(uuid, public.booking_status)
 revoke all on function public.review_verification_request(uuid, boolean) from public, anon;
 revoke all on function public.is_blocked_between(uuid) from public, anon;
 revoke all on function public.is_conversation_blocked(uuid) from public, anon;
+revoke all on function public.can_access_chat_realtime_topic() from public, anon;
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.is_blocked_between(uuid) to authenticated;
 grant execute on function public.is_conversation_blocked(uuid) to authenticated;
+grant execute on function public.can_access_chat_realtime_topic() to authenticated;
 grant execute on function public.create_group_booking(uuid, text, text, timestamptz, smallint, numeric) to authenticated;
 grant execute on function public.join_group_booking(uuid) to authenticated;
 grant execute on function public.leave_group_booking(uuid) to authenticated;
