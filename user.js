@@ -423,6 +423,9 @@ function renderBookingActivity() {
   );
 }
 function renderAll() {
+  if (typeof window.renderProfileCompleteness === "function") {
+    window.renderProfileCompleteness(state.profile);
+  }
   document.querySelector("#marketplace-date").textContent = new Intl.DateTimeFormat(undefined, {
     weekday: "long",
     month: "long",
@@ -451,7 +454,6 @@ function renderAll() {
     : "Verify to earn a campus badge";
   document.querySelector(".profile-copy strong").textContent = state.profile.name;
   renderUserAvatar(document.querySelector(".profile-avatar"), state.profile);
-  renderUserAvatar(document.querySelector(".topbar-avatar"), state.profile);
   const ownReviews = state.reviews.filter((review) => review.providerId === ownProviderId());
   const ownRating = ownReviews.length ? (ownReviews.reduce((sum, review) => sum + review.rating, 0) / ownReviews.length).toFixed(1) : appSupabase ? "New" : "4.9";
   const ratingStat = document.querySelectorAll(".provider-stat")[2];
@@ -461,7 +463,6 @@ function renderAll() {
     document.querySelector("#view-home h1").innerHTML = `Welcome, ${escapeHTML(state.profile.name)} <span aria-hidden="true">✦</span>`;
     document.querySelector(".campus-card strong").textContent = state.profile.university || "University not set";
     document.querySelector(".campus-card small").textContent = state.profile.course || "STUDENT ACCOUNT";
-    document.querySelector(".topbar-avatar").setAttribute("aria-label", state.profile.name);
     const providerHeading = document.querySelector(".provider-profile-main");
     renderUserAvatar(providerHeading.querySelector(".profile-avatar"), state.profile);
     providerHeading.querySelector(".verified-pill").textContent = verified ? "✓ Campus verified" : "Campus verification pending";
@@ -809,6 +810,10 @@ async function bootstrapStudentApp() {
   );
   document.querySelector("#message-count").textContent = String(state.messages.length);
   showConnectedApp();
+  if (window.location.hash === "#profile") {
+    openStudentProfileEditor();
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  }
   window.setInterval(() => {
     refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate messages and bookings.", error));
   }, 15000);
@@ -1410,13 +1415,19 @@ document.querySelector("#profile-form").addEventListener("submit", (event) => {
   event.target.closest("dialog").close();
   showToast("Your student profile has been updated.");
 });
-document.querySelector("#profile-menu").addEventListener("click", () => {
+function openStudentProfileEditor() {
   document.querySelector("#profile-name").value = state.profile.name;
   document.querySelector("#profile-bio").value = state.profile.bio;
   document.querySelector("#profile-email").value = state.profile.email;
   document.querySelector("#profile-location").value = state.profile.location || "";
   openModal("profile-modal");
+}
+document.querySelector("#profile-menu").addEventListener("click", openStudentProfileEditor);
+document.querySelector("#student-profile-link").addEventListener("click", (event) => {
+  event.preventDefault();
+  openStudentProfileEditor();
 });
+document.addEventListener("skillmate:edit-profile", openStudentProfileEditor);
 document.querySelector("#verification-open").addEventListener("click", () => {
   if (appSupabase && document.querySelector("#verification-open").dataset.requested === "open") {
     showToast("Your campus verification request is waiting for review.");

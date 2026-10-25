@@ -91,7 +91,6 @@ async function fetchAdminDashboard() {
   document.querySelector(".welcome-row h1").innerHTML = `Welcome, ${escapeAdminText(window.adminProfile.full_name)} <span aria-hidden="true">✦</span>`;
   document.querySelector(".profile-copy strong").textContent = window.adminProfile.full_name;
   document.querySelector(".profile-avatar").textContent = initials(window.adminProfile.full_name);
-  document.querySelector(".topbar-avatar").textContent = initials(window.adminProfile.full_name);
   document.querySelector(".page-footer > span:last-child").lastChild.textContent = " Supabase account connected";
 
   const rows = bookings.data || [];
@@ -168,6 +167,11 @@ function updateAdminChart(days) {
   };
   const bookings = countBins(activity.bookings);
   const students = countBins(activity.students);
+  const maxCount = Math.max(0, ...bookings, ...students);
+  const chartMaximum = Math.max(4, Math.ceil(maxCount / 4) * 4);
+  document.querySelectorAll(".chart-y-labels span").forEach((label, index) => {
+    label.textContent = (chartMaximum - index * chartMaximum / 4).toLocaleString();
+  });
   const previousStart = new Date(start);
   previousStart.setDate(previousStart.getDate() - days);
   const countSince = (rows, from, to) => rows.filter((row) => {
@@ -180,10 +184,9 @@ function updateAdminChart(days) {
     ? `${currentBookings >= previousBookings ? "+" : ""}${((currentBookings - previousBookings) / previousBookings * 100).toFixed(1)}%`
     : currentBookings ? "New" : "0%";
   document.querySelector("#activity-change").textContent = change;
-  const line = (values) => {
-    const max = Math.max(1, ...values);
-    return values.map((value, index) => `${index ? "L" : "M"}${index * 140} ${180 - value / max * 155}`).join(" ");
-  };
+  const line = (values) => values
+    .map((value, index) => `${index ? "L" : "M"}${index * 140} ${180 - value / chartMaximum * 160}`)
+    .join(" ");
   const bookingPath = line(bookings);
   const studentPath = line(students);
   document.querySelector(".chart-line-bookings").setAttribute("d", bookingPath);
@@ -193,8 +196,7 @@ function updateAdminChart(days) {
     [".point-bookings", bookings[5]], [".point-students", students[5]],
   ];
   points.forEach(([selector, value]) => {
-    const max = Math.max(1, ...(selector.includes("bookings") ? bookings : students));
-    document.querySelector(selector).setAttribute("cy", String(180 - value / max * 155));
+    document.querySelector(selector).setAttribute("cy", String(180 - value / chartMaximum * 160));
   });
   document.querySelectorAll("#chart-x-labels span").forEach((label, index) => {
     const date = new Date(start);
@@ -247,19 +249,24 @@ async function protectAdminDashboard() {
     document.body.classList.remove("admin-locked");
     document.body.classList.add("admin-ready");
     adminStatus.hidden = true;
+    const studentDashboardLink = document.createElement("a");
+    studentDashboardLink.href = "index.html";
+    studentDashboardLink.className = "student-dashboard-link";
+    studentDashboardLink.textContent = "Student dashboard";
     const signout = document.createElement("button");
     signout.type = "button";
-    signout.className = "signout-button";
+    signout.className = "admin-signout-button";
     signout.textContent = "Sign out";
     signout.addEventListener("click", async () => {
+      signout.disabled = true;
       const { error } = await adminClient.auth.signOut();
       if (error) {
         console.error("Could not sign out.", error);
         showAdminToast(error.message || "Could not sign out.");
-        return;
+        signout.disabled = false;
       }
     });
-    document.querySelector(".sidebar-bottom").prepend(signout);
+    document.querySelector(".sidebar-bottom").prepend(studentDashboardLink, signout);
     document.querySelector(".notification-button").addEventListener("click", async () => {
       const { data, error } = await adminClient.from("notifications")
         .select("id, title, body, read_at").order("created_at", { ascending: false }).limit(10);

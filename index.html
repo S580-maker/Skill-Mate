@@ -48,7 +48,7 @@
             <button class="icon-button notification-button" id="notifications-button" type="button" aria-label="Notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></svg><span class="notification-dot"></span></button>
             <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to dark mode"><span data-theme-icon aria-hidden="true">☾</span></button>
             <button class="mode-switch" id="mode-switch" type="button" aria-label="Switch to offering services" aria-pressed="false"><span class="mode-switch-dot"></span><span id="mode-switch-label">Earn with skills</span><span id="mode-switch-short" aria-hidden="true">Earn</span></button>
-            <div class="topbar-avatar" aria-label="Alex Morgan">AM</div>
+            <a class="student-profile-link" id="student-profile-link" href="#profile" aria-label="Open student profile">EN</a>
           </div>
         </header>
 
@@ -58,6 +58,7 @@
               <div><p class="eyebrow"><time id="marketplace-date"></time> <span class="demo-pill">STUDENT MARKETPLACE</span></p><h1>Good morning, Alex <span aria-hidden="true">✦</span></h1><p class="welcome-copy">Find your next campus go-to, or turn what you know into extra income.</p></div>
               <button class="button button-primary" type="button" data-open="service-modal"><span aria-hidden="true">＋</span> Offer a skill</button>
             </div>
+            <div id="profile-completeness-root"></div>
             <div class="mode-banner" id="provider-setup-banner" hidden><div class="mode-banner-icon">✦</div><div class="mode-banner-copy"><strong id="mode-heading">Have a skill? Earn money on campus.</strong><span id="mode-description">Create a profile, list your service, and accept bookings from other students.</span></div><button class="mode-banner-button" type="button" id="banner-mode-button">Set up your profile <span>→</span></button></div>
             <div class="section-heading"><div><h2>Find your people</h2><p>Useful skills, shared by students on your campus.</p></div><button class="subtle-button" type="button" data-page-link="saved">Saved providers <span>→</span></button>            </div>
             <div class="category-strip" id="category-strip" aria-label="Filter by service category">
@@ -125,6 +126,9 @@
     <script src="supabase-config.js"></script>
     <script src="supabase-client.js"></script>
     <script src="smart-search.js"></script>
+    <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="profile-completeness.js"></script>
     <script src="user.js"></script>
   </body>
 </html>
