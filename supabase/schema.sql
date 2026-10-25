@@ -14,6 +14,8 @@ create table public.profiles (
   full_name text not null check (char_length(full_name) between 1 and 80),
   university text not null default '',
   course text not null default '',
+  skills text[] not null default '{}',
+  onboarding_completed boolean not null default false,
   bio text not null default '' check (char_length(bio) <= 500),
   avatar_url text,
   university_email text,
@@ -278,19 +280,23 @@ security definer
 set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, full_name, university, university_email)
+  insert into public.profiles (id, full_name, university, university_email, avatar_url)
   values (
     new.id,
     coalesce(nullif(new.raw_user_meta_data ->> 'full_name', ''), split_part(new.email, '@', 1)),
     coalesce(new.raw_user_meta_data ->> 'university', ''),
-    new.email
+    new.email,
+    coalesce(new.raw_user_meta_data ->> 'avatar_url', new.raw_user_meta_data ->> 'picture')
   );
-  insert into public.student_identifiers (student_id, university_name, student_id_number)
-  values (
-    new.id,
-    btrim(new.raw_user_meta_data ->> 'university'),
-    btrim(new.raw_user_meta_data ->> 'student_id_number')
-  );
+  if char_length(btrim(coalesce(new.raw_user_meta_data ->> 'university', ''))) between 2 and 120
+    and char_length(btrim(coalesce(new.raw_user_meta_data ->> 'student_id_number', ''))) between 3 and 80 then
+    insert into public.student_identifiers (student_id, university_name, student_id_number)
+    values (
+      new.id,
+      btrim(new.raw_user_meta_data ->> 'university'),
+      btrim(new.raw_user_meta_data ->> 'student_id_number')
+    );
+  end if;
   return new;
 end;
 $$;
@@ -976,7 +982,7 @@ grant select on public.conversation_directory to authenticated;
 grant select on public.profiles to authenticated;
 grant select on public.student_identifiers to authenticated;
 grant select, insert, update, delete on public.user_locations to authenticated;
-grant update (full_name, university, course, bio) on public.profiles to authenticated;
+grant update (full_name, university, course, skills, onboarding_completed, avatar_url, bio) on public.profiles to authenticated;
 grant select, insert, update, delete on public.services to authenticated;
 grant select, insert on public.bookings to authenticated;
 grant select on public.group_bookings to authenticated;

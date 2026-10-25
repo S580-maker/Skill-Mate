@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Set up your profile | Skillmate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="user.css" />
+    <link rel="stylesheet" href="auth.css" />
+    <script src="theme.js"></script>
+  </head>
+  <body>
+    <main class="onboarding-layout">
+      <header class="onboarding-header">
+        <a class="brand auth-brand" href="index.html"><span class="brand-mark" aria-hidden="true">S</span><span class="brand-name">skillmate<span>.</span></span></a>
+        <button class="onboarding-skip" id="onboarding-skip" type="button">Skip for now</button>
+      </header>
+      <section class="onboarding-card" aria-labelledby="onboarding-title">
+        <p class="eyebrow">YOUR CAMPUS. YOUR COMMUNITY.</p>
+        <h1 id="onboarding-title">Make your profile yours</h1>
+        <p class="auth-intro">Add a photo, your campus, and any skills you’d like to share. Skills are optional, and you can skip this step.</p>
+        <form id="onboarding-form">
+          <fieldset class="onboarding-photo-field">
+            <legend>Profile photo <span class="label-hint">(optional)</span></legend>
+            <div class="onboarding-photo-row">
+              <img id="onboarding-avatar-preview" class="onboarding-avatar" alt="" hidden />
+              <span id="onboarding-avatar-fallback" class="onboarding-avatar-fallback" aria-hidden="true">S</span>
+              <label class="onboarding-file-label" for="onboarding-photo">Choose a photo<input id="onboarding-photo" type="file" accept="image/png,image/jpeg,image/webp,image/gif" /><small>PNG, JPG, WEBP, or GIF up to 5 MB.</small></label>
+            </div>
+            <p class="onboarding-error" id="onboarding-photo-error" aria-live="polite"></p>
+          </fieldset>
+          <label for="onboarding-name">Your name<input id="onboarding-name" autocomplete="name" maxlength="80" required /></label>
+          <label for="onboarding-campus">University or campus<input id="onboarding-campus" autocomplete="organization" list="onboarding-university-options" maxlength="120" placeholder="Enter your university or campus" required /><datalist id="onboarding-university-options"></datalist></label>
+          <fieldset class="onboarding-skills">
+            <legend>Skills you offer <span class="label-hint">(optional)</span></legend>
+            <p class="onboarding-help">Add a suggestion or type your own skill.</p>
+            <div class="skill-suggestions" aria-label="Suggested skills">
+              <button type="button" data-skill-suggestion="Graphic design">Graphic design</button>
+              <button type="button" data-skill-suggestion="Tech help">Tech help</button>
+              <button type="button" data-skill-suggestion="Tutoring">Tutoring</button>
+              <button type="button" data-skill-suggestion="Braiding">Braiding</button>
+              <button type="button" data-skill-suggestion="Photography">Photography</button>
+            </div>
+            <div class="skill-entry"><label class="visually-hidden" for="custom-skill">Add a custom skill</label><input id="custom-skill" maxlength="40" placeholder="e.g. Video editing" /><button id="add-skill" type="button">Add skill</button></div>
+            <ul class="skill-chips" id="skill-chips" aria-label="Selected skills"></ul>
+          </fieldset>
+          <p class="auth-message" id="onboarding-message" role="status" aria-live="polite"></p>
+          <div class="onboarding-actions"><button class="button button-primary auth-submit" id="onboarding-submit" type="submit"><span class="auth-submit-spinner" aria-hidden="true" hidden></span><span id="onboarding-submit-label">Save and continue</span></button><button class="auth-text-button" id="onboarding-skip-mobile" type="button">Skip for now</button></div>
+        </form>
+        <footer class="auth-footer"><a href="terms.html">Terms</a><span aria-hidden="true"> · </span><a href="privacy.html">Privacy</a></footer>
+      </section>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="supabase-client.js"></script>
+    <script src="ghana-universities.js"></script>
+    <script src="onboarding.js"></script>
+  </body>
+</html>

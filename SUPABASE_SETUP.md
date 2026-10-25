@@ -53,7 +53,7 @@ http://localhost:3000/index.html
 Add this password-recovery redirect URL as well:
 
 ```text
-http://localhost:3000/login.html?mode=recovery
+http://localhost:3000/reset.html
 ```
 
 For deployment, set the Site URL to your production HTTPS domain and add the corresponding callback URL, for example:
@@ -62,7 +62,7 @@ For deployment, set the Site URL to your production HTTPS domain and add the cor
 https://your-skillmate-domain.vercel.app
 https://your-skillmate-domain.vercel.app/index.html
 https://your-skillmate-domain.vercel.app/login.html
-https://your-skillmate-domain.vercel.app/login.html?mode=recovery
+https://your-skillmate-domain.vercel.app/reset.html
 ```
 
 Configure email/password sign-in and decide whether email confirmation is required. If confirmation is enabled, use the email link before signing in.
@@ -83,6 +83,12 @@ Configure email/password sign-in and decide whether email confirmation is requir
 5. Visit the Vercel URL, create/sign in to an account, and test the main marketplace and administrator route. Promote the intended admin account using the SQL in the next section.
 
 The repository includes Vercel configuration and does not include `.env` or local dependency files in Git. Changing Vercel environment variables requires a new deployment to take effect. Local development remains available with `npm start`.
+
+For Google sign-in, enable the Google provider in Supabase **Authentication → Sign In / Providers**, add the Google OAuth client ID and secret there, and allow the local and deployed callback URLs shown by Supabase. Keep the OAuth client secret in Supabase; the browser uses only the public anon/publishable key.
+
+On existing projects, apply `supabase/migrations/20261025_profile_onboarding.sql` once in the SQL Editor before using onboarding. It adds the profile `skills` and `onboarding_completed` columns, marks existing profiles as already onboarded, and makes the new-user trigger compatible with Google accounts that do not have a student ID at signup. New accounts are prompted to complete or skip the optional onboarding step. New projects include the same schema changes in `supabase/schema.sql`.
+
+The Terms and Privacy pages are marked **Draft, pending review** and contain placeholders. Replace and approve their text before publishing them as final policies.
 
 ## 6. Promote the first administrator
 

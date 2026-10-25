@@ -450,8 +450,8 @@ function renderAll() {
     ? "Campus status verified"
     : "Verify to earn a campus badge";
   document.querySelector(".profile-copy strong").textContent = state.profile.name;
-  document.querySelector(".profile-avatar").textContent = state.profile.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
-  document.querySelector(".topbar-avatar").textContent = state.profile.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
+  renderUserAvatar(document.querySelector(".profile-avatar"), state.profile);
+  renderUserAvatar(document.querySelector(".topbar-avatar"), state.profile);
   const ownReviews = state.reviews.filter((review) => review.providerId === ownProviderId());
   const ownRating = ownReviews.length ? (ownReviews.reduce((sum, review) => sum + review.rating, 0) / ownReviews.length).toFixed(1) : appSupabase ? "New" : "4.9";
   const ratingStat = document.querySelectorAll(".provider-stat")[2];
@@ -463,12 +463,28 @@ function renderAll() {
     document.querySelector(".campus-card small").textContent = state.profile.course || "STUDENT ACCOUNT";
     document.querySelector(".topbar-avatar").setAttribute("aria-label", state.profile.name);
     const providerHeading = document.querySelector(".provider-profile-main");
-    providerHeading.querySelector(".profile-avatar").textContent = initialsFor(state.profile.name);
+    renderUserAvatar(providerHeading.querySelector(".profile-avatar"), state.profile);
     providerHeading.querySelector(".verified-pill").textContent = verified ? "✓ Campus verified" : "Campus verification pending";
     providerHeading.querySelector("h2").textContent = state.profile.name;
     providerHeading.querySelector("p").textContent = `${state.profile.bio || "Student service provider"} · ${state.profile.university || "Campus not set"}`;
     providerHeading.querySelector(".profile-tags").innerHTML = [...new Set(state.services.map((service) => service.category))]
       .slice(0, 3).map((category) => `<span>${escapeHTML(category)}</span>`).join("");
+  }
+  function renderUserAvatar(element, profile) {
+    const initials = initialsFor(profile.name);
+    element.replaceChildren();
+    if (profile.avatarUrl) {
+      const image = document.createElement("img");
+      image.src = profile.avatarUrl;
+      image.alt = "";
+      image.loading = "lazy";
+      image.addEventListener("error", () => {
+        element.textContent = initials;
+      }, { once: true });
+      element.append(image);
+    } else {
+      element.textContent = initials;
+    }
   }
   const completedThisMonth = state.bookings.filter((booking) => isOwnBooking(booking)
     && booking.status === "Completed" && booking.date?.slice(0, 7) === new Date().toISOString().slice(0, 7))
@@ -487,7 +503,7 @@ async function refreshSupabaseState() {
     savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory,
     verification,
   ] = await Promise.all([
-    appSupabase.from("profiles").select("id, full_name, university, course, bio, campus_verified, university_email, role").eq("id", appUser.id).single(),
+    appSupabase.from("profiles").select("id, full_name, university, course, bio, campus_verified, university_email, role, skills, avatar_url, onboarding_completed").eq("id", appUser.id).single(),
     appSupabase.from("provider_directory").select("*"),
     appSupabase.from("services").select("*").eq("provider_id", appUser.id).order("created_at", { ascending: false }),
     appSupabase.from("booking_directory").select("*").order("scheduled_at", { ascending: true }),
@@ -507,10 +523,15 @@ async function refreshSupabaseState() {
   if (failed) throw failed.error;
 
   const profile = ownProfile.data;
+  if (!profile.onboarding_completed) {
+    window.location.replace("onboarding.html");
+    return;
+  }
   document.querySelector("#admin-link").hidden = profile.role !== "admin";
   state.profile = {
     name: profile.full_name, university: profile.university, course: profile.course,
     bio: profile.bio, email: profile.university_email || appUser.email, verified: profile.campus_verified,
+    skills: profile.skills || [], avatarUrl: profile.avatar_url || "",
     location: (userLocations.data || []).find((item) => item.user_id === appUser.id)?.location_name || "",
   };
   connectedServices = (directory.data || []).map((row) => ({
@@ -743,10 +764,35 @@ async function bootstrapStudentApp() {
     throw new Error(window.skillmateSupabaseError
       || "Skillmate could not connect to Supabase. Start the Express server and check its .env configuration.");
   }
-  const { data, error } = await appSupabase.auth.getSession();
+  appSupabase.auth.onAuthStateChange((event, session) => {
+    if (event === "SIGNED_OUT") {
+      window.clearSkillmateServerSession()
+        .catch((sessionError) => console.error("Could not clear the secure Skillmate session.", sessionError))
+        .finally(() => window.location.replace("login.html"));
+    }
+    if (event === "TOKEN_REFRESHED" && session) {
+      window.syncSkillmateServerSession(session).catch((syncError) => {
+        console.error("Could not refresh the secure Skillmate session.", syncError);
+      });
+    }
+  });
+  let timeoutId;
+  const { data, error } = await Promise.race([
+    appSupabase.auth.getSession(),
+    new Promise((_, reject) => {
+      timeoutId = window.setTimeout(() => reject(new Error("SESSION_CHECK_TIMEOUT")), 3000);
+    }),
+  ]).finally(() => window.clearTimeout(timeoutId));
   if (error) throw error;
   if (!data.session) {
     window.location.replace("login.html");
+    return;
+  }
+  const { data: profile, error: profileError } = await appSupabase.from("profiles")
+    .select("onboarding_completed").eq("id", data.session.user.id).single();
+  if (profileError) throw profileError;
+  if (!profile.onboarding_completed) {
+    window.location.replace("onboarding.html");
     return;
   }
   await window.syncSkillmateServerSession(data.session);
@@ -763,18 +809,6 @@ async function bootstrapStudentApp() {
   );
   document.querySelector("#message-count").textContent = String(state.messages.length);
   showConnectedApp();
-  appSupabase.auth.onAuthStateChange((event, session) => {
-    if (event === "SIGNED_OUT") {
-      window.clearSkillmateServerSession()
-        .catch((sessionError) => console.error("Could not clear the secure Skillmate session.", sessionError))
-        .finally(() => window.location.replace("login.html"));
-    }
-    if (event === "TOKEN_REFRESHED" && session) {
-      window.syncSkillmateServerSession(session).catch((syncError) => {
-        console.error("Could not refresh the secure Skillmate session.", syncError);
-      });
-    }
-  });
   window.setInterval(() => {
     refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate messages and bookings.", error));
   }, 15000);
@@ -1742,6 +1776,10 @@ document.querySelector("#group-service").addEventListener("change", updateGroupP
 renderServiceCategories();
 bootstrapStudentApp().catch((error) => {
   console.error("Could not initialize the Skillmate student dashboard.", error);
+  if (error?.message === "SESSION_CHECK_TIMEOUT") {
+    window.location.replace("login.html");
+    return;
+  }
   const status = document.querySelector("#app-auth-status");
   status.replaceChildren(document.createTextNode(error?.message || "Could not load your Skillmate account."));
   const loginLink = document.createElement("a");

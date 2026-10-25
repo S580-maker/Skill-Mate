@@ -1,17 +1,24 @@
 (function initializeSkillmateTheme() {
   const storageKey = "skillmate-theme";
-  let theme = "light";
+  const colorScheme = window.matchMedia?.("(prefers-color-scheme: dark)");
+  let savedTheme = null;
   try {
-    theme = localStorage.getItem(storageKey) === "dark" ? "dark" : "light";
+    const storedTheme = localStorage.getItem(storageKey);
+    if (storedTheme === "dark" || storedTheme === "light") savedTheme = storedTheme;
   } catch (error) {
     console.warn("Could not load the saved Skillmate theme preference.", error);
   }
-  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.theme = savedTheme || (colorScheme?.matches ? "dark" : "light");
 
   function updateThemeButtons() {
     const isDark = document.documentElement.dataset.theme === "dark";
-    const themeColor = document.querySelector('meta[name="theme-color"]');
-    if (themeColor) themeColor.content = isDark ? "#111c2b" : "#f4f7fb";
+    let themeColor = document.querySelector('meta[name="theme-color"]');
+    if (!themeColor) {
+      themeColor = document.createElement("meta");
+      themeColor.name = "theme-color";
+      document.head.append(themeColor);
+    }
+    themeColor.content = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
     document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
       button.setAttribute("aria-pressed", String(isDark));
       button.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
@@ -25,6 +32,7 @@
     document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
       button.addEventListener("click", () => {
         const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        savedTheme = nextTheme;
         document.documentElement.dataset.theme = nextTheme;
         try {
           localStorage.setItem(storageKey, nextTheme);
@@ -33,6 +41,11 @@
         }
         updateThemeButtons();
       });
+    });
+    colorScheme?.addEventListener("change", (event) => {
+      if (savedTheme) return;
+      document.documentElement.dataset.theme = event.matches ? "dark" : "light";
+      updateThemeButtons();
     });
   });
 })();
