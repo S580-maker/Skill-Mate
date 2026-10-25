@@ -72,6 +72,7 @@ function setAuthMode(mode) {
   const signup = mode === "signup";
   const recovery = mode === "recovery";
   const signin = !signup && !recovery;
+  document.querySelector("#auth-tabs").dataset.mode = signup ? "signup" : "signin";
   setPasswordVisibility(false);
   document.title = signup ? "Create account | Skillmate" : recovery ? "Reset password | Skillmate" : "Sign in | Skillmate";
   document.querySelector("#auth-tabs").hidden = recovery;

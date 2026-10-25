@@ -8,11 +8,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="user.css?v=3" />
-    <script src="theme.js"></script>
+    <link rel="preload" href="user.css?v=5" as="style" />
+    <link rel="stylesheet" href="user.css?v=5" />
+    <script src="theme.js?v=2"></script>
   </head>
   <body class="app-auth-pending">
-    <div class="auth-screen" id="app-auth-status" role="status">Checking your Skillmate session…</div>
+    <div class="auth-screen" id="app-auth-status" role="status" aria-live="polite">
+      <span class="splash-brand" aria-hidden="true"><span class="brand-mark">✓</span><strong>skillmate<span>.</span></strong></span>
+      <span class="auth-screen-label">Checking your session</span>
+      <span class="splash-skeleton" aria-hidden="true"><i></i><i></i><i></i></span>
+    </div>
     <div class="app-shell" id="app-shell">
       <aside class="sidebar" id="sidebar">
         <a class="brand" href="#home" aria-label="Skillmate home">
@@ -128,13 +133,13 @@
     <dialog class="app-modal" id="review-modal"><form method="dialog" class="modal-frame" id="review-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">HELP STUDENTS CHOOSE WELL</p><h2>Leave a review</h2><p class="modal-description" id="review-description"></p><input type="hidden" id="review-booking-id" /><label>Your rating<select id="review-rating"><option value="5">★★★★★ — Great</option><option value="4">★★★★☆ — Good</option><option value="3">★★★☆☆ — Okay</option><option value="2">★★☆☆☆ — Not great</option><option value="1">★☆☆☆☆ — Poor</option></select></label><label>Share your experience<textarea id="review-text" rows="3" required maxlength="300" placeholder="What should another student know?"></textarea></label><button class="button button-primary modal-submit" type="submit">Post review</button></form></dialog>
     <div class="loading-indicator" id="loading-indicator" role="status" aria-live="polite" hidden><span class="loading-spinner" aria-hidden="true"></span><span id="loading-label">Working on it…</span></div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js"></script>
-    <script src="supabase-client.js?v=4"></script>
-    <script src="smart-search.js"></script>
-    <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-    <script src="profile-completeness.js"></script>
-    <script src="user.js?v=4"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script defer src="supabase-config.js"></script>
+    <script defer src="supabase-client.js?v=4"></script>
+    <script defer src="smart-search.js"></script>
+    <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script defer src="profile-completeness.js"></script>
+    <script defer src="user.js?v=6"></script>
   </body>
 </html>

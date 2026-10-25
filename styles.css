@@ -31,6 +31,9 @@
   --main-hover: color-mix(in srgb, var(--main) 85%, var(--nav-bg));
   --panel: var(--surface);
   --line: var(--border);
+  --ease: cubic-bezier(.2,.8,.2,1);
+  --fast: 150ms;
+  --base: 250ms;
 }
 
 * { box-sizing: border-box; }
@@ -484,3 +487,22 @@ body.admin-locked .auth-screen { display: grid; }
 .verified-pill, .verified-dot { color: var(--main); background: var(--main-soft); }
 .auth-message:not(.success):not(:empty)::before, .onboarding-error:not(:empty)::before { content: "! "; }
 :where(button, a, input, select, textarea):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
+
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after { transition-property: color, background-color, border-color, box-shadow, fill, stroke; transition-duration: 200ms; transition-timing-function: var(--ease); }
+button, a, input, select, textarea, .panel, .stat-card, .button, .theme-toggle { transition-timing-function: var(--ease); }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  button:not(:disabled):hover, .button:not(:disabled):hover { transform: translateY(-1px); }
+  button:not(:disabled):active, .button:not(:disabled):active { transform: translateY(1px) scale(.985); }
+}
+.admin-dashboard > main, .admin-page { animation: polish-view-in var(--base) var(--ease) both; }
+.admin-card, .admin-list-item, .admin-report-row { animation: polish-list-in var(--base) var(--ease) both; }
+.admin-dialog[open] { animation: polish-modal-in var(--base) var(--ease) both; }
+@keyframes polish-view-in { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes polish-list-in { from { transform: translateY(5px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes polish-modal-in { from { transform: translateY(8px) scale(.98); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

@@ -117,21 +117,23 @@ const hiddenMessageIds = new Set();
 const readUpdatesInProgress = new Set();
 const presenceTypingTimers = new Map();
 let toastTimer;
+let toastExitTimer;
+let globalSearchTimer;
 let pendingActionCount = 0;
 let activityRefreshInProgress = false;
 const pendingProviderSaves = new Set();
 const ownProviderId = () => appUser?.id || "alex";
 const isOwnBooking = (booking) => booking.providerId === ownProviderId();
-const messageColumns = "id, sender_id, body, created_at, read_at, delivered_at, reply_to";
-const legacyMessageColumns = "id, sender_id, body, created_at, read_at";
+const messageColumns = "id, conversation_id, sender_id, body, created_at, read_at, delivered_at, reply_to";
+const legacyMessageColumns = "id, conversation_id, sender_id, body, created_at, read_at";
 
 function isMissingMessageMetadata(error) {
   return ["42703", "PGRST204"].includes(error?.code)
     && /delivered_at|reply_to/i.test(`${error.message || ""} ${error.details || ""}`);
 }
 
-async function loadConversationMessages(chatId) {
-  const conversation = { conversation_id: chatId, other_user_name: "Student" };
+async function loadConversationMessages(chatId, otherUserName = "Student") {
+  const conversation = { conversation_id: chatId, other_user_name: otherUserName };
   const messages = await loadConversationMessageGroups([conversation]);
   return messages.get(chatId) || [];
 }
@@ -165,6 +167,9 @@ async function loadConversationMessageGroups(conversations) {
   ]));
   for (const row of data || []) {
     const conversationMessages = grouped.get(row.conversation_id);
+    if (!conversationMessages) {
+      throw new Error(`Received a message for an unexpected conversation: ${row.conversation_id || "unknown"}.`);
+    }
     conversationMessages.push(normalizeMessageRow(row, names.get(row.conversation_id)));
   }
   for (const conversation of conversations) {
@@ -407,12 +412,17 @@ function providerServices(providerId) {
       price: provider.price, description: provider.description, groups: provider.groups,
     }));
 }
-function showToast(message) {
+function showToast(message, kind = "info") {
   const toast = document.querySelector("#toast");
   toast.textContent = message;
+  toast.dataset.kind = kind;
   toast.classList.add("visible");
   window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 3000);
+  window.clearTimeout(toastExitTimer);
+  toastTimer = window.setTimeout(() => {
+    toast.classList.remove("visible");
+    toastExitTimer = window.setTimeout(() => { delete toast.dataset.kind; }, 250);
+  }, 4000);
 }
 function syncChatVisualViewport() {
   const viewport = window.visualViewport;
@@ -623,7 +633,7 @@ async function refreshConversationMessages(chatId) {
     await refreshLiveMessages();
     return;
   }
-  const data = await loadConversationMessages(chatId);
+  const data = await loadConversationMessages(chatId, chat.name || getProvider(chat.providerId)?.name || "Student");
   chat.messages = linkMessageReplies(data.map((message) => normalizeMessageRow(message, chat.name || getProvider(chat.providerId)?.name || "Student")));
   renderConversations({ preserveChatState: true });
   if (activeConversationId === chatId && state.activePage === "messages" && !document.hidden) {
@@ -1115,7 +1125,7 @@ function renderListings() {
 }
 function renderPortfolio() {
   const target = document.querySelector("#portfolio-grid");
-  target.innerHTML = state.portfolio.length ? state.portfolio.map((item) => `<article class="portfolio-item">${item.image ? `<img class="portfolio-art portfolio-image" src="${escapeHTML(item.image)}" alt="" />` : `<span class="portfolio-art">${getCategoryIcon("Design")}</span>`}<div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.description)}</small></div><button type="button" class="portfolio-remove" data-remove-work="${escapeHTML(item.id)}" aria-label="Remove ${escapeHTML(item.title)}">×</button></article>`).join("") : '<div class="empty-card"><strong>Your portfolio is ready to grow</strong><small>Add examples of your best work.</small></div>';
+  target.innerHTML = state.portfolio.length ? state.portfolio.map((item) => `<article class="portfolio-item">${item.image ? `<img class="portfolio-art portfolio-image" src="${escapeHTML(item.image)}" alt="" width="96" height="72" loading="lazy" decoding="async" />` : `<span class="portfolio-art">${getCategoryIcon("Design")}</span>`}<div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.description)}</small></div><button type="button" class="portfolio-remove" data-remove-work="${escapeHTML(item.id)}" aria-label="Remove ${escapeHTML(item.title)}">×</button></article>`).join("") : '<div class="empty-card"><strong>Your portfolio is ready to grow</strong><small>Add examples of your best work.</small></div>';
 }
 function renderEarnings() {
   const completed = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Completed");
@@ -1204,7 +1214,10 @@ function renderAll() {
       const image = document.createElement("img");
       image.src = profile.avatarUrl;
       image.alt = "";
+      image.width = 48;
+      image.height = 48;
       image.loading = "lazy";
+      image.decoding = "async";
       image.addEventListener("error", () => {
         element.textContent = initials;
       }, { once: true });
@@ -1431,16 +1444,31 @@ async function persistBookingStatus(bookingId, status) {
 async function runAction(action, failureMessage, loadingMessage = "Saving your changes…") {
   const loadingIndicator = document.querySelector("#loading-indicator");
   const loadingLabel = document.querySelector("#loading-label");
+  const activeElement = document.activeElement;
+  const control = activeElement instanceof HTMLButtonElement
+    ? activeElement
+    : activeElement instanceof HTMLElement
+      ? activeElement.closest("form")?.querySelector('button[type="submit"]')
+      : null;
+  const controlWasDisabled = control?.disabled ?? false;
   pendingActionCount += 1;
   loadingLabel.textContent = loadingMessage;
   loadingIndicator.hidden = false;
   document.querySelector("#app-shell").setAttribute("aria-busy", "true");
+  if (control && !control.disabled) {
+    control.disabled = true;
+    control.setAttribute("aria-busy", "true");
+  }
   try {
     await action();
   } catch (error) {
     console.error(failureMessage, error);
-    showToast(error?.message || failureMessage);
+    showToast(error?.message || failureMessage, "error");
   } finally {
+    if (control && control.isConnected) {
+      control.disabled = controlWasDisabled;
+      if (!controlWasDisabled) control.removeAttribute("aria-busy");
+    }
     pendingActionCount = Math.max(0, pendingActionCount - 1);
     if (!pendingActionCount) {
       loadingIndicator.hidden = true;
@@ -1450,9 +1478,10 @@ async function runAction(action, failureMessage, loadingMessage = "Saving your c
 }
 function showConnectedApp() {
   const status = document.querySelector("#app-auth-status");
-  status.hidden = true;
   document.body.classList.remove("app-auth-pending");
   document.querySelector("#app-shell").hidden = false;
+  status.classList.add("is-exiting");
+  window.setTimeout(() => { status.hidden = true; }, 250);
 }
 function initializeDashboard() {
   const modeSwitch = document.querySelector("#mode-switch");
@@ -1744,9 +1773,12 @@ document.querySelector("#category-strip").addEventListener("click", (event) => {
   renderMarketplace();
 });
 document.querySelector("#global-search").addEventListener("input", () => {
-  if (document.querySelector("#global-search").value.trim() && state.activePage !== "home") showPage("home");
-  renderMarketplace();
-  renderSearchSuggestions();
+  window.clearTimeout(globalSearchTimer);
+  globalSearchTimer = window.setTimeout(() => {
+    if (document.querySelector("#global-search").value.trim() && state.activePage !== "home") showPage("home");
+    renderMarketplace();
+    renderSearchSuggestions();
+  }, 300);
 });
 const globalSearch = document.querySelector("#global-search");
 globalSearch.addEventListener("focus", () => {
@@ -1820,31 +1852,42 @@ function handleCardAction(event) {
       return;
     }
     const saving = !state.saved.includes(id);
+    const previousSaved = [...state.saved];
+    state.saved = saving
+      ? [...new Set([...state.saved, id])]
+      : state.saved.filter((savedId) => savedId !== id);
     pendingProviderSaves.add(id);
+    renderMarketplace();
+    if (state.activePage === "saved") {
+      renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders)
+        .filter((provider) => state.saved.includes(provider.id)));
+    }
     setProviderSaveButtonsBusy(id, true);
     void runAction(async () => {
-      if (appSupabase) {
-        const services = connectedServices.filter((service) => service.providerId === id);
-        const changes = await Promise.all(services.map((service) => saving
-          ? appSupabase.from("saved_services").upsert(
-            { user_id: appUser.id, service_id: service.id },
-            { onConflict: "user_id,service_id", ignoreDuplicates: true },
-          )
-          : appSupabase.from("saved_services").delete().eq("user_id", appUser.id).eq("service_id", service.id)));
-        const failed = changes.find((result) => result.error);
-        if (failed) throw failed.error;
-        await refreshSupabaseState();
-        renderAll();
-      } else {
-        state.saved = saving
-          ? [...new Set([...state.saved, id])]
-          : state.saved.filter((savedId) => savedId !== id);
-        saveState();
+      try {
+        if (appSupabase) {
+          const services = connectedServices.filter((service) => service.providerId === id);
+          const changes = await Promise.all(services.map((service) => saving
+            ? appSupabase.from("saved_services").upsert(
+              { user_id: appUser.id, service_id: service.id },
+              { onConflict: "user_id,service_id", ignoreDuplicates: true },
+            )
+            : appSupabase.from("saved_services").delete().eq("user_id", appUser.id).eq("service_id", service.id)));
+          const failed = changes.find((result) => result.error);
+          if (failed) throw failed.error;
+          await refreshSupabaseState();
+          renderAll();
+        } else {
+          saveState();
+        }
+      } catch (error) {
+        state.saved = previousSaved;
         renderMarketplace();
         if (state.activePage === "saved") {
           renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders)
             .filter((provider) => state.saved.includes(provider.id)));
         }
+        throw error;
       }
       showToast(saving ? "Provider saved to your shortlist." : "Provider removed from saved.");
     }, "Could not update your saved providers.", saving ? "Saving provider…" : "Updating saved providers…")
@@ -1922,18 +1965,35 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
     return;
   }
   if (appSupabase) {
+    const temporaryId = `pending-booking-${Date.now()}`;
+    const pendingBooking = {
+      id: temporaryId, providerId, customerId: appUser.id, customer: state.profile.name,
+      service: service.title, category: service.category, price: Number(service.price),
+      currency: service.currency || "GHS", date: appointmentDate,
+      time: scheduledAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      status: "Pending", type: "Individual",
+      note: document.querySelector("#booking-note").value.trim(), reviewed: false,
+    };
+    state.bookings.unshift(pendingBooking);
+    renderAll();
     runAction(async () => {
-      const { error } = await appSupabase.from("bookings").insert({
-        service_id: service.id, customer_id: appUser.id, provider_id: providerId,
-        scheduled_at: scheduledAt.toISOString(), note: document.querySelector("#booking-note").value.trim(),
-        agreed_price: service.price, currency: service.currency || "GHS",
-      });
-      if (error) throw error;
-      await refreshSupabaseState();
-      event.target.closest("dialog").close();
-      renderAll();
-      showPage("bookings");
-      showToast("Booking request sent. You can track it in My bookings.");
+      try {
+        const { error } = await appSupabase.from("bookings").insert({
+          service_id: service.id, customer_id: appUser.id, provider_id: providerId,
+          scheduled_at: scheduledAt.toISOString(), note: pendingBooking.note,
+          agreed_price: service.price, currency: service.currency || "GHS",
+        });
+        if (error) throw error;
+        await refreshSupabaseState();
+        event.target.closest("dialog").close();
+        renderAll();
+        showPage("bookings");
+        showToast("Booking request sent. You can track it in My bookings.", "success");
+      } catch (error) {
+        state.bookings = state.bookings.filter((booking) => booking.id !== temporaryId);
+        renderAll();
+        throw error;
+      }
     }, "Could not send the booking request.");
     return;
   }
@@ -2018,7 +2078,7 @@ document.querySelector("#conversation-list").addEventListener("click", (event) =
 let conversationSearchTimer;
 document.querySelector("#conversation-search").addEventListener("input", () => {
   window.clearTimeout(conversationSearchTimer);
-  conversationSearchTimer = window.setTimeout(() => renderConversations({ preserveChatState: true }), 120);
+  conversationSearchTimer = window.setTimeout(() => renderConversations({ preserveChatState: true }), 300);
 });
 document.querySelector("#chat-panel").addEventListener("click", (event) => {
   const retryButton = event.target.closest("[data-retry-message]");
@@ -2456,23 +2516,34 @@ document.querySelector("#report-form").addEventListener("submit", (event) => {
   const provider = getProvider(providerId);
   const shouldBlock = document.querySelector("#report-block").checked;
   if (appSupabase) {
-    runAction(async () => {
-      const { error } = await appSupabase.from("reports").insert({
-        reporter_id: appUser.id, reported_user_id: providerId,
-        reason: document.querySelector("#report-reason").value,
-        details: document.querySelector("#report-details").value.trim(),
-      });
-      if (error) throw error;
-      if (shouldBlock && !state.blocked.includes(providerId)) {
-        const { error: blockError } = await appSupabase.from("user_blocks").insert({
-          blocker_id: appUser.id, blocked_id: providerId,
-        });
-        if (blockError) throw blockError;
-      }
-      await refreshSupabaseState();
-      event.target.closest("dialog").close();
+    const wasBlocked = state.blocked.includes(providerId);
+    if (shouldBlock && !wasBlocked) {
+      state.blocked.push(providerId);
       renderAll();
-      showToast(shouldBlock ? "Report submitted and student blocked." : "Report submitted to the safety team.");
+    }
+    runAction(async () => {
+      try {
+        const { error } = await appSupabase.from("reports").insert({
+          reporter_id: appUser.id, reported_user_id: providerId,
+          reason: document.querySelector("#report-reason").value,
+          details: document.querySelector("#report-details").value.trim(),
+        });
+        if (error) throw error;
+        if (shouldBlock && !wasBlocked) {
+          const { error: blockError } = await appSupabase.from("user_blocks").insert({
+            blocker_id: appUser.id, blocked_id: providerId,
+          });
+          if (blockError) throw blockError;
+        }
+        await refreshSupabaseState();
+        event.target.closest("dialog").close();
+        renderAll();
+        showToast(shouldBlock ? "Report submitted and student blocked." : "Report submitted to the safety team.", "success");
+      } catch (error) {
+        if (shouldBlock && !wasBlocked) state.blocked = state.blocked.filter((id) => id !== providerId);
+        renderAll();
+        throw error;
+      }
     }, "Could not submit your report.");
     return;
   }

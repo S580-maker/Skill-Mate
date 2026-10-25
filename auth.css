@@ -49,8 +49,10 @@ body { min-height: 100vh; }
 .auth-card .eyebrow { margin-bottom: 10px; color: var(--main); }
 .auth-card h2 { margin: 0; color: var(--dark); font-family: Poppins, sans-serif; font-size: 30px; font-weight: 700; letter-spacing: -.9px; }
 .auth-intro { margin: 9px 0 25px; color: var(--dark); font-size: 13px; line-height: 1.6; }
-.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 20px; padding: 4px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg); }
-.auth-tab { min-height: 40px; border: 0; border-radius: 6px; color: var(--dark); background: transparent; font-size: 12px; font-weight: 600; cursor: pointer; }
+.auth-tabs { position: relative; isolation: isolate; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 20px; padding: 4px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg); }
+.auth-tabs::before { position: absolute; z-index: -1; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); transform: translateX(0); border: 1px solid var(--border); border-radius: 6px; background: var(--surface); box-shadow: 0 1px 4px color-mix(in srgb, var(--shadow-color) 10%, transparent); content: ""; transition: transform var(--base) var(--ease); }
+.auth-tabs[data-mode="signup"]::before { transform: translateX(100%); }
+.auth-tab { position: relative; z-index: 1; min-height: 40px; border: 0; border-radius: 6px; color: var(--dark); background: transparent; font-size: 12px; font-weight: 600; cursor: pointer; transition: color var(--fast) var(--ease); }
 .auth-tab.active { color: var(--dark); background: var(--surface); box-shadow: 0 1px 4px color-mix(in srgb, var(--shadow-color) 10%, transparent); }
 .auth-tabs[hidden],
 .auth-text-button[hidden] { display: none; }
@@ -228,6 +230,16 @@ body { min-height: 100vh; }
 .auth-password-toggle,
 .onboarding-skip,
 .onboarding-file-label { color: var(--main); }
+.auth-submit[aria-busy="true"], .auth-google[aria-busy="true"] { cursor: wait; }
+.field-error { display: block; margin-top: 2px; color: var(--danger); font-size: 11px; font-weight: 500; animation: field-error-in var(--fast) var(--ease) both; }
+@keyframes field-error-in { from { transform: translateY(-3px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.auth-card { animation: polish-view-in var(--base) var(--ease) both; }
+.auth-tabs::before, .auth-tab, .auth-submit, .auth-google, .auth-password-toggle,
+.auth-card input, .auth-card a { transition-timing-function: var(--ease); }
+@media (prefers-reduced-motion: reduce) {
+  .auth-card, .field-error { animation: none; }
+  .auth-tabs::before { transition: none; }
+}
 .auth-note,
 .auth-footer,
 .auth-field-note,
@@ -254,7 +266,7 @@ body { min-height: 100vh; }
 .auth-tabs,
 .auth-tab.active { border-color: var(--border); background: var(--bg); }
 .auth-tab { color: var(--dark); }
-.auth-tab.active { color: var(--main); background: var(--surface); }
+.auth-tab.active { color: var(--main); background: transparent; box-shadow: none; }
 .auth-google,
 .skill-entry button { border-color: var(--border); color: var(--dark); background: var(--surface); }
 .auth-google:hover,
