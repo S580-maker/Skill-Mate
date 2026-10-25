@@ -47,6 +47,31 @@
       },
     });
     window.skillmateSupabaseError = "";
+    window.skillmateSession = null;
+    window.skillmateSupabase.auth.onAuthStateChange((event, session) => {
+      window.skillmateSession = session;
+      window.dispatchEvent(new CustomEvent("skillmate:auth-state-change", {
+        detail: { event, session },
+      }));
+    });
+    window.skillmateRestoreSession = async function restoreSkillmateSession() {
+      const { data, error } = await window.skillmateSupabase.auth.getSession();
+      if (error) throw error;
+      window.skillmateSession = data.session;
+      window.dispatchEvent(new CustomEvent("skillmate:auth-state-change", {
+        detail: { event: "SESSION_RESTORED", session: data.session },
+      }));
+      return data.session;
+    };
+    window.skillmateSignOut = async function signOutSkillmate() {
+      const { error } = await window.skillmateSupabase.auth.signOut();
+      if (error) throw error;
+      await window.clearSkillmateServerSession();
+      window.skillmateSession = null;
+      window.dispatchEvent(new CustomEvent("skillmate:auth-state-change", {
+        detail: { event: "SIGNED_OUT", session: null },
+      }));
+    };
   } catch (error) {
     console.error("Could not initialize the Skillmate Supabase client.", error);
     window.skillmateSupabase = null;
@@ -86,6 +111,8 @@ window.syncSkillmateServerSession = async function syncSkillmateServerSession(se
   }
 };
 
+let serverSessionClearPromise = null;
+
 window.clearExpiredSkillmateSession = async function clearExpiredSkillmateSession() {
   if (window.skillmateSupabase) {
     try {
@@ -102,7 +129,15 @@ window.clearExpiredSkillmateSession = async function clearExpiredSkillmateSessio
   }
 };
 
-window.clearSkillmateServerSession = async function clearSkillmateServerSession() {
-  const response = await fetch("/api/session", { method: "DELETE", credentials: "same-origin" });
-  if (!response.ok) throw new Error("Could not clear the secure Skillmate session.");
+window.clearSkillmateServerSession = function clearSkillmateServerSession() {
+  if (!serverSessionClearPromise) {
+    serverSessionClearPromise = fetch("/api/session", { method: "DELETE", credentials: "same-origin" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Could not clear the secure Skillmate session.");
+      })
+      .finally(() => {
+        serverSessionClearPromise = null;
+      });
+  }
+  return serverSessionClearPromise;
 };

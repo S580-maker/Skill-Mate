@@ -2733,8 +2733,7 @@ document.querySelector("#signout-button").addEventListener("click", () => {
     return;
   }
   runAction(async () => {
-    const { error } = await appSupabase.auth.signOut();
-    if (error) throw error;
+    await window.skillmateSignOut();
   }, "Could not sign out.");
 });
 document.addEventListener("keydown", (event) => {

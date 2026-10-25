@@ -282,11 +282,19 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_full_name text;
 begin
+  v_full_name := coalesce(
+    nullif(left(btrim(coalesce(new.raw_user_meta_data ->> 'full_name', '')), 80), ''),
+    nullif(left(split_part(coalesce(new.email, ''), '@', 1), 80), ''),
+    'Student'
+  );
+
   insert into public.profiles (id, full_name, university, university_email, avatar_url)
   values (
     new.id,
-    coalesce(nullif(new.raw_user_meta_data ->> 'full_name', ''), split_part(new.email, '@', 1)),
+    v_full_name,
     coalesce(new.raw_user_meta_data ->> 'university', ''),
     new.email,
     coalesce(new.raw_user_meta_data ->> 'avatar_url', new.raw_user_meta_data ->> 'picture')
@@ -307,6 +315,64 @@ $$;
 create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.create_profile_for_new_user();
+
+create function public.complete_social_onboarding(
+  p_full_name text,
+  p_university text,
+  p_student_id_number text,
+  p_skills text[] default '{}',
+  p_avatar_url text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then
+    raise exception 'Sign in to finish creating your profile.';
+  end if;
+  if char_length(btrim(coalesce(p_full_name, ''))) not between 2 and 80 then
+    raise exception 'Enter a name between 2 and 80 characters.';
+  end if;
+  if char_length(btrim(coalesce(p_university, ''))) not between 2 and 120 then
+    raise exception 'Enter a university or campus name between 2 and 120 characters.';
+  end if;
+  if char_length(btrim(coalesce(p_student_id_number, ''))) not between 3 and 80 then
+    raise exception 'Enter a student ID number between 3 and 80 characters.';
+  end if;
+  if cardinality(coalesce(p_skills, array[]::text[])) > 10
+    or exists (
+      select 1
+      from unnest(coalesce(p_skills, array[]::text[])) as selected_skill(skill)
+      where char_length(btrim(coalesce(skill, ''))) not between 1 and 40
+    ) then
+    raise exception 'Choose up to 10 skills, each between 1 and 40 characters.';
+  end if;
+
+  update public.profiles
+  set full_name = btrim(p_full_name),
+      university = btrim(p_university),
+      skills = coalesce(p_skills, array[]::text[]),
+      avatar_url = p_avatar_url,
+      onboarding_completed = true
+  where id = v_user_id
+    and role = 'student'
+    and onboarding_completed = false;
+
+  if not found then
+    raise exception 'This profile is not awaiting social sign-up details.';
+  end if;
+
+  insert into public.student_identifiers (student_id, university_name, student_id_number)
+  values (v_user_id, btrim(p_university), btrim(p_student_id_number))
+  on conflict (student_id) do update
+    set university_name = excluded.university_name,
+        student_id_number = excluded.student_id_number;
+end;
+$$;
 
 create function public.sync_auth_email_change()
 returns trigger
@@ -1090,6 +1156,7 @@ revoke all on function public.leave_group_booking(uuid) from public, anon;
 revoke all on function public.start_conversation(uuid, uuid) from public, anon;
 revoke all on function public.update_booking_status(uuid, public.booking_status) from public, anon;
 revoke all on function public.review_verification_request(uuid, boolean) from public, anon;
+revoke all on function public.complete_social_onboarding(text, text, text, text[], text) from public, anon;
 revoke all on function public.is_blocked_between(uuid) from public, anon;
 revoke all on function public.is_conversation_blocked(uuid) from public, anon;
 revoke all on function public.can_access_chat_realtime_topic() from public, anon;
@@ -1103,6 +1170,7 @@ grant execute on function public.leave_group_booking(uuid) to authenticated;
 grant execute on function public.start_conversation(uuid, uuid) to authenticated;
 grant execute on function public.update_booking_status(uuid, public.booking_status) to authenticated;
 grant execute on function public.review_verification_request(uuid, boolean) to authenticated;
+grant execute on function public.complete_social_onboarding(text, text, text, text[], text) to authenticated;
 
 -- Admin role assignment example (run manually after creating the account):
 -- update public.profiles

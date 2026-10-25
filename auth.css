@@ -84,6 +84,7 @@ body { min-height: 100vh; }
 #auth-form .auth-consent input { width: 16px; min-height: 16px; flex: 0 0 16px; margin: 2px 0 0; accent-color: var(--main); }
 .auth-consent a { color: var(--main); text-underline-offset: 2px; }
 .auth-google { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--dark); background: var(--surface); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.auth-google + .auth-google { margin-top: 8px; }
 .auth-google svg { width: 19px; height: 19px; }
 .auth-google:hover { background: var(--surface); }
 .auth-google:focus-visible { outline: 3px solid color-mix(in srgb, var(--focus-ring) 35%, transparent); outline-offset: 2px; }
@@ -115,6 +116,8 @@ body { min-height: 100vh; }
 .onboarding-layout { width: min(100% - 32px, 720px); margin: 0 auto; padding: 22px 0 48px; }
 .onboarding-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
 .onboarding-skip { padding: 8px 10px; border: 0; color: var(--main); background: transparent; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.onboarding-skip[hidden],
+.onboarding-skip-mobile[hidden] { display: none !important; }
 .onboarding-skip:hover { text-decoration: underline; }
 .onboarding-skip:focus-visible,
 .skill-suggestions button:focus-visible,
@@ -124,6 +127,7 @@ body { min-height: 100vh; }
 .onboarding-card h1 { margin: 0; color: var(--dark); font-family: Poppins, sans-serif; font-size: clamp(25px, 5vw, 34px); }
 .onboarding-card > .auth-intro { margin-bottom: 22px; }
 #onboarding-form { display: grid; gap: 18px; }
+#onboarding-form [hidden] { display: none !important; }
 #onboarding-form > label { display: grid; gap: 7px; color: var(--dark); font-size: 12px; font-weight: 600; }
 #onboarding-form > label > input,
 .skill-entry input { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; outline: none; color: var(--dark); background: var(--surface); font: inherit; font-size: 13px; font-weight: 400; }

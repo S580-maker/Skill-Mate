@@ -288,8 +288,9 @@ async function protectAdminDashboard() {
     signout.textContent = "Sign out";
     signout.addEventListener("click", async () => {
       signout.disabled = true;
-      const { error } = await adminClient.auth.signOut();
-      if (error) {
+      try {
+        await window.skillmateSignOut();
+      } catch (error) {
         console.error("Could not sign out.", error);
         showAdminToast(error.message || "Could not sign out.");
         signout.disabled = false;

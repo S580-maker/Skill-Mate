@@ -5,6 +5,13 @@ const passwordInput = document.querySelector("#auth-password");
 const passwordVisibility = document.querySelector("#password-visibility");
 let authMode = "signin";
 let authSubmitting = false;
+let authRedirectStarted = false;
+
+function redirectForSession(session) {
+  if (!session || authMode === "recovery" || authSubmitting || authRedirectStarted) return;
+  authRedirectStarted = true;
+  window.location.replace(getPostAuthUrl());
+}
 
 function isInvalidRefreshTokenError(error) {
   const code = (error?.code || "").toLowerCase();
@@ -28,6 +35,12 @@ function friendlyAuthError(error, mode) {
   const message = (error?.message || "").toLowerCase();
   if (isInvalidRefreshTokenError(error)) {
     return "Your sign-in session expired. Please sign in again.";
+  }
+  if (message.includes("redirect_uri_mismatch")) {
+    return "The provider redirect URL does not match its console settings. Add Supabase’s exact callback URL in Google Cloud or Apple Developer.";
+  }
+  if (code === "invalid_client" || message.includes("invalid_client")) {
+    return "The Google or Apple client ID/secret is invalid. Check the provider credentials in Supabase.";
   }
   if (code === "email_not_confirmed" || message.includes("email not confirmed")) {
     return "Please confirm your email using the link we sent before signing in.";
@@ -89,6 +102,7 @@ function setAuthMode(mode) {
   document.querySelector("#auth-consent").required = signup;
   document.querySelector("#consent-field").hidden = false;
   document.querySelector("#google-signin").hidden = recovery;
+  document.querySelector("#apple-signin").hidden = recovery;
   document.querySelector("#forgot-password-link").hidden = !signin;
   document.querySelector("#password-hint").hidden = signin;
   document.querySelector("#auth-password").autocomplete = signin ? "current-password" : "new-password";
@@ -148,32 +162,41 @@ passwordInput.addEventListener("input", updatePasswordHint);
 passwordVisibility.addEventListener("click", () => {
   setPasswordVisibility(passwordInput.type === "password");
 });
-document.querySelector("#google-signin").addEventListener("click", async (event) => {
+async function signInWithSocialProvider(provider, button) {
   if (!authClient || authSubmitting) return;
   const consent = document.querySelector("#auth-consent");
   if (!consent.checked) {
-    authMessage.textContent = "Agree to the Terms and Privacy Policy before continuing with Google.";
+    authMessage.textContent = `Agree to the Terms and Privacy Policy before continuing with ${provider === "apple" ? "Apple" : "Google"}.`;
     consent.focus();
     return;
   }
   authSubmitting = true;
-  const button = event.currentTarget;
   button.disabled = true;
   button.setAttribute("aria-busy", "true");
   authMessage.textContent = "";
   try {
     const { error } = await authClient.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: new URL(getPostAuthUrl(), window.location.href).href },
+      provider,
+      options: {
+        redirectTo: new URL(getPostAuthUrl(), window.location.href).href,
+        ...(provider === "apple" ? { scopes: "name email" } : {}),
+        ...(provider === "google" ? { queryParams: { prompt: "select_account" } } : {}),
+      },
     });
     if (error) throw error;
   } catch (error) {
-    console.error("Skillmate Google sign-in failed.", error);
+    console.error(`Skillmate ${provider} sign-in failed.`, error);
     authMessage.textContent = friendlyAuthError(error, authMode);
     authSubmitting = false;
     button.disabled = false;
     button.removeAttribute("aria-busy");
   }
+}
+document.querySelector("#google-signin").addEventListener("click", (event) => {
+  signInWithSocialProvider("google", event.currentTarget);
+});
+document.querySelector("#apple-signin").addEventListener("click", (event) => {
+  signInWithSocialProvider("apple", event.currentTarget);
 });
 document.querySelector("#return-to-signin").addEventListener("click", () => {
   window.history.replaceState(null, "", window.location.pathname);
@@ -181,16 +204,15 @@ document.querySelector("#return-to-signin").addEventListener("click", () => {
 });
 loadGhanaianUniversities();
 setAuthMode(new URLSearchParams(window.location.search).get("mode") === "recovery" ? "recovery" : "signin");
+if (authClient) {
+  window.skillmateRestoreSession().then(redirectForSession).catch((error) => {
+    console.error("Could not restore the Skillmate sign-in session.", error);
+    authMessage.textContent = "Could not check your sign-in session. Reload the page and try again.";
+  });
+}
 
-authClient?.auth.onAuthStateChange((event, session) => {
-  if (event === "INITIAL_SESSION" && session && authMode !== "recovery") {
-    window.setTimeout(() => {
-      if (!authSubmitting) window.location.replace(getPostAuthUrl());
-    }, 0);
-  }
-  if (event === "SIGNED_IN" && session && !authSubmitting && authMode !== "recovery") {
-    window.location.assign(getPostAuthUrl());
-  }
+authClient?.auth.onAuthStateChange((_event, session) => {
+  redirectForSession(session);
 });
 
 authForm.addEventListener("submit", async (event) => {
