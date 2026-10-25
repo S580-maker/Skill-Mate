@@ -105,6 +105,9 @@ let activeBookingFilter = "all";
 let pendingReplyId = null;
 let messageMetadataAvailable = null;
 let messageMetadataWarningShown = false;
+const chatDrafts = new Map();
+const pendingOutgoingMessages = new Map();
+const sendingMessageIds = new Set();
 let typingTimeoutId = null;
 let longPressTimeoutId = null;
 let pendingLongPressId = null;
@@ -128,9 +131,18 @@ function isMissingMessageMetadata(error) {
 }
 
 async function loadConversationMessages(chatId) {
+  const conversation = { conversation_id: chatId, other_user_name: "Student" };
+  const messages = await loadConversationMessageGroups([conversation]);
+  return messages.get(chatId) || [];
+}
+
+async function loadConversationMessageGroups(conversations) {
+  const grouped = new Map(conversations.map((conversation) => [conversation.conversation_id, []]));
+  if (!conversations.length) return grouped;
+  const ids = conversations.map((conversation) => conversation.conversation_id);
   const selectMessages = (columns) => appSupabase.from("messages")
     .select(columns)
-    .eq("conversation_id", chatId)
+    .in("conversation_id", ids)
     .order("created_at", { ascending: true });
   let { data, error } = await selectMessages(
     messageMetadataAvailable === false ? legacyMessageColumns : messageColumns,
@@ -147,7 +159,178 @@ async function loadConversationMessages(chatId) {
     messageMetadataAvailable = true;
   }
   if (error) throw error;
-  return data || [];
+  const names = new Map(conversations.map((conversation) => [
+    conversation.conversation_id,
+    conversation.other_user_name || "Student",
+  ]));
+  for (const row of data || []) {
+    const conversationMessages = grouped.get(row.conversation_id);
+    conversationMessages.push(normalizeMessageRow(row, names.get(row.conversation_id)));
+  }
+  for (const conversation of conversations) {
+    const messages = grouped.get(conversation.conversation_id);
+    grouped.set(conversation.conversation_id, mergePendingMessages(conversation.conversation_id, messages));
+  }
+  return grouped;
+}
+
+function chatDraftStorageKey() {
+  return `skillmate-chat-drafts:${appUser?.id || "demo"}`;
+}
+function pendingMessageStorageKey() {
+  return `skillmate-pending-messages:${appUser?.id || "demo"}`;
+}
+function loadChatDrafts() {
+  chatDrafts.clear();
+  try {
+    const saved = JSON.parse(localStorage.getItem(chatDraftStorageKey()) || "{}");
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+      Object.entries(saved).forEach(([conversationId, text]) => {
+        if (typeof text === "string" && text) chatDrafts.set(conversationId, text);
+      });
+    }
+  } catch (error) {
+    console.error("Could not load saved chat drafts.", error);
+    showToast("Saved drafts could not be loaded from this browser.");
+  }
+}
+function saveChatDraft(conversationId, text) {
+  if (text) chatDrafts.set(conversationId, text);
+  else chatDrafts.delete(conversationId);
+  try {
+    localStorage.setItem(chatDraftStorageKey(), JSON.stringify(Object.fromEntries(chatDrafts)));
+  } catch (error) {
+    console.error("Could not save the chat draft.", error);
+    showToast("This draft could not be saved on this device.");
+  }
+}
+function persistPendingMessages() {
+  try {
+    localStorage.setItem(pendingMessageStorageKey(), JSON.stringify([...pendingOutgoingMessages.values()]));
+  } catch (error) {
+    console.error("Could not save pending chat messages.", error);
+    showToast("A failed message could not be saved for retry on this device.");
+  }
+}
+function loadPendingMessages() {
+  pendingOutgoingMessages.clear();
+  try {
+    const saved = JSON.parse(localStorage.getItem(pendingMessageStorageKey()) || "[]");
+    if (!Array.isArray(saved)) throw new TypeError("Pending messages must be stored as a list.");
+    for (const message of saved) {
+      if (typeof message?.id !== "string" || typeof message.conversationId !== "string"
+        || typeof message.text !== "string" || typeof message.createdAt !== "string") continue;
+      pendingOutgoingMessages.set(message.id, {
+        ...message,
+        senderId: appUser.id,
+        sendStatus: "failed",
+      });
+    }
+  } catch (error) {
+    console.error("Could not load pending chat messages.", error);
+    showToast("Failed messages could not be restored from this browser.");
+  }
+}
+function mergePendingMessages(conversationId, messages) {
+  const serverIds = new Set(messages.map((message) => String(message.id)));
+  let outboxChanged = false;
+  for (const [id, pending] of pendingOutgoingMessages) {
+    if (pending.conversationId === conversationId && serverIds.has(id)) {
+      pendingOutgoingMessages.delete(id);
+      outboxChanged = true;
+    } else if (pending.conversationId === conversationId) {
+      messages.push({ ...pending, sender: "You" });
+    }
+  }
+  if (outboxChanged) persistPendingMessages();
+  return linkMessageReplies(messages);
+}
+function createChatMessageId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  return [...bytes].map((byte, index) => `${[4, 6, 8, 10].includes(index) ? "-" : ""}${byte.toString(16).padStart(2, "0")}`).join("");
+}
+function queuePendingMessage(chat, message) {
+  const pending = { ...message, conversationId: chat.id, senderId: appUser.id, sendStatus: "failed" };
+  pendingOutgoingMessages.set(String(pending.id), pending);
+  persistPendingMessages();
+  return pending;
+}
+async function sendPendingMessage(chat, message) {
+  const id = String(message.id);
+  if (sendingMessageIds.has(id) || !appSupabase || !appUser) return;
+  sendingMessageIds.add(id);
+  message.sendStatus = "sending";
+  renderConversations({ preserveChatState: true });
+  try {
+    const insertMessage = async (includeMetadata) => {
+      const payload = {
+        id: message.id,
+        conversation_id: chat.id,
+        sender_id: appUser.id,
+        body: message.text,
+      };
+      if (includeMetadata && message.replyTo) payload.reply_to = message.replyTo;
+      return appSupabase.from("messages").insert(payload)
+        .select(includeMetadata ? messageColumns : legacyMessageColumns).single();
+    };
+    let includeMetadata = messageMetadataAvailable !== false;
+    let result = await insertMessage(includeMetadata);
+    if (result.error && isMissingMessageMetadata(result.error)) {
+      messageMetadataAvailable = false;
+      includeMetadata = false;
+      if (!messageMetadataWarningShown) {
+        messageMetadataWarningShown = true;
+        console.warn("Chat metadata columns are missing. Apply the messaging migration to enable delivery receipts and replies.");
+        showToast("Messages are available; apply the messaging migration to enable replies and delivery receipts.");
+      }
+      result = await insertMessage(false);
+    }
+    if (result.error?.code === "23505") {
+      const existing = await appSupabase.from("messages")
+        .select(legacyMessageColumns).eq("id", message.id).maybeSingle();
+      if (existing.error) throw existing.error;
+      if (existing.data?.sender_id === appUser.id && existing.data.body === message.text) {
+        result = { data: existing.data, error: null };
+      }
+    }
+    if (result.error) throw result.error;
+    if (includeMetadata && messageMetadataAvailable === null) messageMetadataAvailable = true;
+    const sent = normalizeMessageRow(result.data, chat.name || getProvider(chat.providerId)?.name || "Student");
+    const index = chat.messages.findIndex((item) => String(item.id) === id);
+    if (index >= 0) chat.messages[index] = sent;
+    else chat.messages.push(sent);
+    pendingOutgoingMessages.delete(id);
+    persistPendingMessages();
+    linkMessageReplies(chat.messages);
+    renderConversations({ preserveChatState: true });
+    broadcastTyping(chat.id, false).catch((typingError) => console.error("Could not clear the typing event.", typingError));
+  } catch (error) {
+    message.sendStatus = "failed";
+    queuePendingMessage(chat, message);
+    renderConversations({ preserveChatState: true });
+    throw error;
+  } finally {
+    sendingMessageIds.delete(id);
+  }
+}
+function retryPendingMessage(messageId) {
+  const chat = state.messages.find((item) => item.id === activeConversationId);
+  const message = chat?.messages.find((item) => String(item.id) === String(messageId));
+  if (!chat || !message) return;
+  queuePendingMessage(chat, message);
+  runAction(() => sendPendingMessage(chat, message), "Message wasn't sent. It is saved on this device; tap Retry to try again.", "Sending message…");
+}
+async function retryQueuedMessages() {
+  for (const pending of [...pendingOutgoingMessages.values()]) {
+    const chat = state.messages.find((item) => item.id === pending.conversationId);
+    const message = chat?.messages.find((item) => String(item.id) === String(pending.id));
+    if (chat && message && !sendingMessageIds.has(String(message.id))) {
+      await runAction(() => sendPendingMessage(chat, message), "A saved message could not be sent.", "Sending saved messages…");
+    }
+  }
 }
 
 function loadState() {
@@ -724,7 +907,7 @@ function renderChat(options = {}) {
   const target = document.querySelector("#chat-panel");
   if (!chat || !provider) { renderEmptyChat(); return; }
   const previousInput = options.preserveChatState ? target.querySelector('[name="message"]') : null;
-  const draft = previousInput?.value || "";
+  const draft = previousInput ? previousInput.value : chatDrafts.get(chat.id) || "";
   const hadFocus = previousInput === document.activeElement;
   const previousMessages = options.preserveChatState ? target.querySelector("#chat-messages") : null;
   const previousNewMessages = options.preserveChatState ? target.querySelector(".chat-new-messages") : null;
@@ -819,7 +1002,12 @@ function renderChat(options = {}) {
     time.dateTime = message.createdAt || "";
     time.textContent = message.createdAt ? formatChatTime(message.createdAt) : message.time || "";
     meta.append(time);
-    if (message.sender === "You" && appSupabase) {
+    if (message.sendStatus) {
+      const status = document.createElement("span");
+      status.className = `chat-send-status chat-send-status-${message.sendStatus}`;
+      status.textContent = message.sendStatus === "failed" ? "Not sent" : "Sending…";
+      meta.append(status);
+    } else if (message.sender === "You" && appSupabase) {
       const ticks = document.createElement("span");
       ticks.className = `chat-ticks${message.readAt ? " chat-ticks-read" : ""}`;
       ticks.setAttribute("aria-label", message.readAt ? "Read" : message.deliveredAt ? "Delivered" : "Sent");
@@ -827,6 +1015,15 @@ function renderChat(options = {}) {
       meta.append(ticks);
     }
     bubble.append(body, meta);
+    if (message.sendStatus === "failed") {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "chat-message-retry";
+      retry.dataset.retryMessage = String(message.id);
+      retry.textContent = "Retry";
+      retry.setAttribute("aria-label", `Retry sending message: ${message.text.slice(0, 60)}`);
+      bubble.append(retry);
+    }
     row.append(bubble);
     messages.append(row);
     previousMessage = message;
@@ -1150,12 +1347,10 @@ async function refreshSupabaseState() {
   }));
 
   const conversations = conversationDirectory.data || [];
-  const messages = await Promise.all(conversations.map(async (conversation) => {
-    const data = await loadConversationMessages(conversation.conversation_id);
-    return {
-      id: conversation.conversation_id, providerId: conversation.other_user_id, name: conversation.other_user_name,
-      messages: linkMessageReplies(data.map((message) => normalizeMessageRow(message, conversation.other_user_name))),
-    };
+  const groupedMessages = await loadConversationMessageGroups(conversations);
+  const messages = conversations.map((conversation) => ({
+    id: conversation.conversation_id, providerId: conversation.other_user_id, name: conversation.other_user_name,
+    messages: groupedMessages.get(conversation.conversation_id) || [],
   }));
   state.messages = messages;
   syncMessageChannels();
@@ -1199,24 +1394,25 @@ async function refreshLiveMessages() {
     .from("conversation_directory")
     .select("conversation_id, other_user_id, other_user_name");
   if (conversationsError) throw conversationsError;
-  state.messages = await Promise.all((conversations || []).map(async (conversation) => {
-    const data = await loadConversationMessages(conversation.conversation_id);
-    return {
-      id: conversation.conversation_id,
-      providerId: conversation.other_user_id,
-      name: conversation.other_user_name,
-      messages: linkMessageReplies(data.map((message) => normalizeMessageRow(message, conversation.other_user_name))),
-    };
+  const groupedMessages = await loadConversationMessageGroups(conversations || []);
+  state.messages = (conversations || []).map((conversation) => ({
+    id: conversation.conversation_id,
+    providerId: conversation.other_user_id,
+    name: conversation.other_user_name,
+    messages: groupedMessages.get(conversation.conversation_id) || [],
   }));
   syncMessageChannels();
   renderConversations({ preserveChatState: true });
 }
 async function refreshLiveActivity() {
   if (!appSupabase || !appUser || document.hidden || pendingActionCount || activityRefreshInProgress) return;
+  const pageNeedsBookings = ["home", "bookings", "provider", "earnings"].includes(state.activePage);
+  const pageNeedsMessages = state.activePage === "messages";
+  if (!pageNeedsBookings && !pageNeedsMessages) return;
   activityRefreshInProgress = true;
   try {
-    await refreshLiveBookings();
-    if (state.activePage === "messages") await refreshLiveMessages();
+    if (pageNeedsBookings) await refreshLiveBookings();
+    if (pageNeedsMessages) await refreshLiveMessages();
   } finally {
     activityRefreshInProgress = false;
   }
@@ -1328,6 +1524,8 @@ async function bootstrapStudentApp() {
   await window.syncSkillmateServerSession(data.session);
   appUser = data.session.user;
   loadHiddenMessages();
+  loadChatDrafts();
+  loadPendingMessages();
   await refreshSupabaseState();
   initializeDashboard();
   document.querySelector("#profile-name").value = state.profile.name;
@@ -1346,12 +1544,18 @@ async function bootstrapStudentApp() {
   }
   window.setInterval(() => {
     refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate messages and bookings.", error));
-  }, 15000);
+  }, 30000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
       refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate messages and bookings.", error));
     }
   });
+  window.addEventListener("online", () => {
+    retryQueuedMessages().catch((error) => console.error("Could not retry saved Skillmate messages.", error));
+  });
+  if (navigator.onLine) {
+    retryQueuedMessages().catch((error) => console.error("Could not retry saved Skillmate messages.", error));
+  }
 }
 function showPage(page) {
   const view = document.querySelector(`[data-view="${page}"]`);
@@ -1369,6 +1573,9 @@ function showPage(page) {
   if (page === "provider") { renderListings(); renderPortfolio(); renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true }); }
   if (page === "earnings") renderEarnings();
   window.scrollTo({ top: 0, behavior: "smooth" });
+  if (appSupabase && appUser && ["home", "bookings", "messages", "provider", "earnings"].includes(page)) {
+    refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate activity for this page.", error));
+  }
 }
 function openBooking(providerId) {
   const provider = getProvider(providerId);
@@ -1808,8 +2015,17 @@ document.querySelector("#conversation-list").addEventListener("click", (event) =
   renderConversations();
   markConversationMessagesRead(activeConversationId).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
 });
-document.querySelector("#conversation-search").addEventListener("input", () => renderConversations({ preserveChatState: true }));
+let conversationSearchTimer;
+document.querySelector("#conversation-search").addEventListener("input", () => {
+  window.clearTimeout(conversationSearchTimer);
+  conversationSearchTimer = window.setTimeout(() => renderConversations({ preserveChatState: true }), 120);
+});
 document.querySelector("#chat-panel").addEventListener("click", (event) => {
+  const retryButton = event.target.closest("[data-retry-message]");
+  if (retryButton) {
+    retryPendingMessage(retryButton.dataset.retryMessage);
+    return;
+  }
   if (event.target.closest("[data-chat-back]")) {
     activeConversationId = null;
     pendingReplyId = null;
@@ -1854,7 +2070,9 @@ document.querySelector("#chat-panel").addEventListener("input", (event) => {
   if (event.target.name !== "message") return;
   resizeChatInput(event.target);
   const chat = state.messages.find((item) => item.id === activeConversationId);
-  if (!chat || !appSupabase) return;
+  if (!chat) return;
+  saveChatDraft(chat.id, event.target.value);
+  if (!appSupabase) return;
   broadcastTyping(chat.id, true).catch((error) => console.error("Could not send a typing event.", error));
   window.clearTimeout(typingTimeoutId);
   typingTimeoutId = window.setTimeout(() => {
@@ -1876,23 +2094,27 @@ document.querySelector("#chat-panel").addEventListener("submit", (event) => {
   if (!chat) return;
   const replyTo = pendingReplyId;
   input.value = "";
+  saveChatDraft(chat.id, "");
   pendingReplyId = null;
-  renderChat({ preserveChatState: true });
   if (appSupabase) {
-    runAction(async () => {
-      const payload = { conversation_id: chat.id, sender_id: appUser.id, body: text };
-      if (replyTo && messageMetadataAvailable === true) payload.reply_to = replyTo;
-      else if (replyTo) showToast("Apply the messaging migration to save reply links.");
-      const { data, error } = await appSupabase.from("messages")
-        .insert(payload).select(
-          messageMetadataAvailable === true ? messageColumns : legacyMessageColumns,
-        ).single();
-      if (error) throw error;
-      chat.messages.push(normalizeMessageRow(data, chat.name || getProvider(chat.providerId)?.name || "Student"));
-      linkMessageReplies(chat.messages);
-      renderConversations({ preserveChatState: true });
-      broadcastTyping(chat.id, false).catch((typingError) => console.error("Could not clear the typing event.", typingError));
-    }, "Could not send your message.");
+    const message = {
+      id: createChatMessageId(),
+      sender: "You",
+      senderId: appUser.id,
+      text,
+      createdAt: new Date().toISOString(),
+      time: formatChatTime(new Date()),
+      replyTo: replyTo || null,
+      sendStatus: navigator.onLine ? "sending" : "failed",
+    };
+    chat.messages.push(message);
+    queuePendingMessage(chat, message);
+    renderConversations({ preserveChatState: true });
+    if (!navigator.onLine) {
+      showToast("You’re offline. This message is saved on this device; tap Retry when you reconnect.");
+      return;
+    }
+    runAction(() => sendPendingMessage(chat, message), "Message wasn't sent. It is saved on this device; tap Retry to try again.", "Sending message…");
     return;
   }
   const message = {
