@@ -440,6 +440,54 @@ as $$
   );
 $$;
 
+create function public.can_access_conversation(p_conversation_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.conversation_members mine
+    where mine.conversation_id = p_conversation_id
+      and mine.user_id = (select auth.uid())
+  )
+  and not exists (
+    select 1
+    from public.conversation_members other
+    join public.user_blocks blocked
+      on (blocked.blocker_id = (select auth.uid()) and blocked.blocked_id = other.user_id)
+      or (blocked.blocker_id = other.user_id and blocked.blocked_id = (select auth.uid()))
+    where other.conversation_id = p_conversation_id
+      and other.user_id <> (select auth.uid())
+  );
+$$;
+
+create function public.can_send_conversation_message(
+  p_conversation_id uuid,
+  p_sender_id uuid,
+  p_reply_to uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select p_sender_id = (select auth.uid())
+    and public.can_access_conversation(p_conversation_id)
+    and (
+      p_reply_to is null
+      or exists (
+        select 1
+        from public.messages replied
+        where replied.id = p_reply_to
+          and replied.conversation_id = p_conversation_id
+      )
+    );
+$$;
+
 create function public.can_access_chat_realtime_topic()
 returns boolean
 language sql
@@ -973,56 +1021,25 @@ on public.conversation_members for select to authenticated
 using (user_id = (select auth.uid()) or (select public.is_admin()));
 create policy "Conversation members read messages"
 on public.messages for select to authenticated
-using (
-  exists (
-    select 1 from public.conversation_members m
-    where m.conversation_id = messages.conversation_id and m.user_id = (select auth.uid())
-  )
-  and not public.is_conversation_blocked(messages.conversation_id)
-);
+using (public.can_access_conversation(conversation_id));
 create policy "Conversation members send messages as themselves"
 on public.messages for insert to authenticated
-with check (
-  sender_id = (select auth.uid())
-  and exists (
-    select 1 from public.conversation_members m
-    where m.conversation_id = messages.conversation_id and m.user_id = (select auth.uid())
-  )
-  and not public.is_conversation_blocked(messages.conversation_id)
-  and (
-    reply_to is null
-    or exists (
-      select 1 from public.messages replied
-      where replied.id = messages.reply_to and replied.conversation_id = messages.conversation_id
-    )
-  )
-);
+with check (public.can_send_conversation_message(conversation_id, sender_id, reply_to));
 create policy "Message recipients mark messages delivered or read"
 on public.messages for update to authenticated
 using (
   sender_id <> (select auth.uid())
-  and exists (
-    select 1 from public.conversation_members m
-    where m.conversation_id = messages.conversation_id and m.user_id = (select auth.uid())
-  )
-  and not public.is_conversation_blocked(messages.conversation_id)
+  and public.can_access_conversation(conversation_id)
 )
 with check (
   sender_id <> (select auth.uid())
-  and exists (
-    select 1 from public.conversation_members m
-    where m.conversation_id = messages.conversation_id and m.user_id = (select auth.uid())
-  )
-  and not public.is_conversation_blocked(messages.conversation_id)
+  and public.can_access_conversation(conversation_id)
 );
 create policy "Message senders delete their own messages"
 on public.messages for delete to authenticated
 using (
   sender_id = (select auth.uid())
-  and exists (
-    select 1 from public.conversation_members m
-    where m.conversation_id = messages.conversation_id and m.user_id = (select auth.uid())
-  )
+  and public.can_access_conversation(conversation_id)
 );
 create policy "Conversation members access private realtime chat channels"
 on realtime.messages for all to authenticated
@@ -1160,10 +1177,14 @@ revoke all on function public.complete_social_onboarding(text, text, text, text[
 revoke all on function public.is_blocked_between(uuid) from public, anon;
 revoke all on function public.is_conversation_blocked(uuid) from public, anon;
 revoke all on function public.can_access_chat_realtime_topic() from public, anon;
+revoke all on function public.can_access_conversation(uuid) from public, anon;
+revoke all on function public.can_send_conversation_message(uuid, uuid, uuid) from public, anon;
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.is_blocked_between(uuid) to authenticated;
 grant execute on function public.is_conversation_blocked(uuid) to authenticated;
 grant execute on function public.can_access_chat_realtime_topic() to authenticated;
+grant execute on function public.can_access_conversation(uuid) to authenticated;
+grant execute on function public.can_send_conversation_message(uuid, uuid, uuid) to authenticated;
 grant execute on function public.create_group_booking(uuid, text, text, timestamptz, smallint, numeric) to authenticated;
 grant execute on function public.join_group_booking(uuid) to authenticated;
 grant execute on function public.leave_group_booking(uuid) to authenticated;

@@ -501,8 +501,8 @@ textarea:focus-visible, summary:focus-visible {
 img[loading="lazy"] { background-color: var(--main-soft); }
 .auth-tab.active { background: transparent; box-shadow: none; }
 @media (max-width: 680px) {
-  .toast { top: auto; right: auto; bottom: calc(16px + env(safe-area-inset-bottom)); left: 50%; width: max-content; max-width: calc(100vw - 24px); transform: translate(-50%, 12px); text-align: center; }
-  .toast.visible { transform: translate(-50%, 0); }
+  #toast { top: auto; right: auto; bottom: calc(16px + env(safe-area-inset-bottom)); left: 50%; width: max-content; max-width: calc(100vw - 24px); transform: translate(-50%, 12px); text-align: center; }
+  #toast.visible { transform: translate(-50%, 0); }
   button, .chat-back, .chat-send, .chat-icon-button, .theme-toggle, .menu-toggle { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -578,7 +578,7 @@ img[loading="lazy"] { background-color: var(--main-soft); }
 .safety-action:hover { background: var(--bg); }
 .blocked-list { display: grid; gap: 7px; }
 .blocked-person { display: flex; align-items: center; justify-content: space-between; padding: 9px; border: 1px solid var(--border); border-radius: 7px; color: var(--dark); font-size: 10px; }
-.toast { position: fixed; z-index: 50; right: 22px; bottom: 22px; max-width: calc(100vw - 32px); padding: 11px 15px; transform: translateY(15px); border: 1px solid var(--border); border-radius: 8px; color: var(--dark); background: var(--surface); box-shadow: 0 8px 30px color-mix(in srgb, var(--shadow-color) 12%, transparent); font-size: 10px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+.toast { position: fixed; z-index: 50; top: 20px; right: 22px; bottom: auto; max-width: calc(100vw - 32px); padding: 11px 15px; transform: translateY(15px); border: 1px solid var(--border); border-radius: 8px; color: var(--dark); background: var(--surface); box-shadow: 0 8px 30px color-mix(in srgb, var(--shadow-color) 12%, transparent); font-size: 10px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
 .toast.visible { transform: translateY(0); opacity: 1; }
 .loading-indicator { position: fixed; z-index: 60; right: 22px; bottom: 22px; display: inline-flex; min-height: 44px; align-items: center; gap: 10px; padding: 0 15px; border: 1px solid var(--border); border-radius: 12px; color: var(--dark); background: color-mix(in srgb, var(--surface) 97%, transparent); box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow-color) 14%, transparent); font-size: 12px; font-weight: 600; animation: loading-indicator-in .2s ease-out both; }
 .loading-indicator[hidden] { display: none; }
@@ -721,6 +721,7 @@ img[loading="lazy"] { background-color: var(--main-soft); }
   .topbar-actions { gap: 6px 8px; }
 }
 @media (max-width: 350px) {
+  html, body { min-width: 0; }
   .topbar-actions { grid-template-columns: repeat(4, minmax(40px, 1fr)); gap: 6px; }
   .notification-button, .theme-toggle, .mode-switch { width: 40px; height: 40px; min-height: 40px; flex-basis: 40px; }
 }

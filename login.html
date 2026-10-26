@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="user.css?v=5" />
-    <link rel="stylesheet" href="auth.css?v=2" />
+    <link rel="stylesheet" href="auth.css?v=3" />
     <script src="theme.js?v=2"></script>
   </head>
   <body>
@@ -44,7 +44,8 @@
             <label id="university-field" hidden>Your university<input id="auth-university" autocomplete="organization" list="ghana-university-options" maxlength="120" placeholder="Start typing your university" /><datalist id="ghana-university-options"></datalist><small class="auth-field-note" id="university-directory-status">Type to search Ghanaian universities, or enter your school if it is not listed.</small></label>
             <label id="student-id-field" hidden>Student ID number<input id="auth-student-id" autocomplete="off" minlength="3" maxlength="80" placeholder="Enter your student ID number" /><small class="auth-field-note">Your ID is stored privately with your account. It is not automatically verified.</small></label>
             <label>Email address<input id="auth-email" type="email" autocomplete="email" required placeholder="you@university.edu" /></label>
-            <label><span id="password-label">Password</span><span class="auth-password-input"><input id="auth-password" type="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters" /><button class="auth-password-toggle" id="password-visibility" type="button" aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.5 12s3.3-6 9.5-6 9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/></svg></button></span><small class="password-hint" id="password-hint" aria-live="polite" hidden>Use at least 8 characters.</small></label>
+            <label><span id="password-label">Password</span><span class="auth-password-input"><input id="auth-password" type="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters" /><button class="auth-password-toggle" id="password-visibility" type="button" aria-label="Show password" aria-pressed="false">Show</button></span><small class="password-hint" id="password-hint" aria-live="polite" hidden>Use at least 8 characters.</small></label>
+            <label id="confirm-password-field" hidden>Confirm password<span class="auth-password-input"><input id="auth-confirm-password" type="password" autocomplete="new-password" minlength="8" placeholder="Enter your password again" /><button class="auth-password-toggle" id="confirm-password-visibility" type="button" aria-label="Show confirm password" aria-pressed="false">Show</button></span></label>
             <label class="auth-consent" id="consent-field"><input id="auth-consent" type="checkbox" required /><span>I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>. Required to create an account or continue with Google or Apple.</span></label>
             <a class="auth-text-button" id="forgot-password-link" href="forgot-password.html">Forgot password?</a>
             <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
@@ -62,6 +63,6 @@
     <script src="supabase-config.js"></script>
     <script src="supabase-client.js?v=4"></script>
     <script src="ghana-universities.js"></script>
-    <script src="auth.js?v=2"></script>
+    <script src="auth.js?v=4"></script>
   </body>
 </html>

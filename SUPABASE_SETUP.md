@@ -25,6 +25,8 @@ On existing projects, apply `supabase/migrations/20261025_public_provider_direct
 
 On existing projects, apply `supabase/migrations/20261025_whatsapp_style_messaging.sql` once in the SQL Editor before using the redesigned Messages page. It adds delivery and reply metadata, restricts message access and changes to conversation participants, permits recipients to update read/delivery timestamps, allows senders to delete their own messages, and adds messages to Supabase Realtime when that publication is available. The app uses `conversation_id` and `conversation_members` for recipient membership; it does not need a separate `receiver_id` column. New projects include the same fields, policies, and realtime publication setup in `supabase/schema.sql`.
 
+If an existing project reports `infinite recursion detected in policy for relation "messages"` after applying the messaging migration, apply `supabase/migrations/20261026_fix_message_rls_recursion.sql` once. It moves conversation membership, block, and reply checks into narrowly scoped security-definer functions so message policies do not recursively query the protected messages table.
+
 ## 3. Install and run Skillmate
 
 Install dependencies and start the Express server:

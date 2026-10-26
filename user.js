@@ -66,6 +66,7 @@ const categoryIcons = {
   Laundry: "✧",
   "Moving help": "➜",
 };
+const MESSAGE_PAGE_SIZE = 30;
 const defaultState = {
   mode: "find",
   activePage: "home",
@@ -101,10 +102,12 @@ let connectedProviders = [];
 let connectedServices = [];
 let selectedCategory = "All";
 let activeConversationId = null;
+let restoreConversationOnMessagesOpen = false;
 let activeBookingFilter = "all";
 let pendingReplyId = null;
 let messageMetadataAvailable = null;
 let messageMetadataWarningShown = false;
+let realtimeFallbackNoticeShown = false;
 const chatDrafts = new Map();
 const pendingOutgoingMessages = new Map();
 const sendingMessageIds = new Set();
@@ -112,7 +115,11 @@ let typingTimeoutId = null;
 let longPressTimeoutId = null;
 let pendingLongPressId = null;
 const messageChannels = new Map();
+const messageChannelRetryTimers = new Map();
+const messageChannelRetryAttempts = new Map();
 const messagePresence = new Map();
+const conversationMessageRefreshes = new Set();
+const conversationMessageRefreshTimes = new Map();
 const hiddenMessageIds = new Set();
 const readUpdatesInProgress = new Set();
 const presenceTypingTimers = new Map();
@@ -121,11 +128,44 @@ let toastExitTimer;
 let globalSearchTimer;
 let pendingActionCount = 0;
 let activityRefreshInProgress = false;
+let dashboardDataLoaded = false;
+let messagePollingTimer = null;
 const pendingProviderSaves = new Set();
 const ownProviderId = () => appUser?.id || "alex";
 const isOwnBooking = (booking) => booking.providerId === ownProviderId();
 const messageColumns = "id, conversation_id, sender_id, body, created_at, read_at, delivered_at, reply_to";
 const legacyMessageColumns = "id, conversation_id, sender_id, body, created_at, read_at";
+const olderMessagesAvailable = new Map();
+
+function chatMessagesStorageKey() {
+  return `skillmate-chat-messages:${appUser?.id || "demo"}`;
+}
+
+function loadCachedConversationMessages() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(chatMessagesStorageKey()) || "[]");
+    if (!Array.isArray(cached)) throw new Error("Cached conversation history has an invalid format.");
+    return cached.filter((chat) => chat && typeof chat.id === "string" && Array.isArray(chat.messages))
+      .map((chat) => ({ ...chat, messages: chat.messages.slice(-MESSAGE_PAGE_SIZE) }));
+  } catch (error) {
+    console.error("Could not load cached Skillmate conversations.", error);
+    return [];
+  }
+}
+
+function cacheConversationMessages(conversations) {
+  try {
+    const cached = conversations.map((chat) => ({
+      id: chat.id,
+      providerId: chat.providerId,
+      name: chat.name,
+      messages: chat.messages.slice(-MESSAGE_PAGE_SIZE),
+    }));
+    localStorage.setItem(chatMessagesStorageKey(), JSON.stringify(cached));
+  } catch (error) {
+    console.error("Could not cache Skillmate conversation history.", error);
+  }
+}
 
 function isMissingMessageMetadata(error) {
   return ["42703", "PGRST204"].includes(error?.code)
@@ -141,46 +181,73 @@ async function loadConversationMessages(chatId, otherUserName = "Student") {
 async function loadConversationMessageGroups(conversations) {
   const grouped = new Map(conversations.map((conversation) => [conversation.conversation_id, []]));
   if (!conversations.length) return grouped;
-  const ids = conversations.map((conversation) => conversation.conversation_id);
-  const selectMessages = (columns) => appSupabase.from("messages")
-    .select(columns)
-    .in("conversation_id", ids)
-    .order("created_at", { ascending: true });
-  let { data, error } = await selectMessages(
-    messageMetadataAvailable === false ? legacyMessageColumns : messageColumns,
-  );
-  if (error && isMissingMessageMetadata(error)) {
-    messageMetadataAvailable = false;
-    if (!messageMetadataWarningShown) {
-      messageMetadataWarningShown = true;
-      console.warn("Chat metadata columns are missing. Apply the messaging migration to enable delivery receipts and replies.");
-      showToast("Messages are available; apply the messaging migration to enable replies and delivery receipts.");
+  const pages = await Promise.all(conversations.map(async (conversation) => {
+    const selectMessages = (columns) => appSupabase.from("messages")
+      .select(columns)
+      .eq("conversation_id", conversation.conversation_id)
+      .order("created_at", { ascending: false })
+      .limit(MESSAGE_PAGE_SIZE);
+    let { data, error } = await selectMessages(
+      messageMetadataAvailable === false ? legacyMessageColumns : messageColumns,
+    );
+    if (error && isMissingMessageMetadata(error)) {
+      messageMetadataAvailable = false;
+      if (!messageMetadataWarningShown) {
+        messageMetadataWarningShown = true;
+        console.warn("Chat metadata columns are missing. Apply the messaging migration to enable delivery receipts and replies.");
+        showToast("Messages are available; apply the messaging migration to enable replies and delivery receipts.");
+      }
+      ({ data, error } = await selectMessages(legacyMessageColumns));
+    } else if (!error && messageMetadataAvailable === null) {
+      messageMetadataAvailable = true;
     }
-    ({ data, error } = await selectMessages(legacyMessageColumns));
-  } else if (!error && messageMetadataAvailable === null) {
-    messageMetadataAvailable = true;
-  }
-  if (error) throw error;
-  const names = new Map(conversations.map((conversation) => [
-    conversation.conversation_id,
-    conversation.other_user_name || "Student",
-  ]));
-  for (const row of data || []) {
-    const conversationMessages = grouped.get(row.conversation_id);
-    if (!conversationMessages) {
-      throw new Error(`Received a message for an unexpected conversation: ${row.conversation_id || "unknown"}.`);
-    }
-    conversationMessages.push(normalizeMessageRow(row, names.get(row.conversation_id)));
-  }
-  for (const conversation of conversations) {
-    const messages = grouped.get(conversation.conversation_id);
-    grouped.set(conversation.conversation_id, mergePendingMessages(conversation.conversation_id, messages));
-  }
+    if (error) throw error;
+    const messages = (data || []).reverse()
+      .map((row) => normalizeMessageRow(row, conversation.other_user_name || "Student"));
+    olderMessagesAvailable.set(conversation.conversation_id, messages.length === MESSAGE_PAGE_SIZE);
+    return [conversation.conversation_id, mergePendingMessages(conversation.conversation_id, messages)];
+  }));
+  pages.forEach(([conversationId, messages]) => grouped.set(conversationId, messages));
   return grouped;
 }
 
 function chatDraftStorageKey() {
   return `skillmate-chat-drafts:${appUser?.id || "demo"}`;
+}
+function activeConversationStorageKey() {
+  return `skillmate-active-conversation:${appUser?.id || "demo"}`;
+}
+function persistActiveConversation(conversationId) {
+  activeConversationId = conversationId;
+  try {
+    if (conversationId) localStorage.setItem(activeConversationStorageKey(), conversationId);
+    else localStorage.removeItem(activeConversationStorageKey());
+  } catch (error) {
+    console.error("Could not save the selected conversation.", error);
+    showToast("Your selected conversation could not be saved on this device.");
+  }
+}
+function savedActiveConversationId() {
+  try {
+    return localStorage.getItem(activeConversationStorageKey());
+  } catch (error) {
+    console.error("Could not restore the selected conversation.", error);
+    showToast("Your last conversation could not be restored from this browser.");
+    return null;
+  }
+}
+function restoreActiveConversation() {
+  const available = state.messages.filter((chat) => !state.blocked.includes(chat.providerId));
+  if (!available.length) return false;
+  if (available.some((chat) => chat.id === activeConversationId)) return true;
+  const savedId = savedActiveConversationId();
+  const savedChat = available.find((chat) => chat.id === savedId);
+  const mostRecentChat = [...available].sort((left, right) => (
+    (Date.parse(right.messages.at(-1)?.createdAt || "") || 0)
+    - (Date.parse(left.messages.at(-1)?.createdAt || "") || 0)
+  ))[0];
+  persistActiveConversation((savedChat || mostRecentChat).id);
+  return true;
 }
 function pendingMessageStorageKey() {
   return `skillmate-pending-messages:${appUser?.id || "demo"}`;
@@ -278,8 +345,15 @@ async function sendPendingMessage(chat, message) {
         body: message.text,
       };
       if (includeMetadata && message.replyTo) payload.reply_to = message.replyTo;
-      return appSupabase.from("messages").insert(payload)
-        .select(includeMetadata ? messageColumns : legacyMessageColumns).single();
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+      try {
+        return await appSupabase.from("messages").insert(payload)
+          .select(includeMetadata ? messageColumns : legacyMessageColumns).single()
+          .abortSignal(controller.signal);
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
     };
     let includeMetadata = messageMetadataAvailable !== false;
     let result = await insertMessage(includeMetadata);
@@ -310,6 +384,7 @@ async function sendPendingMessage(chat, message) {
     pendingOutgoingMessages.delete(id);
     persistPendingMessages();
     linkMessageReplies(chat.messages);
+    cacheConversationMessages(state.messages);
     renderConversations({ preserveChatState: true });
     broadcastTyping(chat.id, false).catch((typingError) => console.error("Could not clear the typing event.", typingError));
   } catch (error) {
@@ -321,19 +396,28 @@ async function sendPendingMessage(chat, message) {
     sendingMessageIds.delete(id);
   }
 }
+function sendMessageWithoutBlocking(chat, message, failureMessage) {
+  sendPendingMessage(chat, message).catch((error) => {
+    console.error(failureMessage, error);
+    const message = error?.name === "AbortError"
+      ? "Message send timed out. It is saved on this device; tap Retry to try again."
+      : error?.message || failureMessage;
+    showToast(message, "error");
+  });
+}
 function retryPendingMessage(messageId) {
   const chat = state.messages.find((item) => item.id === activeConversationId);
   const message = chat?.messages.find((item) => String(item.id) === String(messageId));
   if (!chat || !message) return;
   queuePendingMessage(chat, message);
-  runAction(() => sendPendingMessage(chat, message), "Message wasn't sent. It is saved on this device; tap Retry to try again.", "Sending message…");
+  sendMessageWithoutBlocking(chat, message, "Message wasn't sent. It is saved on this device; tap Retry to try again.");
 }
 async function retryQueuedMessages() {
   for (const pending of [...pendingOutgoingMessages.values()]) {
     const chat = state.messages.find((item) => item.id === pending.conversationId);
     const message = chat?.messages.find((item) => String(item.id) === String(pending.id));
     if (chat && message && !sendingMessageIds.has(String(message.id))) {
-      await runAction(() => sendPendingMessage(chat, message), "A saved message could not be sent.", "Sending saved messages…");
+      sendMessageWithoutBlocking(chat, message, "A saved message could not be sent.");
     }
   }
 }
@@ -527,23 +611,47 @@ function renderChatHeaderStatus() {
   status.textContent = currentChatStatus(chat);
   status.dataset.status = presence?.online ? "online" : presence?.typing ? "typing" : "offline";
 }
+function retryMessageChannel(chatId, channel) {
+  if (messageChannels.get(chatId) !== channel) return;
+  messageChannels.delete(chatId);
+  messagePresence.delete(chatId);
+  const attempt = messageChannelRetryAttempts.get(chatId) || 0;
+  const delay = Math.min(30000, 1000 * (2 ** attempt));
+  messageChannelRetryAttempts.set(chatId, attempt + 1);
+  messageChannelRetryTimers.set(chatId, window.setTimeout(() => {
+    messageChannelRetryTimers.delete(chatId);
+    if (!appUser || !state.messages.some((chat) => chat.id === chatId && !state.blocked.includes(chat.providerId))) return;
+    syncMessageChannels();
+  }, delay));
+  appSupabase.removeChannel(channel).then((status) => {
+    if (status !== "ok") console.warn("Could not remove a failed Skillmate chat channel.", status, chatId);
+  }).catch((error) => console.error("Could not clean up a failed Skillmate chat channel.", error, chatId));
+}
 function syncMessageChannels() {
   if (!appSupabase || !appUser) return;
   const conversations = state.messages.filter((chat) => !state.blocked.includes(chat.providerId));
   const activeIds = new Set(conversations.map((chat) => chat.id));
+  for (const [id, timer] of messageChannelRetryTimers) {
+    if (activeIds.has(id)) continue;
+    window.clearTimeout(timer);
+    messageChannelRetryTimers.delete(id);
+    messageChannelRetryAttempts.delete(id);
+  }
   for (const [id, channel] of messageChannels) {
     if (!activeIds.has(id)) {
-      appSupabase.removeChannel(channel);
       messageChannels.delete(id);
       messagePresence.delete(id);
+      appSupabase.removeChannel(channel).then((status) => {
+        if (status !== "ok") console.warn("Could not remove an inactive Skillmate chat channel.", status, id);
+      }).catch((error) => console.error("Could not clean up an inactive Skillmate chat channel.", error, id));
     }
   }
   for (const chat of conversations) {
-    if (messageChannels.has(chat.id)) continue;
+    if (messageChannels.has(chat.id) || messageChannelRetryTimers.has(chat.id)) continue;
     const channel = appSupabase.channel(`skillmate-chat:${chat.id}`, { config: { private: true, presence: { key: appUser.id } } })
       .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${chat.id}` }, () => {
         markConversationMessagesDelivered(chat.id)
-          .then(() => refreshConversationMessages(chat.id))
+          .then(() => refreshConversationMessages(chat.id, { force: true }))
           .catch((error) => console.error("Could not refresh a realtime Skillmate conversation.", error));
       })
       .on("presence", { event: "sync" }, () => {
@@ -563,8 +671,11 @@ function syncMessageChannels() {
           }, 2500));
         }
       })
-      .subscribe(async (status) => {
+      .subscribe(async (status, error) => {
+        if (messageChannels.get(chat.id) !== channel) return;
         if (status === "SUBSCRIBED") {
+          messageChannelRetryAttempts.delete(chat.id);
+          realtimeFallbackNoticeShown = false;
           const { error } = await channel.track({ user_id: appUser.id, typing: false, online_at: new Date().toISOString() });
           if (error) console.error("Could not publish Skillmate chat presence.", error);
           try {
@@ -576,7 +687,12 @@ function syncMessageChannels() {
             markConversationMessagesRead(chat.id).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
           }
         } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
-          console.error(`Skillmate chat realtime channel ${status.toLowerCase()}.`, chat.id);
+          console.warn(`Skillmate chat realtime channel ${status.toLowerCase()}; periodic message refresh remains active while reconnecting.`, chat.id, error || "");
+          if (!realtimeFallbackNoticeShown) {
+            realtimeFallbackNoticeShown = true;
+            showToast("Live chat updates are unavailable. Messages will refresh periodically until the connection returns.");
+          }
+          retryMessageChannel(chat.id, channel);
         }
       });
     messageChannels.set(chat.id, channel);
@@ -602,6 +718,8 @@ async function markConversationMessagesDelivered(chatId) {
 }
 async function markConversationMessagesRead(chatId) {
   if (!appSupabase || !appUser || readUpdatesInProgress.has(chatId) || document.hidden || state.activePage !== "messages" || activeConversationId !== chatId) return;
+  const chat = state.messages.find((item) => item.id === chatId);
+  if (!chat?.messages.some((message) => message.senderId && message.senderId !== appUser.id && !message.readAt)) return;
   readUpdatesInProgress.add(chatId);
   try {
     const readAt = new Date().toISOString();
@@ -612,7 +730,6 @@ async function markConversationMessagesRead(chatId) {
       .update(updates)
       .eq("conversation_id", chatId).neq("sender_id", appUser.id).is("read_at", null);
     if (error) throw error;
-    const chat = state.messages.find((item) => item.id === chatId);
     if (chat) {
       chat.messages.forEach((message) => {
         if (message.senderId && message.senderId !== appUser.id && !message.readAt) {
@@ -620,24 +737,87 @@ async function markConversationMessagesRead(chatId) {
           message.readAt = readAt;
         }
       });
+      cacheConversationMessages(state.messages);
       renderConversations({ preserveChatState: true });
     }
   } finally {
     readUpdatesInProgress.delete(chatId);
   }
 }
-async function refreshConversationMessages(chatId) {
+async function refreshConversationMessages(chatId, { force = false } = {}) {
   if (!appSupabase || !appUser) return;
+  if (!force && Date.now() - (conversationMessageRefreshTimes.get(chatId) || 0) < 4000) return;
+  if (conversationMessageRefreshes.has(chatId)) return;
+  conversationMessageRefreshes.add(chatId);
+  try {
+    const chat = state.messages.find((item) => item.id === chatId);
+    if (!chat) {
+      await refreshLiveMessages();
+      return;
+    }
+    const data = await loadConversationMessages(chatId, chat.name || getProvider(chat.providerId)?.name || "Student");
+    conversationMessageRefreshTimes.set(chatId, Date.now());
+    const nextMessages = linkMessageReplies(data.map((message) => normalizeMessageRow(message, chat.name || getProvider(chat.providerId)?.name || "Student")));
+    const unchanged = nextMessages.length === chat.messages.length
+      && nextMessages.every((message, index) => {
+        const current = chat.messages[index];
+        return String(message.id) === String(current.id)
+          && message.text === current.text
+          && message.createdAt === current.createdAt
+          && message.readAt === current.readAt
+          && message.deliveredAt === current.deliveredAt
+          && message.replyTo === current.replyTo
+          && message.sendStatus === current.sendStatus;
+      });
+    if (unchanged) return;
+    chat.messages = nextMessages;
+    renderConversations({ preserveChatState: true });
+  } finally {
+    conversationMessageRefreshes.delete(chatId);
+  }
+}
+async function loadOlderConversationMessages(chatId) {
+  if (!appSupabase || !appUser || conversationMessageRefreshes.has(chatId) || !olderMessagesAvailable.get(chatId)) return;
   const chat = state.messages.find((item) => item.id === chatId);
-  if (!chat) {
-    await refreshLiveMessages();
+  const oldestMessage = chat?.messages.find((message) => message.createdAt);
+  if (!chat || !oldestMessage) {
+    olderMessagesAvailable.set(chatId, false);
     return;
   }
-  const data = await loadConversationMessages(chatId, chat.name || getProvider(chat.providerId)?.name || "Student");
-  chat.messages = linkMessageReplies(data.map((message) => normalizeMessageRow(message, chat.name || getProvider(chat.providerId)?.name || "Student")));
-  renderConversations({ preserveChatState: true });
-  if (activeConversationId === chatId && state.activePage === "messages" && !document.hidden) {
-    await markConversationMessagesRead(chatId);
+  conversationMessageRefreshes.add(chatId);
+  try {
+    const selectMessages = (columns) => appSupabase.from("messages")
+      .select(columns)
+      .eq("conversation_id", chatId)
+      .lt("created_at", oldestMessage.createdAt)
+      .order("created_at", { ascending: false })
+      .limit(MESSAGE_PAGE_SIZE);
+    let { data, error } = await selectMessages(messageMetadataAvailable === false ? legacyMessageColumns : messageColumns);
+    if (error && isMissingMessageMetadata(error)) {
+      messageMetadataAvailable = false;
+      if (!messageMetadataWarningShown) {
+        messageMetadataWarningShown = true;
+        console.warn("Chat metadata columns are missing. Apply the messaging migration to enable delivery receipts and replies.");
+        showToast("Messages are available; apply the messaging migration to enable replies and delivery receipts.");
+      }
+      ({ data, error } = await selectMessages(legacyMessageColumns));
+    } else if (!error && messageMetadataAvailable === null) {
+      messageMetadataAvailable = true;
+    }
+    if (error) throw error;
+    const olderMessages = (data || []).reverse()
+      .map((message) => normalizeMessageRow(message, chat.name || "Student"));
+    olderMessagesAvailable.set(chatId, olderMessages.length === MESSAGE_PAGE_SIZE);
+    if (!olderMessages.length) return;
+    const knownIds = new Set(chat.messages.map((message) => String(message.id)));
+    chat.messages = linkMessageReplies([
+      ...olderMessages.filter((message) => !knownIds.has(String(message.id))),
+      ...chat.messages,
+    ]);
+    cacheConversationMessages(state.messages);
+    renderConversations({ preserveChatState: true, preserveScrollAnchor: true });
+  } finally {
+    conversationMessageRefreshes.delete(chatId);
   }
 }
 function openModal(id) {
@@ -836,7 +1016,7 @@ function renderConversations(options = {}) {
     .filter((chat) => !state.blocked.includes(chat.providerId))
     .sort((a, b) => new Date(b.messages.at(-1)?.createdAt || 0) - new Date(a.messages.at(-1)?.createdAt || 0));
   const selectedChatExists = conversations.some((chat) => chat.id === activeConversationId);
-  if (activeConversationId && !selectedChatExists) activeConversationId = null;
+  if (activeConversationId && !selectedChatExists) persistActiveConversation(null);
   if (activeConversationId) layout.dataset.chatOpen = "true";
   else layout.removeAttribute("data-chat-open");
   const totalUnread = conversations.reduce((total, chat) => total + unreadMessageCount(chat), 0);
@@ -894,6 +1074,7 @@ function renderConversations(options = {}) {
   }
   if (activeConversationId) renderChat(options);
   else renderEmptyChat();
+  syncMessageChannels();
 }
 function renderEmptyChat() {
   const target = document.querySelector("#chat-panel");
@@ -925,6 +1106,7 @@ function renderChat(options = {}) {
     ? previousMessages.scrollHeight - previousMessages.scrollTop - previousMessages.clientHeight < 48
     : true;
   const previousScrollTop = previousMessages?.scrollTop || 0;
+  const previousScrollHeight = previousMessages?.scrollHeight || 0;
   const previousMessageCount = previousMessages?.querySelectorAll("[data-message-id]").length || 0;
   const hasNewMessages = visibleMessageCount(chat) > previousMessageCount;
   const header = document.createElement("header");
@@ -1113,7 +1295,9 @@ function renderChat(options = {}) {
   input.value = draft;
   resizeChatInput(input);
   if (hadFocus) input.focus({ preventScroll: true });
-  messages.scrollTop = wasNearBottom ? messages.scrollHeight : previousScrollTop;
+  messages.scrollTop = options.preserveScrollAnchor && previousMessages
+    ? previousScrollTop + messages.scrollHeight - previousScrollHeight
+    : wasNearBottom ? messages.scrollHeight : previousScrollTop;
   newMessages.hidden = wasNearBottom || (!hasNewMessages && (previousNewMessages?.hidden ?? true));
   if (activeConversationId === chat.id && state.activePage === "messages" && !document.hidden) {
     markConversationMessagesRead(chat.id).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
@@ -1238,10 +1422,16 @@ function toDatabaseStatus(status) {
   return ({ Pending: "pending", Confirmed: "confirmed", Declined: "declined", Completed: "completed", Cancelled: "cancelled" })[status] || status.toLowerCase();
 }
 async function refreshSupabaseState() {
+  const conversationDirectoryRequest = appSupabase.from("conversation_directory")
+    .select("conversation_id, other_user_id, other_user_name");
+  const groupedMessagesRequest = conversationDirectoryRequest.then(({ data, error }) => {
+    if (error) throw error;
+    return loadConversationMessageGroups(data || []);
+  });
   const [
     ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations,
     savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory,
-    verification,
+    verification, groupedMessages,
   ] = await Promise.all([
     appSupabase.from("profiles").select("id, full_name, university, course, bio, campus_verified, university_email, role, skills, avatar_url, onboarding_completed").eq("id", appUser.id).single(),
     appSupabase.from("provider_directory").select("*"),
@@ -1255,8 +1445,9 @@ async function refreshSupabaseState() {
     appSupabase.from("reviews").select("booking_id, provider_id, rating, body, created_at"),
     appSupabase.from("portfolio_items").select("*").eq("provider_id", appUser.id).order("created_at", { ascending: false }),
     appSupabase.from("portfolio_items").select("provider_id, title").order("created_at", { ascending: false }),
-    appSupabase.from("conversation_directory").select("conversation_id, other_user_id, other_user_name"),
+    conversationDirectoryRequest,
     appSupabase.from("verification_requests").select("id, status").eq("student_id", appUser.id).eq("status", "open").maybeSingle(),
+    groupedMessagesRequest,
   ]);
   const results = [ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations, savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory, verification];
   const failed = results.find((result) => result.error);
@@ -1360,13 +1551,17 @@ async function refreshSupabaseState() {
   }));
 
   const conversations = conversationDirectory.data || [];
-  const groupedMessages = await loadConversationMessageGroups(conversations);
   const messages = conversations.map((conversation) => ({
     id: conversation.conversation_id, providerId: conversation.other_user_id, name: conversation.other_user_name,
     messages: groupedMessages.get(conversation.conversation_id) || [],
   }));
+  const refreshedAt = Date.now();
+  messages.forEach((chat) => conversationMessageRefreshTimes.set(chat.id, refreshedAt));
   state.messages = messages;
-  syncMessageChannels();
+  cacheConversationMessages(messages);
+  if (restoreConversationOnMessagesOpen && state.activePage === "messages") {
+    restoreConversationOnMessagesOpen = !restoreActiveConversation();
+  }
   const verificationButton = document.querySelector("#verification-open");
   verificationButton.dataset.requested = verification.data?.status || "";
   const reportTarget = document.querySelector("#report-target");
@@ -1408,17 +1603,48 @@ async function refreshLiveMessages() {
     .select("conversation_id, other_user_id, other_user_name");
   if (conversationsError) throw conversationsError;
   const groupedMessages = await loadConversationMessageGroups(conversations || []);
-  state.messages = (conversations || []).map((conversation) => ({
+  const nextMessages = (conversations || []).map((conversation) => ({
     id: conversation.conversation_id,
     providerId: conversation.other_user_id,
     name: conversation.other_user_name,
     messages: groupedMessages.get(conversation.conversation_id) || [],
   }));
-  syncMessageChannels();
+  const refreshedAt = Date.now();
+  nextMessages.forEach((chat) => conversationMessageRefreshTimes.set(chat.id, refreshedAt));
+  const hasChanged = nextMessages.length !== state.messages.length
+    || nextMessages.some((chat, chatIndex) => {
+      const current = state.messages[chatIndex];
+      return !current
+        || chat.id !== current.id
+        || chat.providerId !== current.providerId
+        || chat.name !== current.name
+        || chat.messages.length !== current.messages.length
+        || chat.messages.some((message, messageIndex) => {
+          const existing = current.messages[messageIndex];
+          return !existing
+            || message.id !== existing.id
+            || message.senderId !== existing.senderId
+            || message.text !== existing.text
+            || message.createdAt !== existing.createdAt
+            || message.readAt !== existing.readAt
+            || message.deliveredAt !== existing.deliveredAt
+            || message.replyTo !== existing.replyTo
+            || message.sendStatus !== existing.sendStatus;
+        });
+    });
+  if (!hasChanged) {
+    syncMessageChannels();
+    return;
+  }
+  state.messages = nextMessages;
+  cacheConversationMessages(nextMessages);
+  if (restoreConversationOnMessagesOpen && state.activePage === "messages") {
+    restoreConversationOnMessagesOpen = !restoreActiveConversation();
+  }
   renderConversations({ preserveChatState: true });
 }
 async function refreshLiveActivity() {
-  if (!appSupabase || !appUser || document.hidden || pendingActionCount || activityRefreshInProgress) return;
+  if (!appSupabase || !appUser || !dashboardDataLoaded || document.hidden || pendingActionCount || activityRefreshInProgress) return;
   const pageNeedsBookings = ["home", "bookings", "provider", "earnings"].includes(state.activePage);
   const pageNeedsMessages = state.activePage === "messages";
   if (!pageNeedsBookings && !pageNeedsMessages) return;
@@ -1429,6 +1655,17 @@ async function refreshLiveActivity() {
   } finally {
     activityRefreshInProgress = false;
   }
+}
+function startMessagePolling() {
+  if (messagePollingTimer) return;
+  messagePollingTimer = window.setInterval(() => {
+    if (state.activePage !== "messages" || document.hidden) return;
+    refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate messages.", error));
+  }, 8000);
+}
+function stopMessagePolling() {
+  window.clearInterval(messagePollingTimer);
+  messagePollingTimer = null;
 }
 function initialsFor(name = "Student") {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
@@ -1501,7 +1738,11 @@ function initializeDashboard() {
   populateServiceSelects();
   updateGroupPrice();
   renderAll();
-  if (state.activePage && state.activePage !== "home") showPage(state.activePage);
+  const pageFromHash = window.location.hash.slice(1);
+  const requestedPage = ["home", "bookings", "messages", "saved", "provider", "earnings"].includes(pageFromHash)
+    ? pageFromHash
+    : state.activePage;
+  if (requestedPage && requestedPage !== "home") showPage(requestedPage);
   if (state.mode === "offer") {
     modeSwitch.setAttribute("aria-pressed", "true");
     document.querySelector("#mode-switch-label").textContent = "Find services";
@@ -1544,29 +1785,65 @@ async function bootstrapStudentApp() {
     return;
   }
   const { data: profile, error: profileError } = await appSupabase.from("profiles")
-    .select("onboarding_completed").eq("id", data.session.user.id).single();
+    .select("id, full_name, university, course, bio, campus_verified, university_email, role, skills, avatar_url, onboarding_completed")
+    .eq("id", data.session.user.id).single();
   if (profileError) throw profileError;
   if (!profile.onboarding_completed) {
     window.location.replace("onboarding.html");
     return;
   }
-  await window.syncSkillmateServerSession(data.session);
   appUser = data.session.user;
   loadHiddenMessages();
   loadChatDrafts();
   loadPendingMessages();
-  await refreshSupabaseState();
+  state.profile = {
+    name: profile.full_name,
+    university: profile.university,
+    course: profile.course,
+    bio: profile.bio,
+    email: profile.university_email || appUser.email,
+    verified: profile.campus_verified,
+    skills: profile.skills || [],
+    avatarUrl: profile.avatar_url || "",
+    location: "",
+  };
+  state.messages = loadCachedConversationMessages();
+  state.messages.forEach((chat) => {
+    olderMessagesAvailable.set(chat.id, chat.messages.length === MESSAGE_PAGE_SIZE);
+    chat.messages = linkMessageReplies(chat.messages);
+  });
+  cacheConversationMessages(state.messages);
   initializeDashboard();
   document.querySelector("#profile-name").value = state.profile.name;
-  document.querySelector("#profile-bio").value = state.profile.bio;
+  document.querySelector("#profile-bio").value = state.profile.bio || "";
   document.querySelector("#profile-email").value = state.profile.email;
   document.querySelector(".campus-card strong").textContent = state.profile.university || "Your campus";
   document.querySelector(".campus-card small").textContent = state.profile.course || "Student account";
+  showConnectedApp();
+  window.syncSkillmateServerSession(data.session).catch((sessionError) => {
+    console.error("Could not synchronize the secure Skillmate session.", sessionError);
+    showToast("Some account features may be unavailable until your session reconnects.", "error");
+  });
+  try {
+    await refreshSupabaseState();
+    dashboardDataLoaded = true;
+    populateServiceSelects();
+    updateGroupPrice();
+    renderAll();
+    document.querySelector("#profile-name").value = state.profile.name;
+    document.querySelector("#profile-bio").value = state.profile.bio || "";
+    document.querySelector("#profile-email").value = state.profile.email;
+    document.querySelector(".campus-card strong").textContent = state.profile.university || "Your campus";
+    document.querySelector(".campus-card small").textContent = state.profile.course || "Student account";
+  } catch (refreshError) {
+    dashboardDataLoaded = true;
+    console.error("Could not refresh Skillmate account data.", refreshError);
+    showToast("Some account data could not be refreshed. Your cached conversations are still available.", "error");
+  }
   document.querySelector("#booking-count").textContent = String(
     state.bookings.filter((booking) => !["Declined", "Cancelled", "Completed"].includes(booking.status)).length,
   );
   document.querySelector("#message-count").textContent = String(state.messages.length);
-  showConnectedApp();
   if (window.location.hash === "#profile") {
     openStudentProfileEditor();
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
@@ -1589,8 +1866,18 @@ async function bootstrapStudentApp() {
 function showPage(page) {
   const view = document.querySelector(`[data-view="${page}"]`);
   if (!view) return;
+  const pageHash = `#${page}`;
+  if (window.location.hash !== pageHash) {
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${pageHash}`);
+  }
+  if (page === "messages") {
+    restoreConversationOnMessagesOpen = true;
+    restoreConversationOnMessagesOpen = !restoreActiveConversation();
+  }
   state.activePage = page;
   saveState();
+  if (page === "messages") startMessagePolling();
+  else stopMessagePolling();
   document.querySelectorAll(".view").forEach((element) => element.classList.toggle("active-view", element === view));
   document.querySelectorAll(".side-nav .nav-link[data-page]").forEach((element) => element.classList.toggle("active", element.dataset.page === page));
   document.querySelector("#breadcrumb-title").textContent = {
@@ -1598,7 +1885,13 @@ function showPage(page) {
   }[page];
   closeSidebar(sidebar.contains(document.activeElement));
   if (page === "saved") renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders).filter((provider) => state.saved.includes(provider.id)));
-  if (page === "messages") renderConversations();
+  if (page === "messages") {
+    renderConversations();
+    if (activeConversationId && !document.hidden) {
+      markConversationMessagesRead(activeConversationId)
+        .catch((error) => console.error("Could not mark Skillmate messages as read.", error));
+    }
+  }
   if (page === "provider") { renderListings(); renderPortfolio(); renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true }); }
   if (page === "earnings") renderEarnings();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1669,7 +1962,7 @@ async function startConversation(providerId, text) {
       conversation_id: conversationId, sender_id: appUser.id, body: text,
     });
     if (messageError) throw messageError;
-    activeConversationId = conversationId;
+    persistActiveConversation(conversationId);
     await refreshSupabaseState();
     return;
   }
@@ -1679,7 +1972,7 @@ async function startConversation(providerId, text) {
     state.messages.unshift(chat);
   }
   chat.messages.push({ sender: "You", text, time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) });
-  activeConversationId = chat.id;
+  persistActiveConversation(chat.id);
   saveState();
 }
 function openReport(providerId) {
@@ -2069,12 +2362,24 @@ document.querySelector("#message-form").addEventListener("submit", (event) => {
 document.querySelector("#conversation-list").addEventListener("click", (event) => {
   const button = event.target.closest("[data-chat]");
   if (!button) return;
-  activeConversationId = button.dataset.chat;
+  restoreConversationOnMessagesOpen = false;
+  persistActiveConversation(button.dataset.chat);
   pendingReplyId = null;
   document.querySelector("#messages-layout").dataset.chatOpen = "true";
   renderConversations();
   markConversationMessagesRead(activeConversationId).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
+  refreshConversationMessages(activeConversationId).catch((error) => {
+    console.error("Could not refresh the selected Skillmate conversation.", error);
+    showToast("Could not refresh this chat’s messages. Check your connection and try again.", "error");
+  });
 });
+document.querySelector("#chat-panel").addEventListener("scroll", (event) => {
+  if (event.target.id !== "chat-messages" || event.target.scrollTop > 32) return;
+  loadOlderConversationMessages(activeConversationId).catch((error) => {
+    console.error("Could not load older Skillmate messages.", error);
+    showToast("Could not load older messages. Check your connection and try again.", "error");
+  });
+}, true);
 let conversationSearchTimer;
 document.querySelector("#conversation-search").addEventListener("input", () => {
   window.clearTimeout(conversationSearchTimer);
@@ -2088,6 +2393,7 @@ document.querySelector("#chat-panel").addEventListener("click", (event) => {
   }
   if (event.target.closest("[data-chat-back]")) {
     activeConversationId = null;
+    restoreConversationOnMessagesOpen = false;
     pendingReplyId = null;
     document.querySelector("#messages-layout").removeAttribute("data-chat-open");
     renderConversations();
@@ -2169,12 +2475,13 @@ document.querySelector("#chat-panel").addEventListener("submit", (event) => {
     };
     chat.messages.push(message);
     queuePendingMessage(chat, message);
+    cacheConversationMessages(state.messages);
     renderConversations({ preserveChatState: true });
     if (!navigator.onLine) {
       showToast("You’re offline. This message is saved on this device; tap Retry when you reconnect.");
       return;
     }
-    runAction(() => sendPendingMessage(chat, message), "Message wasn't sent. It is saved on this device; tap Retry to try again.", "Sending message…");
+    sendMessageWithoutBlocking(chat, message, "Message wasn't sent. It is saved on this device; tap Retry to try again.");
     return;
   }
   const message = {

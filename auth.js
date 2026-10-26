@@ -2,7 +2,9 @@ const authClient = window.skillmateSupabase;
 const authForm = document.querySelector("#auth-form");
 const authMessage = document.querySelector("#auth-message");
 const passwordInput = document.querySelector("#auth-password");
+const confirmPasswordInput = document.querySelector("#auth-confirm-password");
 const passwordVisibility = document.querySelector("#password-visibility");
+const confirmPasswordVisibility = document.querySelector("#confirm-password-visibility");
 let authMode = "signin";
 let authSubmitting = false;
 let authRedirectStarted = false;
@@ -21,13 +23,11 @@ function isInvalidRefreshTokenError(error) {
     || message.includes("refresh token not found");
 }
 
-function setPasswordVisibility(visible) {
-  passwordInput.type = visible ? "text" : "password";
-  passwordVisibility.setAttribute("aria-label", `${visible ? "Hide" : "Show"} password`);
-  passwordVisibility.setAttribute("aria-pressed", String(visible));
-  passwordVisibility.querySelector("svg").innerHTML = visible
-    ? '<path d="M3 3 21 21M10.6 10.6a2 2 0 0 0 2.8 2.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9.9 5.2A10.9 10.9 0 0 1 12 5c6.2 0 9.5 7 9.5 7a16 16 0 0 1-2.2 3.1M6.2 6.3C3.8 8 2.5 12 2.5 12s3.3 7 9.5 7c1.2 0 2.3-.2 3.2-.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>'
-    : '<path d="M2.5 12s3.3-6 9.5-6 9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/>';
+function setPasswordVisibility(input, button, visible, label) {
+  input.type = visible ? "text" : "password";
+  button.setAttribute("aria-label", `${visible ? "Hide" : "Show"} ${label}`);
+  button.setAttribute("aria-pressed", String(visible));
+  button.textContent = visible ? "Hide" : "Show";
 }
 
 function friendlyAuthError(error, mode) {
@@ -86,7 +86,8 @@ function setAuthMode(mode) {
   const recovery = mode === "recovery";
   const signin = !signup && !recovery;
   document.querySelector("#auth-tabs").dataset.mode = signup ? "signup" : "signin";
-  setPasswordVisibility(false);
+  setPasswordVisibility(passwordInput, passwordVisibility, false, "password");
+  setPasswordVisibility(confirmPasswordInput, confirmPasswordVisibility, false, "confirm password");
   document.title = signup ? "Create account | Skillmate" : recovery ? "Reset password | Skillmate" : "Sign in | Skillmate";
   document.querySelector("#auth-tabs").hidden = recovery;
   document.querySelector("#signin-tab").classList.toggle("active", signin);
@@ -99,6 +100,9 @@ function setAuthMode(mode) {
   document.querySelector("#auth-name").required = signup;
   document.querySelector("#auth-university").required = signup;
   document.querySelector("#auth-student-id").required = signup;
+  document.querySelector("#confirm-password-field").hidden = !signup;
+  confirmPasswordInput.required = signup;
+  if (!signup) confirmPasswordInput.value = "";
   document.querySelector("#auth-consent").required = signup;
   document.querySelector("#consent-field").hidden = false;
   document.querySelector("#google-signin").hidden = recovery;
@@ -160,7 +164,15 @@ document.querySelector("#signin-tab").addEventListener("click", () => setAuthMod
 document.querySelector("#signup-tab").addEventListener("click", () => setAuthMode("signup"));
 passwordInput.addEventListener("input", updatePasswordHint);
 passwordVisibility.addEventListener("click", () => {
-  setPasswordVisibility(passwordInput.type === "password");
+  setPasswordVisibility(passwordInput, passwordVisibility, passwordInput.type === "password", "password");
+});
+confirmPasswordVisibility.addEventListener("click", () => {
+  setPasswordVisibility(
+    confirmPasswordInput,
+    confirmPasswordVisibility,
+    confirmPasswordInput.type === "password",
+    "confirm password",
+  );
 });
 async function signInWithSocialProvider(provider, button) {
   if (!authClient || authSubmitting) return;
@@ -223,12 +235,18 @@ authForm.addEventListener("submit", async (event) => {
   }
   const email = document.querySelector("#auth-email").value.trim();
   const password = document.querySelector("#auth-password").value;
+  const confirmPassword = confirmPasswordInput.value;
   const fullName = document.querySelector("#auth-name").value.trim();
   const university = document.querySelector("#auth-university").value.trim();
   const studentIdNumber = document.querySelector("#auth-student-id").value.trim();
   const submit = document.querySelector("#auth-submit");
   const submitLabel = document.querySelector("#auth-submit-label");
   const submitSpinner = submit.querySelector(".auth-submit-spinner");
+  if (authMode === "signup" && password !== confirmPassword) {
+    authMessage.textContent = "Your passwords do not match.";
+    confirmPasswordInput.focus();
+    return;
+  }
   submit.disabled = true;
   authSubmitting = true;
   submit.setAttribute("aria-busy", "true");

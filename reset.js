@@ -29,9 +29,7 @@ passwordToggle.addEventListener("click", () => {
   newPassword.type = visible ? "text" : "password";
   passwordToggle.setAttribute("aria-label", `${visible ? "Hide" : "Show"} password`);
   passwordToggle.setAttribute("aria-pressed", String(visible));
-  passwordToggle.querySelector("svg").innerHTML = visible
-    ? '<path d="M3 3 21 21M10.6 10.6a2 2 0 0 0 2.8 2.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9.9 5.2A10.9 10.9 0 0 1 12 5c6.2 0 9.5 7 9.5 7a16 16 0 0 1-2.2 3.1M6.2 6.3C3.8 8 2.5 12 2.5 12s3.3 7 9.5 7c1.2 0 2.3-.2 3.2-.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>'
-    : '<path d="M2.5 12s3.3-6 9.5-6 9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/>';
+  passwordToggle.textContent = visible ? "Hide" : "Show";
 });
 newPassword.addEventListener("input", updateResetPasswordHint);
 
