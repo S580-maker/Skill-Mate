@@ -220,7 +220,7 @@ async function saveOnboarding(skip = false) {
     window.location.replace("index.html");
   } catch (error) {
     console.error("Could not save the Skillmate onboarding profile.", error);
-    setOnboardingError(error.message || "Could not save your profile. Please try again.");
+    setOnboardingError("We couldn’t save your details right now. Please check your connection and try again.");
   } finally {
     onboardingSubmit.disabled = false;
     onboardingSubmit.removeAttribute("aria-busy");
@@ -246,5 +246,5 @@ loadOnboarding().catch((error) => {
   onboardingSubmit.disabled = true;
   document.querySelector("#onboarding-skip").disabled = true;
   document.querySelector("#onboarding-skip-mobile").disabled = true;
-  setOnboardingError(error.message || "Could not load your profile. Check your connection and try again.");
+  setOnboardingError("We couldn’t load your profile right now. Please check your connection and try again.");
 });

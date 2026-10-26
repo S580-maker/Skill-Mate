@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const path = require("node:path");
+const { randomUUID } = require("node:crypto");
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
@@ -222,10 +223,19 @@ app.use((request, response, next) => {
 
 app.use(express.static(projectRoot, { dotfiles: "deny", index: false }));
 
-app.use((error, _request, response, _next) => {
-  console.error("Skillmate server error.", error);
+app.use((error, request, response, _next) => {
+  const errorId = randomUUID();
+  console.error("Skillmate request failed.", {
+    errorId,
+    method: request.method,
+    path: request.path,
+    error,
+  });
   if (response.headersSent) return;
-  response.status(500).send("Skillmate could not complete that request. Check the server logs.");
+  response
+    .set("X-Skillmate-Error-Id", errorId)
+    .status(500)
+    .send(`Sorry, we couldn’t complete that request. Please try again. If it keeps happening, contact support with reference ${errorId}.`);
 });
 
 if (require.main === module) {

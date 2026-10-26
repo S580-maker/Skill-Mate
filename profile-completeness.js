@@ -7,23 +7,21 @@
   const root = ReactDOM.createRoot(container);
 
   function ProfileCompleteness({ profile }) {
+    if (profile.identityComplete) return null;
+
     const fields = [
       Boolean(profile.name?.trim()),
-      Boolean(profile.bio?.trim()),
-      Boolean(profile.email?.trim()),
-      Boolean(profile.location?.trim()),
-      Boolean(profile.avatarUrl),
+      Boolean(profile.university?.trim()),
+      Boolean(profile.studentIdNumber?.trim()),
     ];
     const completed = fields.filter(Boolean).length;
     const percentage = Math.round((completed / fields.length) * 100);
     const missing = [
-      !fields[3] && "location",
-      !fields[4] && "profile photo",
-      !fields[1] && "bio",
+      !fields[0] && "your name",
+      !fields[1] && "your university",
+      !fields[2] && "your student ID number",
     ].filter(Boolean);
-    const detail = percentage === 100
-      ? "Your profile is ready to help classmates get to know you."
-      : `Add your ${missing.join(" and ")} to help classmates get to know you.`;
+    const detail = `Add ${missing.join(" and ")} to finish setting up your student profile.`;
 
     return React.createElement(
       "section",
@@ -32,7 +30,7 @@
         "div",
         { className: "profile-completeness-copy" },
         React.createElement("p", { className: "eyebrow" }, "YOUR STUDENT PROFILE"),
-        React.createElement("h2", { id: "profile-completeness-title" }, "Make a great first impression"),
+        React.createElement("h2", { id: "profile-completeness-title" }, "Complete your student profile"),
         React.createElement("p", { className: "profile-completeness-detail" }, detail),
       ),
       React.createElement(
@@ -57,7 +55,7 @@
           type: "button",
           onClick: () => window.dispatchEvent(new Event("skillmate:edit-profile")),
         },
-        percentage === 100 ? "Edit profile" : "Complete profile",
+        "Complete profile",
         React.createElement("span", { "aria-hidden": "true" }, "→"),
       ),
     );

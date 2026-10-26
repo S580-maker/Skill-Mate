@@ -317,6 +317,15 @@ function mergePendingMessages(conversationId, messages) {
   if (outboxChanged) persistPendingMessages();
   return linkMessageReplies(messages);
 }
+function retainLocalOutgoingMessages(currentMessages, refreshedMessages) {
+  const merged = new Map(refreshedMessages.map((message) => [String(message.id), message]));
+  for (const message of currentMessages) {
+    if (message.senderId === appUser?.id && !merged.has(String(message.id))) {
+      merged.set(String(message.id), message);
+    }
+  }
+  return [...merged.values()].sort((left, right) => new Date(left.createdAt || 0) - new Date(right.createdAt || 0));
+}
 function createChatMessageId() {
   if (crypto.randomUUID) return crypto.randomUUID();
   const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -363,7 +372,6 @@ async function sendPendingMessage(chat, message) {
       if (!messageMetadataWarningShown) {
         messageMetadataWarningShown = true;
         console.warn("Chat metadata columns are missing. Apply the messaging migration to enable delivery receipts and replies.");
-        showToast("Messages are available; apply the messaging migration to enable replies and delivery receipts.");
       }
       result = await insertMessage(false);
     }
@@ -757,7 +765,7 @@ async function refreshConversationMessages(chatId, { force = false } = {}) {
     }
     const data = await loadConversationMessages(chatId, chat.name || getProvider(chat.providerId)?.name || "Student");
     conversationMessageRefreshTimes.set(chatId, Date.now());
-    const nextMessages = linkMessageReplies(data.map((message) => normalizeMessageRow(message, chat.name || getProvider(chat.providerId)?.name || "Student")));
+    const nextMessages = linkMessageReplies(retainLocalOutgoingMessages(chat.messages, data));
     const unchanged = nextMessages.length === chat.messages.length
       && nextMessages.every((message, index) => {
         const current = chat.messages[index];
@@ -771,6 +779,7 @@ async function refreshConversationMessages(chatId, { force = false } = {}) {
       });
     if (unchanged) return;
     chat.messages = nextMessages;
+      cacheConversationMessages(state.messages);
     renderConversations({ preserveChatState: true });
   } finally {
     conversationMessageRefreshes.delete(chatId);
@@ -1092,14 +1101,75 @@ function renderEmptyChat() {
   empty.append(icon, heading, description);
   target.append(empty);
 }
+function chatMessageRenderKey(message, grouped) {
+  return JSON.stringify([
+    message.text, message.sender, message.senderId, message.createdAt, message.time,
+    message.replyTo, message.replyText, message.replySender, message.sendStatus,
+    message.readAt, message.deliveredAt, grouped,
+  ]);
+}
+function createChatMessageRow(message, grouped) {
+  const row = document.createElement("article");
+  row.className = `chat-message${message.sender === "You" ? " chat-outgoing" : ""}${grouped ? " chat-message-grouped" : ""}`;
+  row.dataset.messageId = String(message.id);
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble";
+  if (message.replyText) {
+    const quote = document.createElement("div");
+    quote.className = "chat-message-quote";
+    const quoteName = document.createElement("strong");
+    quoteName.textContent = message.replySender || "Message";
+    const quoteText = document.createElement("span");
+    quoteText.textContent = message.replyText;
+    quote.append(quoteName, quoteText);
+    bubble.append(quote);
+  }
+  const body = document.createElement("span");
+  body.className = "chat-message-text";
+  body.textContent = message.text;
+  const meta = document.createElement("span");
+  meta.className = "chat-message-meta";
+  const time = document.createElement("time");
+  time.className = "chat-time";
+  time.dateTime = message.createdAt || "";
+  time.textContent = message.createdAt ? formatChatTime(message.createdAt) : message.time || "";
+  meta.append(time);
+  if (message.sendStatus) {
+    const status = document.createElement("span");
+    status.className = `chat-send-status chat-send-status-${message.sendStatus}`;
+    status.textContent = message.sendStatus === "failed" ? "Not sent" : "Sending…";
+    meta.append(status);
+  } else if (message.sender === "You" && appSupabase) {
+    const ticks = document.createElement("span");
+    ticks.className = `chat-ticks${message.readAt ? " chat-ticks-read" : ""}`;
+    ticks.setAttribute("aria-label", message.readAt ? "Read" : message.deliveredAt ? "Delivered" : "Sent");
+    ticks.textContent = message.readAt || message.deliveredAt ? "✓✓" : "✓";
+    meta.append(ticks);
+  }
+  bubble.append(body, meta);
+  if (message.sendStatus === "failed") {
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "chat-message-retry";
+    retry.dataset.retryMessage = String(message.id);
+    retry.textContent = "Retry";
+    retry.setAttribute("aria-label", `Retry sending message: ${message.text.slice(0, 60)}`);
+    bubble.append(retry);
+  }
+  row.append(bubble);
+  return row;
+}
 function renderChat(options = {}) {
   const chat = state.messages.find((item) => item.id === activeConversationId);
   const provider = chat && getProvider(chat.providerId);
   const target = document.querySelector("#chat-panel");
   if (!chat || !provider) { renderEmptyChat(); return; }
   const previousInput = options.preserveChatState ? target.querySelector('[name="message"]') : null;
+  const previousForm = options.preserveChatState ? target.querySelector("#chat-compose") : null;
   const draft = previousInput ? previousInput.value : chatDrafts.get(chat.id) || "";
   const hadFocus = previousInput === document.activeElement;
+  const selectionStart = previousInput?.selectionStart || 0;
+  const selectionEnd = previousInput?.selectionEnd || 0;
   const previousMessages = options.preserveChatState ? target.querySelector("#chat-messages") : null;
   const previousNewMessages = options.preserveChatState ? target.querySelector(".chat-new-messages") : null;
   const wasNearBottom = previousMessages
@@ -1145,95 +1215,70 @@ function renderChat(options = {}) {
   menu.append(menuTrigger, menuItems);
   header.append(back, avatar, contact, menu);
 
-  const messages = document.createElement("div");
+  const messages = previousMessages || document.createElement("div");
   messages.className = "chat-messages";
   messages.id = "chat-messages";
   messages.setAttribute("aria-live", "polite");
   messages.setAttribute("aria-relevant", "additions text");
+  const existingRows = new Map([...messages.querySelectorAll("[data-message-id]")]
+    .map((row) => [row.dataset.messageId, row]));
+  const existingDateRows = new Map([...messages.querySelectorAll(".chat-date-row")]
+    .map((row) => [row.dataset.messageDate, row]));
+  const orderedChildren = [];
   let previousDate = "";
   let previousMessage = null;
   const visibleMessages = chat.messages.filter((message) => !isHiddenMessage(message));
   for (const message of visibleMessages) {
     const messageDate = message.createdAt ? new Date(message.createdAt).toDateString() : "Today";
     if (messageDate !== previousDate) {
-      const dateRow = document.createElement("div");
-      dateRow.className = "chat-date-row";
-      const pill = document.createElement("span");
-      pill.className = "chat-date-pill";
-      pill.textContent = message.createdAt ? formatChatDate(message.createdAt) : "Today";
-      dateRow.append(pill);
-      messages.append(dateRow);
+      let dateRow = existingDateRows.get(messageDate);
+      if (!dateRow) {
+        dateRow = document.createElement("div");
+        dateRow.className = "chat-date-row";
+        dateRow.dataset.messageDate = messageDate;
+        const pill = document.createElement("span");
+        pill.className = "chat-date-pill";
+        dateRow.append(pill);
+      }
+      dateRow.querySelector(".chat-date-pill").textContent = message.createdAt ? formatChatDate(message.createdAt) : "Today";
+      orderedChildren.push(dateRow);
       previousDate = messageDate;
       previousMessage = null;
     }
     const sameSender = previousMessage && (previousMessage.senderId || previousMessage.sender) === (message.senderId || message.sender);
     const grouped = sameSender
       && new Date(message.createdAt || 0) - new Date(previousMessage.createdAt || 0) < 5 * 60 * 1000;
-    const row = document.createElement("article");
-    row.className = `chat-message${message.sender === "You" ? " chat-outgoing" : ""}${grouped ? " chat-message-grouped" : ""}`;
-    row.dataset.messageId = String(message.id);
-    const bubble = document.createElement("div");
-    bubble.className = "chat-bubble";
-    if (message.replyText) {
-      const quote = document.createElement("div");
-      quote.className = "chat-message-quote";
-      const quoteName = document.createElement("strong");
-      quoteName.textContent = message.replySender || "Message";
-      const quoteText = document.createElement("span");
-      quoteText.textContent = message.replyText;
-      quote.append(quoteName, quoteText);
-      bubble.append(quote);
-    }
-    const body = document.createElement("span");
-    body.className = "chat-message-text";
-    body.textContent = message.text;
-    const meta = document.createElement("span");
-    meta.className = "chat-message-meta";
-    const time = document.createElement("time");
-    time.className = "chat-time";
-    time.dateTime = message.createdAt || "";
-    time.textContent = message.createdAt ? formatChatTime(message.createdAt) : message.time || "";
-    meta.append(time);
-    if (message.sendStatus) {
-      const status = document.createElement("span");
-      status.className = `chat-send-status chat-send-status-${message.sendStatus}`;
-      status.textContent = message.sendStatus === "failed" ? "Not sent" : "Sending…";
-      meta.append(status);
-    } else if (message.sender === "You" && appSupabase) {
-      const ticks = document.createElement("span");
-      ticks.className = `chat-ticks${message.readAt ? " chat-ticks-read" : ""}`;
-      ticks.setAttribute("aria-label", message.readAt ? "Read" : message.deliveredAt ? "Delivered" : "Sent");
-      ticks.textContent = message.readAt || message.deliveredAt ? "✓✓" : "✓";
-      meta.append(ticks);
-    }
-    bubble.append(body, meta);
-    if (message.sendStatus === "failed") {
-      const retry = document.createElement("button");
-      retry.type = "button";
-      retry.className = "chat-message-retry";
-      retry.dataset.retryMessage = String(message.id);
-      retry.textContent = "Retry";
-      retry.setAttribute("aria-label", `Retry sending message: ${message.text.slice(0, 60)}`);
-      bubble.append(retry);
-    }
-    row.append(bubble);
-    messages.append(row);
+    const messageId = String(message.id);
+    const renderKey = chatMessageRenderKey(message, grouped);
+    let row = existingRows.get(messageId);
+    if (!row || row.dataset.renderKey !== renderKey) row = createChatMessageRow(message, grouped);
+    row.dataset.renderKey = renderKey;
+    orderedChildren.push(row);
     previousMessage = message;
   }
   if (!visibleMessages.length) {
-    const empty = document.createElement("div");
-    empty.className = "chat-empty-state";
-    empty.textContent = "No messages yet 👋 Say hi!";
-    messages.append(empty);
+    let empty = messages.querySelector(".chat-empty-state");
+    if (!empty) {
+      empty = document.createElement("div");
+      empty.className = "chat-empty-state";
+      empty.textContent = "No messages yet 👋 Say hi!";
+    }
+    orderedChildren.push(empty);
   }
-  const newMessages = document.createElement("button");
+  const newMessages = previousNewMessages || document.createElement("button");
   newMessages.type = "button";
   newMessages.className = "chat-new-messages";
-  newMessages.hidden = true;
+  if (!previousNewMessages) newMessages.hidden = true;
   newMessages.textContent = "↓ New messages";
-  const form = document.createElement("form");
+  orderedChildren.push(newMessages);
+  orderedChildren.forEach((child, index) => {
+    if (messages.children[index] !== child) messages.insertBefore(child, messages.children[index] || null);
+  });
+  while (messages.children.length > orderedChildren.length) messages.lastElementChild.remove();
+  const form = previousForm || document.createElement("form");
   form.className = "chat-compose";
   form.id = "chat-compose";
+  form.replaceChildren();
   if (pendingReplyId) {
     const repliedMessage = chat.messages.find((message) => String(message.id) === String(pendingReplyId));
     if (repliedMessage) {
@@ -1276,7 +1321,7 @@ function renderChat(options = {}) {
   emojiButton.dataset.emojiToggle = "";
   emojiButton.setAttribute("aria-label", "Choose emoji");
   emojiButton.textContent = "☺";
-  const input = document.createElement("textarea");
+  const input = previousInput || document.createElement("textarea");
   input.name = "message";
   input.maxLength = 500;
   input.rows = 1;
@@ -1292,9 +1337,12 @@ function renderChat(options = {}) {
   form.append(emojiPicker, controls);
   messages.append(newMessages);
   target.replaceChildren(header, messages, form);
-  input.value = draft;
+  if (!previousInput) input.value = draft;
   resizeChatInput(input);
-  if (hadFocus) input.focus({ preventScroll: true });
+  if (hadFocus) {
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(selectionStart, selectionEnd);
+  }
   messages.scrollTop = options.preserveScrollAnchor && previousMessages
     ? previousScrollTop + messages.scrollHeight - previousScrollHeight
     : wasNearBottom ? messages.scrollHeight : previousScrollTop;
@@ -1431,7 +1479,7 @@ async function refreshSupabaseState() {
   const [
     ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations,
     savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory,
-    verification, groupedMessages,
+    verification, groupedMessages, ownStudentIdentifier,
   ] = await Promise.all([
     appSupabase.from("profiles").select("id, full_name, university, course, bio, campus_verified, university_email, role, skills, avatar_url, onboarding_completed").eq("id", appUser.id).single(),
     appSupabase.from("provider_directory").select("*"),
@@ -1448,8 +1496,9 @@ async function refreshSupabaseState() {
     conversationDirectoryRequest,
     appSupabase.from("verification_requests").select("id, status").eq("student_id", appUser.id).eq("status", "open").maybeSingle(),
     groupedMessagesRequest,
+    appSupabase.from("student_identifiers").select("student_id_number").eq("student_id", appUser.id).maybeSingle(),
   ]);
-  const results = [ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations, savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory, verification];
+  const results = [ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations, savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory, verification, ownStudentIdentifier];
   const failed = results.find((result) => result.error);
   if (failed) throw failed.error;
 
@@ -1463,6 +1512,10 @@ async function refreshSupabaseState() {
     name: profile.full_name, university: profile.university, course: profile.course,
     bio: profile.bio, email: profile.university_email || appUser.email, verified: profile.campus_verified,
     skills: profile.skills || [], avatarUrl: profile.avatar_url || "",
+    studentIdNumber: ownStudentIdentifier.data?.student_id_number || "",
+    identityComplete: Boolean(profile.full_name?.trim().length >= 2
+      && profile.university?.trim().length >= 2
+      && ownStudentIdentifier.data?.student_id_number?.trim().length >= 3),
     location: (userLocations.data || []).find((item) => item.user_id === appUser.id)?.location_name || "",
   };
   connectedServices = (directory.data || []).map((row) => ({
@@ -1607,7 +1660,10 @@ async function refreshLiveMessages() {
     id: conversation.conversation_id,
     providerId: conversation.other_user_id,
     name: conversation.other_user_name,
-    messages: groupedMessages.get(conversation.conversation_id) || [],
+    messages: retainLocalOutgoingMessages(
+      state.messages.find((chat) => chat.id === conversation.conversation_id)?.messages || [],
+      groupedMessages.get(conversation.conversation_id) || [],
+    ),
   }));
   const refreshedAt = Date.now();
   nextMessages.forEach((chat) => conversationMessageRefreshTimes.set(chat.id, refreshedAt));
@@ -1678,19 +1734,28 @@ async function persistBookingStatus(bookingId, status) {
   await refreshSupabaseState();
   renderAll();
 }
-async function runAction(action, failureMessage, loadingMessage = "Saving your changes…") {
+async function runAction(action, failureMessage, loadingMessage = "Saving your changes…", {
+  inlineFeedback,
+  submitButton,
+  friendlyFailureMessage,
+} = {}) {
   const loadingIndicator = document.querySelector("#loading-indicator");
   const loadingLabel = document.querySelector("#loading-label");
   const activeElement = document.activeElement;
-  const control = activeElement instanceof HTMLButtonElement
+  const control = submitButton || (activeElement instanceof HTMLButtonElement
     ? activeElement
     : activeElement instanceof HTMLElement
       ? activeElement.closest("form")?.querySelector('button[type="submit"]')
-      : null;
+      : null);
   const controlWasDisabled = control?.disabled ?? false;
   pendingActionCount += 1;
   loadingLabel.textContent = loadingMessage;
-  loadingIndicator.hidden = false;
+  loadingIndicator.hidden = Boolean(inlineFeedback);
+  if (inlineFeedback) {
+    inlineFeedback.hidden = false;
+    inlineFeedback.dataset.state = "loading";
+    inlineFeedback.textContent = loadingMessage;
+  }
   document.querySelector("#app-shell").setAttribute("aria-busy", "true");
   if (control && !control.disabled) {
     control.disabled = true;
@@ -1700,7 +1765,12 @@ async function runAction(action, failureMessage, loadingMessage = "Saving your c
     await action();
   } catch (error) {
     console.error(failureMessage, error);
-    showToast(error?.message || failureMessage, "error");
+    if (inlineFeedback) {
+      inlineFeedback.dataset.state = "error";
+      inlineFeedback.textContent = friendlyFailureMessage || failureMessage;
+    } else {
+      showToast(failureMessage, "error");
+    }
   } finally {
     if (control && control.isConnected) {
       control.disabled = controlWasDisabled;
@@ -1894,7 +1964,7 @@ function showPage(page) {
   }
   if (page === "provider") { renderListings(); renderPortfolio(); renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true }); }
   if (page === "earnings") renderEarnings();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0, behavior: "auto" });
   if (appSupabase && appUser && ["home", "bookings", "messages", "provider", "earnings"].includes(page)) {
     refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate activity for this page.", error));
   }
@@ -2564,13 +2634,38 @@ document.addEventListener("click", (event) => {
 });
 document.querySelector("#service-form").addEventListener("submit", (event) => {
   event.preventDefault();
+  const feedback = document.querySelector("#service-form-feedback");
+  feedback.hidden = true;
+  feedback.textContent = "";
+  delete feedback.dataset.state;
+  const titleInput = document.querySelector("#service-title");
+  const categoryInput = document.querySelector("#service-category");
+  const priceInput = document.querySelector("#service-price");
+  const descriptionInput = document.querySelector("#service-description");
+  const title = titleInput.value.trim();
+  const category = categoryInput.value.trim();
+  const price = Number(priceInput.value);
+  const description = descriptionInput.value.trim();
+  const validationError = title.length < 3
+    ? { input: titleInput, message: "Add a service title with at least 3 characters." }
+    : !category
+      ? { input: categoryInput, message: "Choose a category for your service." }
+      : !Number.isFinite(price) || price <= 0
+        ? { input: priceInput, message: "Enter a price greater than zero." }
+        : description.length < 10
+          ? { input: descriptionInput, message: "Add a little more detail—your description needs at least 10 characters." }
+          : null;
+  if (validationError) {
+    feedback.hidden = false;
+    feedback.dataset.state = "error";
+    feedback.textContent = validationError.message;
+    validationError.input.focus();
+    return;
+  }
   const id = document.querySelector("#service-id").value || `service-${Date.now()}`;
   const existing = state.services.find((service) => service.id === id);
   const service = {
-    id, title: document.querySelector("#service-title").value.trim(),
-    category: document.querySelector("#service-category").value,
-    price: Number(document.querySelector("#service-price").value),
-    description: document.querySelector("#service-description").value.trim(),
+    id, title, category, price, description,
     groups: document.querySelector("#service-group").checked, active: existing?.active ?? true,
   };
   if (appSupabase) {
@@ -2591,7 +2686,11 @@ document.querySelector("#service-form").addEventListener("submit", (event) => {
       document.querySelector("#service-modal-title").textContent = "Add a service";
       renderAll();
       showToast(existing ? "Service updated." : "Your service is now listed.");
-    }, "Could not save your service.");
+    }, "Could not save your service.", "Saving your service…", {
+      inlineFeedback: feedback,
+      submitButton: document.querySelector("#service-submit"),
+      friendlyFailureMessage: "We couldn’t save your service. Please check your connection and try again. Your details are still here.",
+    });
     return;
   }
   if (existing) Object.assign(existing, service);
@@ -2643,6 +2742,8 @@ document.querySelector("#listing-list").addEventListener("click", (event) => {
 document.querySelector("#profile-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const name = document.querySelector("#profile-name").value.trim();
+  const university = document.querySelector("#profile-university").value.trim();
+  const studentIdNumber = document.querySelector("#profile-student-id").value.trim();
   const bio = document.querySelector("#profile-bio").value.trim();
   const email = document.querySelector("#profile-email").value.trim();
   const location = document.querySelector("#profile-location").value.trim();
@@ -2650,6 +2751,13 @@ document.querySelector("#profile-form").addEventListener("submit", (event) => {
     runAction(async () => {
       const { error } = await appSupabase.from("profiles").update({ full_name: name, bio }).eq("id", appUser.id);
       if (error) throw error;
+      if (!state.profile.identityComplete) {
+        const { error: identityError } = await appSupabase.rpc("complete_profile_identity", {
+          p_university: university,
+          p_student_id_number: studentIdNumber,
+        });
+        if (identityError) throw identityError;
+      }
       const locationResult = location
         ? await appSupabase.from("user_locations").upsert({ user_id: appUser.id, location_name: location })
         : await appSupabase.from("user_locations").delete().eq("user_id", appUser.id);
@@ -2669,6 +2777,9 @@ document.querySelector("#profile-form").addEventListener("submit", (event) => {
     return;
   }
   state.profile.name = name;
+  state.profile.university = university;
+  state.profile.studentIdNumber = studentIdNumber;
+  state.profile.identityComplete = Boolean(name && university && studentIdNumber);
   state.profile.bio = bio;
   state.profile.email = email;
   state.profile.location = location;
@@ -2679,6 +2790,12 @@ document.querySelector("#profile-form").addEventListener("submit", (event) => {
 });
 function openStudentProfileEditor() {
   document.querySelector("#profile-name").value = state.profile.name;
+  document.querySelector("#profile-university").value = state.profile.university || "";
+  document.querySelector("#profile-student-id").value = state.profile.studentIdNumber || "";
+  document.querySelector("#profile-university-field").hidden = state.profile.identityComplete;
+  document.querySelector("#profile-student-id-field").hidden = state.profile.identityComplete;
+  document.querySelector("#profile-university").required = !state.profile.identityComplete;
+  document.querySelector("#profile-student-id").required = !state.profile.identityComplete;
   document.querySelector("#profile-bio").value = state.profile.bio;
   document.querySelector("#profile-email").value = state.profile.email;
   document.querySelector("#profile-location").value = state.profile.location || "";
@@ -3065,7 +3182,7 @@ bootstrapStudentApp().catch((error) => {
     return;
   }
   const status = document.querySelector("#app-auth-status");
-  status.replaceChildren(document.createTextNode(error?.message || "Could not load your Skillmate account."));
+  status.replaceChildren(document.createTextNode("We couldn’t load your account right now. Please try again in a moment."));
   const loginLink = document.createElement("a");
   loginLink.href = "login.html";
   loginLink.textContent = "Return to sign in";
