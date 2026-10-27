@@ -69,8 +69,9 @@ svg { display: block; }
 .sidebar-backdrop { display: none; }
 body.sidebar-open { overflow: hidden; }
 .sidebar-close:hover { color: var(--on-dark); background: var(--nav-bg); }
-.brand-mark { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 10px; color: var(--on-dark); background: var(--main); }
+.brand-mark { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border: 1px solid #ffffff35; border-radius: 11px; color: var(--on-dark); background: linear-gradient(145deg, #4f83ff, #2151c5); box-shadow: 0 4px 12px #0b2f8255, inset 0 1px #ffffff45; }
 .brand-mark svg { width: 25px; }
+.brand-mark img { display: block; width: 27px; height: 27px; }
 .brand-name { color: var(--on-dark); font-family: Poppins, sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -.8px; }
 .brand-name > span { color: var(--on-dark-muted); }
 .workspace-switcher { display: flex; align-items: center; gap: 10px; margin: 34px 0 29px; padding: 11px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--nav-bg); }

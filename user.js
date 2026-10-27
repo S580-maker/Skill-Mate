@@ -1229,7 +1229,7 @@ function renderChat(options = {}) {
   back.className = "chat-back";
   back.dataset.chatBack = "";
   back.setAttribute("aria-label", "Back to conversations");
-  back.textContent = "←";
+  back.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h11" /></svg>';
   const avatar = document.createElement("span");
   avatar.className = `person-avatar avatar-${provider.color || "blue"}`;
   avatar.textContent = provider.initials || initialsFor(provider.name);
@@ -1375,7 +1375,7 @@ function renderChat(options = {}) {
   send.type = "submit";
   send.className = "chat-send";
   send.setAttribute("aria-label", "Send message");
-  send.textContent = "↑";
+  send.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3 10.8 13.2M21 3l-6.5 18-3.7-7.8L3 9.5 21 3Z" /></svg>';
   controls.append(emojiButton, input, send);
   form.append(emojiPicker, controls);
   messages.append(newMessages);
@@ -1895,7 +1895,9 @@ function initializeDashboard() {
     modeSwitch.setAttribute("aria-label", label);
     modeSwitch.title = label;
   };
-  document.querySelector(".demo-pill").textContent = appSupabase ? "CONNECTED ACCOUNT" : "DEMO · LOCAL DATA";
+  const accountStatus = document.querySelector(".demo-pill");
+  accountStatus.textContent = appSupabase ? "ONLINE" : "DEMO · LOCAL DATA";
+  accountStatus.classList.toggle("account-online", Boolean(appSupabase));
   document.querySelector("#signout-button").hidden = !appSupabase;
   if (!appSupabase) {
     state.profile.verified = false;

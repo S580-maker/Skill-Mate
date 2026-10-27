@@ -4,8 +4,9 @@
 .auth-access .auth-layout { grid-template-columns: minmax(320px, .95fr) minmax(0, 1.05fr); min-height: 100svh; padding: 16px; gap: 16px; }
 .auth-access .auth-showcase { position: sticky; top: 16px; align-self: start; min-height: calc(100svh - 32px); padding: clamp(28px, 4vw, 64px); border-radius: 24px; background: #0f1c35; }
 .auth-access .auth-showcase::after { display: none; }
-.auth-access .auth-brand .brand-mark { width: 38px; height: 38px; border-radius: 12px; color: #fff; background: #3569e8; }
+.auth-access .auth-brand .brand-mark { width: 38px; height: 38px; border-radius: 12px; color: #fff; }
 .auth-access .auth-brand .brand-mark svg { width: 29px; height: 29px; }
+.auth-access .auth-brand .brand-mark img { width: 30px; height: 30px; }
 .auth-access .auth-brand .brand-name { color: #f8fafc; font-size: 25px; letter-spacing: -1px; }
 .auth-access .auth-brand .brand-name > span { color: #81a6ff; }
 .auth-access .showcase-copy { width: 100%; padding: 64px 0 48px; }
