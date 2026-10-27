@@ -93,7 +93,11 @@ const defaultState = {
   reports: [],
   blocked: [],
   reviews: [],
-  profile: { name: "Alex Morgan", bio: "Graphic designer and laptop fixer who loves helping fellow students.", email: "alex.m@ug.edu.gh", location: "", verified: true },
+  profile: {
+    name: "Alex Morgan", bio: "Graphic designer and laptop fixer who loves helping fellow students.",
+    email: "alex.m@ug.edu.gh", location: "", verified: true, phoneNumber: "",
+    notifyBookingUpdates: true, notifyMessages: true,
+  },
 };
 let state = loadState();
 const appSupabase = window.skillmateSupabase;
@@ -178,9 +182,48 @@ async function loadConversationMessages(chatId, otherUserName = "Student") {
   return messages.get(chatId) || [];
 }
 
+let batchMessagesAvailable = true;
 async function loadConversationMessageGroups(conversations) {
+  const started = performance.now();
+  try {
+    return await loadConversationMessagePages(conversations);
+  } finally {
+    performance.measure("skillmate:message-load", { start: started, end: performance.now() });
+  }
+}
+
+async function loadConversationMessagePages(conversations) {
   const grouped = new Map(conversations.map((conversation) => [conversation.conversation_id, []]));
   if (!conversations.length) return grouped;
+  if (batchMessagesAvailable && conversations.length > 1) {
+    const rows = [];
+    for (let offset = 0; offset < conversations.length; offset += 20) {
+      const { data, error } = await appSupabase.rpc("recent_conversation_messages", {
+        conversation_ids: conversations.slice(offset, offset + 20).map(item => item.conversation_id),
+        page_size: MESSAGE_PAGE_SIZE,
+      }).select(messageMetadataAvailable === false ? legacyMessageColumns : messageColumns);
+      if (error) {
+        if (["PGRST202", "42883"].includes(error.code) || isMissingMessageMetadata(error)) {
+          batchMessagesAvailable = false;
+          console.info("Batch message loading requires the latest database migrations; using individual history requests.");
+          break;
+        }
+        throw error;
+      }
+      rows.push(...(data || []));
+    }
+    if (batchMessagesAvailable) {
+      const names = new Map(conversations.map(item => [item.conversation_id, item.other_user_name || "Student"]));
+      for (const row of rows) grouped.get(row.conversation_id)?.push(normalizeMessageRow(row, names.get(row.conversation_id)));
+      for (const [id, messages] of grouped) {
+        // The RPC returns newest first within each conversation.
+        messages.reverse();
+        olderMessagesAvailable.set(id, messages.length === MESSAGE_PAGE_SIZE);
+        grouped.set(id, mergePendingMessages(id, messages));
+      }
+      return grouped;
+    }
+  }
   const pages = await Promise.all(conversations.map(async (conversation) => {
     const selectMessages = (columns) => appSupabase.from("messages")
       .select(columns)
@@ -899,11 +942,11 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   }
   target.innerHTML = visible.length ? visible.map((provider) => `
     <article class="provider-card">
-      <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><span class="cover-symbol">${getCategoryIcon(provider.category)}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
+      <div class="provider-card-cover cover-${escapeHTML(provider.color)}">${serviceCoverUrl(provider) ? `<img class="service-marketplace-cover" src="${escapeHTML(serviceCoverUrl(provider))}" alt="" loading="lazy" />` : `<span class="cover-symbol">${getCategoryIcon(provider.category)}</span>`}${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
       <div class="provider-card-body">
         <div class="provider-card-person"><span class="provider-avatar avatar-${escapeHTML(provider.color)}">${escapeHTML(provider.initials)}</span>        <span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? '<i class="verified-dot">✓</i> Campus verified' : escapeHTML(provider.campus)}</small></span><span class="rating">★ ${providerReviewSummary(provider).rating}<small> (${providerReviewSummary(provider).count})</small></span></div>
-        <p class="service-category">${escapeHTML(provider.category)}</p><h3>${escapeHTML(provider.service)}</h3><p class="provider-description">${escapeHTML(provider.description)}</p>
-        <div class="provider-card-footer"><span class="price">${currency(provider.price)} <small>/ session</small></span>${provider.id === appUser?.id ? "" : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" aria-label="Message ${escapeHTML(provider.name)}">▤</button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}">Request booking</button></span>`}</div>
+        <p class="service-category">${escapeHTML(provider.category)}</p><h3>${escapeHTML(provider.service)}</h3><p class="provider-description">${escapeHTML(provider.description)}</p><p class="service-delivery-label">${escapeHTML(serviceDetailLabel(provider))}</p>
+        <div class="provider-card-footer"><span class="price">${servicePriceLabel(provider)}</span>${provider.id === appUser?.id ? "" : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" aria-label="Message ${escapeHTML(provider.name)}">▤</button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}">Request booking</button></span>`}</div>
         ${provider.id === appUser?.id ? "" : `<div class="provider-card-tools"><button type="button" data-profile="${escapeHTML(provider.id)}">View provider details <span aria-hidden="true">→</span></button></div>`}
       </div>
     </article>`).join("") : `<div class="empty-card"><span>⌕</span><strong>No services found</strong><small>Try another search or choose a different category.</small></div>`;
@@ -1351,9 +1394,21 @@ function renderChat(options = {}) {
     markConversationMessagesRead(chat.id).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
   }
 }
+function serviceCoverUrl(service) {
+  if (appSupabase && service.coverImagePath && /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp)$/.test(service.coverImagePath)) {
+    return appSupabase.storage.from("service-covers").getPublicUrl(service.coverImagePath).data.publicUrl;
+  }
+  return !appSupabase && /^data:image\/(png|webp|jpeg);base64,/.test(service.coverImage || "") ? service.coverImage : "";
+}
+function servicePriceLabel(service) {
+  return `${service.priceType === "starting" ? "From " : ""}${currency(service.price)}`;
+}
+function serviceDetailLabel(service) {
+  return [window.skillmateServiceUtils.deliveryLabels[service.deliveryMethod], service.estimatedDelivery].filter(Boolean).join(" · ");
+}
 function renderListings() {
   const target = document.querySelector("#listing-list");
-  target.innerHTML = state.services.length ? state.services.map((service) => `<article class="listing-card"><span class="service-list-icon">${getCategoryIcon(service.category)}</span><div class="listing-copy"><div class="listing-title"><strong>${escapeHTML(service.title)}</strong><span class="listing-status ${service.active ? "listing-active" : "listing-paused"}">${service.active ? "Active" : "Paused"}</span></div><small>${escapeHTML(service.category)} ${service.groups ? "· Open to groups" : ""}</small><p>${escapeHTML(service.description)}</p></div><strong class="listing-price">${currency(service.price)}</strong><div class="listing-actions"><button class="button button-small button-outline" type="button" data-edit-service="${escapeHTML(service.id)}">Edit</button><button class="subtle-button" type="button" data-toggle-service="${escapeHTML(service.id)}">${service.active ? "Pause" : "Activate"}</button></div></article>`).join("") : '<div class="empty-card"><strong>Your first service starts here</strong><small>List a skill to help students find and book you.</small><button class="button button-primary button-small" type="button" data-open="service-modal">Add a service</button></div>';
+  target.innerHTML = state.services.length ? state.services.map((service) => `<article class="listing-card">${serviceCoverUrl(service) ? `<img class="service-list-cover" src="${escapeHTML(serviceCoverUrl(service))}" alt="" loading="lazy" />` : `<span class="service-list-icon">${getCategoryIcon(service.category)}</span>`}<div class="listing-copy"><div class="listing-title"><strong>${escapeHTML(service.title)}</strong><span class="listing-status ${service.active ? "listing-active" : "listing-paused"}">${service.active ? "Active" : "Paused"}</span></div><small>${escapeHTML(service.category)} ${service.groups ? "· Open to groups" : ""}</small><p>${escapeHTML(service.description)}</p><small>${escapeHTML(serviceDetailLabel(service))}</small></div><strong class="listing-price">${servicePriceLabel(service)}</strong><div class="listing-actions"><button class="button button-small button-outline" type="button" data-edit-service="${escapeHTML(service.id)}">Edit</button><button class="subtle-button" type="button" data-toggle-service="${escapeHTML(service.id)}">${service.active ? "Pause" : "Activate"}</button></div></article>`).join("") : '<div class="empty-card"><strong>Your first service starts here</strong><small>List a skill to help students find and book you.</small><button class="button button-primary button-small" type="button" data-open="service-modal">Add a service</button></div>';
 }
 function renderPortfolio() {
   const target = document.querySelector("#portfolio-grid");
@@ -1469,9 +1524,48 @@ function toLocalStatus(status) {
 function toDatabaseStatus(status) {
   return ({ Pending: "pending", Confirmed: "confirmed", Declined: "declined", Completed: "completed", Cancelled: "cancelled" })[status] || status.toLowerCase();
 }
+const accountProfileColumns = "id, full_name, university, course, bio, campus_verified, university_email, role, skills, avatar_url, onboarding_completed";
+const accountSettingsColumns = ["phone_number", "notify_booking_updates", "notify_messages"];
+let accountSettingsColumnsAvailable = true;
+
+async function loadAccountProfile(userId) {
+  const readProfile = (columns) => appSupabase.from("profiles")
+    .select(columns).eq("id", userId).single();
+  let result = await readProfile(accountSettingsColumnsAvailable
+    ? `${accountProfileColumns}, ${accountSettingsColumns.join(", ")}`
+    : accountProfileColumns);
+  // Older deployments may not have the profile settings migration yet.
+  const missingSettingsColumn = ["42703", "PGRST204"].includes(result.error?.code)
+    && accountSettingsColumns.some((column) => result.error.message?.includes(column));
+  if (accountSettingsColumnsAvailable && missingSettingsColumn) {
+    accountSettingsColumnsAvailable = false;
+    result = await readProfile(accountProfileColumns);
+  }
+  if (result.error || !result.data) return result;
+  return {
+    ...result,
+    data: {
+      phone_number: "",
+      notify_booking_updates: true,
+      notify_messages: true,
+      ...result.data,
+    },
+  };
+}
+
+let dashboardRefreshPromise = null;
 async function refreshSupabaseState() {
-  const conversationDirectoryRequest = appSupabase.from("conversation_directory")
-    .select("conversation_id, other_user_id, other_user_name");
+  if (dashboardRefreshPromise) return dashboardRefreshPromise;
+  const started = performance.now();
+  dashboardRefreshPromise = loadSupabaseState().finally(() => {
+    performance.measure("skillmate:dashboard-refresh", { start: started, end: performance.now() });
+    dashboardRefreshPromise = null;
+  });
+  return dashboardRefreshPromise;
+}
+async function loadSupabaseState() {
+  const conversationDirectoryRequest = Promise.resolve(appSupabase.from("conversation_directory")
+    .select("conversation_id, other_user_id, other_user_name"));
   const groupedMessagesRequest = conversationDirectoryRequest.then(({ data, error }) => {
     if (error) throw error;
     return loadConversationMessageGroups(data || []);
@@ -1481,7 +1575,7 @@ async function refreshSupabaseState() {
     savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory,
     verification, groupedMessages, ownStudentIdentifier,
   ] = await Promise.all([
-    appSupabase.from("profiles").select("id, full_name, university, course, bio, campus_verified, university_email, role, skills, avatar_url, onboarding_completed").eq("id", appUser.id).single(),
+    loadAccountProfile(appUser.id),
     appSupabase.from("provider_directory").select("*"),
     appSupabase.from("services").select("*").eq("provider_id", appUser.id).order("created_at", { ascending: false }),
     appSupabase.from("booking_directory").select("*").order("scheduled_at", { ascending: true }),
@@ -1510,8 +1604,11 @@ async function refreshSupabaseState() {
   document.querySelector("#admin-link").hidden = profile.role !== "admin";
   state.profile = {
     name: profile.full_name, university: profile.university, course: profile.course,
-    bio: profile.bio, email: profile.university_email || appUser.email, verified: profile.campus_verified,
+    bio: profile.bio, email: appUser.email, verified: profile.campus_verified,
     skills: profile.skills || [], avatarUrl: profile.avatar_url || "",
+    phoneNumber: profile.phone_number || "",
+    notifyBookingUpdates: profile.notify_booking_updates,
+    notifyMessages: profile.notify_messages,
     studentIdNumber: ownStudentIdentifier.data?.student_id_number || "",
     identityComplete: Boolean(profile.full_name?.trim().length >= 2
       && profile.university?.trim().length >= 2
@@ -1521,11 +1618,11 @@ async function refreshSupabaseState() {
   connectedServices = (directory.data || []).map((row) => ({
     id: row.service_id, providerId: row.provider_id, title: row.service_title, category: row.category,
     description: row.service_description, price: Number(row.price), groups: row.accepts_groups,
-    active: true, currency: row.currency,
+    active: true, currency: row.currency, ...window.skillmateServiceUtils.metadata(row),
   })).concat((ownServices.data || []).filter((service) => !(directory.data || []).some((row) => row.service_id === service.id)).map((service) => ({
     id: service.id, providerId: service.provider_id, title: service.title, category: service.category,
     description: service.description, price: Number(service.price), groups: service.accepts_groups,
-    active: service.is_active, currency: service.currency,
+    active: service.is_active, currency: service.currency, ...window.skillmateServiceUtils.metadata(service),
   })));
   const providerMap = new Map();
   for (const row of directory.data || []) {
@@ -1534,7 +1631,7 @@ async function refreshSupabaseState() {
       course: row.course || "Student", category: row.category, service: row.service_title,
       description: row.service_description, price: Number(row.price), currency: row.currency,
       rating: 0, reviews: 0, bookings: 0, color: "blue", verified: row.campus_verified,
-      available: "Message to ask", groups: row.accepts_groups, portfolio: [],
+      available: "Message to ask", groups: row.accepts_groups, portfolio: [], ...window.skillmateServiceUtils.metadata(row),
     });
   }
   const ownActiveService = (ownServices.data || []).find((service) => service.is_active);
@@ -1546,7 +1643,7 @@ async function refreshSupabaseState() {
       description: ownActiveService.description, price: Number(ownActiveService.price),
       currency: ownActiveService.currency, rating: 0, reviews: 0, bookings: 0,
       color: "blue", verified: profile.campus_verified, available: "Message to ask",
-      groups: ownActiveService.accepts_groups, portfolio: [],
+      groups: ownActiveService.accepts_groups, portfolio: [], ...window.skillmateServiceUtils.metadata(ownActiveService),
     });
   }
   connectedProviders = [...providerMap.values()];
@@ -1595,7 +1692,7 @@ async function refreshSupabaseState() {
   }
   state.services = (ownServices.data || []).map((service) => ({
     id: service.id, title: service.title, category: service.category, price: Number(service.price),
-    description: service.description, groups: service.accepts_groups, active: service.is_active,
+    description: service.description, groups: service.accepts_groups, active: service.is_active, ...window.skillmateServiceUtils.metadata(service),
   }));
   state.portfolio = (ownPortfolio.data || []).map((item) => ({
     id: item.id, title: item.title, description: item.description,
@@ -1767,7 +1864,7 @@ async function runAction(action, failureMessage, loadingMessage = "Saving your c
     console.error(failureMessage, error);
     if (inlineFeedback) {
       inlineFeedback.dataset.state = "error";
-      inlineFeedback.textContent = friendlyFailureMessage || failureMessage;
+      inlineFeedback.textContent = error.userMessage || friendlyFailureMessage || failureMessage;
     } else {
       showToast(failureMessage, "error");
     }
@@ -1809,7 +1906,7 @@ function initializeDashboard() {
   updateGroupPrice();
   renderAll();
   const pageFromHash = window.location.hash.slice(1);
-  const requestedPage = ["home", "bookings", "messages", "saved", "provider", "earnings"].includes(pageFromHash)
+  const requestedPage = ["home", "bookings", "messages", "saved", "provider", "earnings", "profile-settings", "help-support"].includes(pageFromHash)
     ? pageFromHash
     : state.activePage;
   if (requestedPage && requestedPage !== "home") showPage(requestedPage);
@@ -1854,9 +1951,7 @@ async function bootstrapStudentApp() {
     window.location.replace("login.html");
     return;
   }
-  const { data: profile, error: profileError } = await appSupabase.from("profiles")
-    .select("id, full_name, university, course, bio, campus_verified, university_email, role, skills, avatar_url, onboarding_completed")
-    .eq("id", data.session.user.id).single();
+  const { data: profile, error: profileError } = await loadAccountProfile(data.session.user.id);
   if (profileError) throw profileError;
   if (!profile.onboarding_completed) {
     window.location.replace("onboarding.html");
@@ -1871,10 +1966,13 @@ async function bootstrapStudentApp() {
     university: profile.university,
     course: profile.course,
     bio: profile.bio,
-    email: profile.university_email || appUser.email,
+    email: appUser.email,
     verified: profile.campus_verified,
     skills: profile.skills || [],
     avatarUrl: profile.avatar_url || "",
+    phoneNumber: profile.phone_number || "",
+    notifyBookingUpdates: profile.notify_booking_updates,
+    notifyMessages: profile.notify_messages,
     location: "",
   };
   state.messages = loadCachedConversationMessages();
@@ -1887,6 +1985,7 @@ async function bootstrapStudentApp() {
   document.querySelector("#profile-name").value = state.profile.name;
   document.querySelector("#profile-bio").value = state.profile.bio || "";
   document.querySelector("#profile-email").value = state.profile.email;
+  loadAccountSettings();
   document.querySelector(".campus-card strong").textContent = state.profile.university || "Your campus";
   document.querySelector(".campus-card small").textContent = state.profile.course || "Student account";
   showConnectedApp();
@@ -1903,6 +2002,7 @@ async function bootstrapStudentApp() {
     document.querySelector("#profile-name").value = state.profile.name;
     document.querySelector("#profile-bio").value = state.profile.bio || "";
     document.querySelector("#profile-email").value = state.profile.email;
+    loadAccountSettings();
     document.querySelector(".campus-card strong").textContent = state.profile.university || "Your campus";
     document.querySelector(".campus-card small").textContent = state.profile.course || "Student account";
   } catch (refreshError) {
@@ -1949,9 +2049,11 @@ function showPage(page) {
   if (page === "messages") startMessagePolling();
   else stopMessagePolling();
   document.querySelectorAll(".view").forEach((element) => element.classList.toggle("active-view", element === view));
-  document.querySelectorAll(".side-nav .nav-link[data-page]").forEach((element) => element.classList.toggle("active", element.dataset.page === page));
+  document.querySelectorAll(".nav-link[data-page]").forEach((element) => element.classList.toggle("active", element.dataset.page === page));
   document.querySelector("#breadcrumb-title").textContent = {
-    home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers", provider: "My services", earnings: "Earnings",
+    home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers",
+    provider: "My services", earnings: "Earnings", "profile-settings": "Profile & Settings",
+    "help-support": "Help & Support",
   }[page];
   closeSidebar(sidebar.contains(document.activeElement));
   if (page === "saved") renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders).filter((provider) => state.saved.includes(provider.id)));
@@ -1975,7 +2077,7 @@ function openBooking(providerId) {
   if (!provider || !services.length) { showToast("This provider hasn’t listed an active service yet."); return; }
   document.querySelector("#booking-provider-id").value = providerId;
   document.querySelector("#booking-description").textContent = `Choose a service from ${provider.name}. You can confirm the details together in messages.`;
-  document.querySelector("#booking-service").innerHTML = services.map((service) => `<option value="${escapeHTML(service.id)}">${escapeHTML(service.title)} · ${currency(service.price)}</option>`).join("");
+  document.querySelector("#booking-service").innerHTML = services.map((service) => `<option value="${escapeHTML(service.id)}">${escapeHTML(service.title)} · ${servicePriceLabel(service)}</option>`).join("");
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   document.querySelector("#booking-date").min = localDateInputValue();
   document.querySelector("#booking-date").value = localDateInputValue(tomorrow);
@@ -1993,7 +2095,7 @@ function openProviderProfile(providerId) {
       <div><span class="verified-pill">${provider.verified ? "✓ Campus verified" : "Campus verification pending"}</span><h2>${escapeHTML(provider.name)}</h2><p>${escapeHTML(provider.course)} · ${escapeHTML(provider.campus)}</p></div>
     </div>
     <div class="detail-rating"><strong>★ ${escapeHTML(rating.rating)}</strong><span>${rating.count} student reviews</span></div>
-    <section class="detail-section"><h3>Services</h3>${services.map((service) => `<div class="detail-service"><span><strong>${escapeHTML(service.title)}</strong><small>${escapeHTML(service.category)} · ${currency(service.price)} per session</small></span>${service.groups ? '<span class="detail-group-tag">Group bookings welcome</span>' : ""}</div>`).join("")}</section>
+    <section class="detail-section"><h3>Services</h3>${services.map((service) => `<div class="detail-service"><span><strong>${escapeHTML(service.title)}</strong><small>${escapeHTML(service.category)} · ${servicePriceLabel(service)}</small><small>${escapeHTML(serviceDetailLabel(service))}</small></span>${service.groups ? '<span class="detail-group-tag">Group bookings welcome</span>' : ""}</div>`).join("")}</section>
     <section class="detail-section"><h3>About</h3><p>${escapeHTML(provider.description)}</p><div class="detail-facts"><span>Availability</span><strong>${escapeHTML(provider.available)}</strong><span>Completed bookings</span><strong>${provider.bookings}</strong></div></section>
     <section class="detail-section"><h3>Portfolio highlights</h3><div class="detail-portfolio">${(provider.portfolio || []).map((item) => `<span>${escapeHTML(item)}</span>`).join("")}</div></section>`;
   document.querySelector("#provider-detail-title").textContent = provider.service;
@@ -2073,7 +2175,7 @@ function renderBlocked() {
 }
 function populateServiceSelects() {
   const options = appSupabase
-    ? connectedServices.filter((service) => service.active && service.groups && service.providerId !== appUser.id).map((service) => `<option value="${escapeHTML(service.id)}">${escapeHTML(service.title)} · ${currency(service.price)} · ${escapeHTML(getProvider(service.providerId)?.name || "Student")}</option>`).join("")
+    ? connectedServices.filter((service) => service.active && service.groups && service.providerId !== appUser.id).map((service) => `<option value="${escapeHTML(service.id)}">${escapeHTML(service.title)} · ${servicePriceLabel(service)} · ${escapeHTML(getProvider(service.providerId)?.name || "Student")}</option>`).join("")
     : seedProviders.map((provider) => `<option value="${escapeHTML(provider.id)}">${escapeHTML(provider.service)} · ${currency(provider.price)} · ${escapeHTML(provider.name)}</option>`).join("");
   document.querySelector("#group-service").innerHTML = options;
 }
@@ -2083,7 +2185,7 @@ function addGroup(group) {
   renderGroups();
 }
 
-document.querySelectorAll(".side-nav .nav-link[data-page]").forEach((link) => link.addEventListener("click", (event) => {
+document.querySelectorAll(".nav-link[data-page]").forEach((link) => link.addEventListener("click", (event) => {
   event.preventDefault();
   showPage(link.dataset.page);
 }));
@@ -2092,6 +2194,7 @@ document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-open]");
   if (!button) return;
   const modalId = button.dataset.open;
+  if (modalId === "service-modal") window.skillmateServiceEditor.prepare();
   if (modalId === "blocked-modal") renderBlocked();
   if (modalId === "report-modal") {
     document.querySelector("#report-provider-id").value = "";
@@ -2144,7 +2247,22 @@ document.querySelector("#global-search").addEventListener("input", () => {
   }, 300);
 });
 const globalSearch = document.querySelector("#global-search");
+const mobileHeader = document.querySelector(".topbar");
+let previousScrollY = window.scrollY;
+window.addEventListener("scroll", () => {
+  const currentScrollY = window.scrollY;
+  if (window.innerWidth > 768 || document.activeElement === globalSearch) {
+    mobileHeader.classList.remove("is-hidden");
+    previousScrollY = currentScrollY;
+    return;
+  }
+  const scrollDelta = currentScrollY - previousScrollY;
+  if (Math.abs(scrollDelta) < 8) return;
+  mobileHeader.classList.toggle("is-hidden", currentScrollY > 80 && scrollDelta > 0);
+  previousScrollY = currentScrollY;
+}, { passive: true });
 globalSearch.addEventListener("focus", () => {
+  mobileHeader.classList.remove("is-hidden");
   document.body.classList.add("search-open");
   globalSearch.setAttribute("aria-expanded", "true");
   renderSearchSuggestions();
@@ -2632,91 +2750,13 @@ document.addEventListener("click", (event) => {
   }
   if (!event.target.closest(".chat-context-menu")) closeMessageContextMenu();
 });
-document.querySelector("#service-form").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const feedback = document.querySelector("#service-form-feedback");
-  feedback.hidden = true;
-  feedback.textContent = "";
-  delete feedback.dataset.state;
-  const titleInput = document.querySelector("#service-title");
-  const categoryInput = document.querySelector("#service-category");
-  const priceInput = document.querySelector("#service-price");
-  const descriptionInput = document.querySelector("#service-description");
-  const title = titleInput.value.trim();
-  const category = categoryInput.value.trim();
-  const price = Number(priceInput.value);
-  const description = descriptionInput.value.trim();
-  const validationError = title.length < 3
-    ? { input: titleInput, message: "Add a service title with at least 3 characters." }
-    : !category
-      ? { input: categoryInput, message: "Choose a category for your service." }
-      : !Number.isFinite(price) || price <= 0
-        ? { input: priceInput, message: "Enter a price greater than zero." }
-        : description.length < 10
-          ? { input: descriptionInput, message: "Add a little more detail—your description needs at least 10 characters." }
-          : null;
-  if (validationError) {
-    feedback.hidden = false;
-    feedback.dataset.state = "error";
-    feedback.textContent = validationError.message;
-    validationError.input.focus();
-    return;
-  }
-  const id = document.querySelector("#service-id").value || `service-${Date.now()}`;
-  const existing = state.services.find((service) => service.id === id);
-  const service = {
-    id, title, category, price, description,
-    groups: document.querySelector("#service-group").checked, active: existing?.active ?? true,
-  };
-  if (appSupabase) {
-    runAction(async () => {
-      const payload = {
-        provider_id: appUser.id, title: service.title, category: service.category,
-        price: service.price, description: service.description, accepts_groups: service.groups,
-      };
-      const result = existing
-        ? await appSupabase.from("services").update(payload).eq("id", id).eq("provider_id", appUser.id)
-        : await appSupabase.from("services").insert(payload);
-      if (result.error) throw result.error;
-      await refreshSupabaseState();
-      populateServiceSelects();
-      event.target.closest("dialog").close();
-      event.target.reset();
-      document.querySelector("#service-id").value = "";
-      document.querySelector("#service-modal-title").textContent = "Add a service";
-      renderAll();
-      showToast(existing ? "Service updated." : "Your service is now listed.");
-    }, "Could not save your service.", "Saving your service…", {
-      inlineFeedback: feedback,
-      submitButton: document.querySelector("#service-submit"),
-      friendlyFailureMessage: "We couldn’t save your service. Please check your connection and try again. Your details are still here.",
-    });
-    return;
-  }
-  if (existing) Object.assign(existing, service);
-  else state.services.unshift(service);
-  saveState();
-  event.target.closest("dialog").close();
-  event.target.reset();
-  document.querySelector("#service-id").value = "";
-  document.querySelector("#service-modal-title").textContent = "Add a service";
-  document.querySelector("#provider-setup-banner").hidden = state.services.length > 0;
-  renderListings();
-  showToast(existing ? "Service updated." : "Your service is live in your demo profile.");
-});
 document.querySelector("#listing-list").addEventListener("click", (event) => {
   const edit = event.target.closest("[data-edit-service]");
   const toggle = event.target.closest("[data-toggle-service]");
   if (edit) {
     const service = state.services.find((item) => item.id === edit.dataset.editService);
     if (!service) return;
-    document.querySelector("#service-id").value = service.id;
-    document.querySelector("#service-title").value = service.title;
-    document.querySelector("#service-category").value = service.category;
-    document.querySelector("#service-price").value = service.price;
-    document.querySelector("#service-description").value = service.description;
-    document.querySelector("#service-group").checked = service.groups;
-    document.querySelector("#service-modal-title").textContent = "Edit your service";
+    window.skillmateServiceEditor.prepare(service);
     openModal("service-modal");
   }
   if (toggle) {
@@ -2802,6 +2842,307 @@ function openStudentProfileEditor() {
   openModal("profile-modal");
 }
 document.querySelector("#profile-menu").addEventListener("click", openStudentProfileEditor);
+function loadAccountSettings() {
+  document.querySelector("#settings-full-name").value = state.profile.name || "";
+  document.querySelector("#settings-email").value = appUser?.email || "";
+  document.querySelector("#settings-university").value = state.profile.university || "";
+  document.querySelector("#settings-bio").value = state.profile.bio || "";
+  document.querySelector("#settings-phone").value = state.profile.phoneNumber || "";
+  document.querySelector("#settings-notify-bookings").checked = state.profile.notifyBookingUpdates !== false;
+  document.querySelector("#settings-notify-messages").checked = state.profile.notifyMessages !== false;
+  const avatar = document.querySelector("#settings-avatar-preview");
+  if (state.profile.avatarUrl) avatar.src = state.profile.avatarUrl;
+  else avatar.removeAttribute("src");
+  const config = window.SKILLMATE_SUPABASE_CONFIG || {};
+  document.querySelector("#delete-account-open").disabled = !config.accountDeletionAvailable;
+  document.querySelector("#account-delete-availability").hidden = Boolean(config.accountDeletionAvailable);
+  const contacts = document.querySelector("#support-contact");
+  contacts.replaceChildren();
+  for (const email of (config.supportEmail || "").split(",").map((value) => value.trim())) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.endsWith(".example")) continue;
+    const link = document.createElement("a");
+    link.href = `mailto:${email}`;
+    link.textContent = `Email ${email}`;
+    contacts.append(link);
+  }
+  const phone = (config.supportWhatsApp || "").replace(/^\+/, "");
+  if (/^[1-9]\d{6,14}$/.test(phone)) {
+    const link = document.createElement("a");
+    link.href = `https://wa.me/${phone}`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "Message us on WhatsApp";
+    contacts.append(link);
+  }
+  document.querySelector("#support-contact-unavailable").hidden = contacts.childElementCount > 0;
+  document.querySelector("#settings-phone").disabled = !accountSettingsColumnsAvailable;
+  document.querySelector("#settings-notify-bookings").disabled = !accountSettingsColumnsAvailable;
+  document.querySelector("#settings-notify-messages").disabled = !accountSettingsColumnsAvailable;
+  document.querySelector("#settings-notifications-save").disabled = !accountSettingsColumnsAvailable;
+  if (!accountSettingsColumnsAvailable) {
+    setSettingsFeedback(document.querySelector("#notification-settings-feedback"),
+      "Phone and notification preferences are unavailable until the site setup is completed.", "error");
+  }
+}
+function setSettingsFeedback(element, message, kind = "success") {
+  element.textContent = message;
+  element.dataset.state = kind;
+  element.hidden = !message;
+}
+document.querySelector("#account-profile-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const feedback = document.querySelector("#account-profile-feedback");
+  const name = document.querySelector("#settings-full-name").value.trim();
+  const university = document.querySelector("#settings-university").value.trim();
+  const bio = document.querySelector("#settings-bio").value.trim();
+  const phoneNumber = document.querySelector("#settings-phone").value.trim();
+  const campusChanged = university !== state.profile.university;
+  const photo = document.querySelector("#settings-avatar-file").files[0];
+  if (name.length < 2 || university.length < 2) {
+    setSettingsFeedback(feedback, "Enter your name and university (at least 2 characters each).", "error");
+    return;
+  }
+  if (photo && (!["image/jpeg", "image/png", "image/webp"].includes(photo.type) || photo.size > 5_000_000)) {
+    setSettingsFeedback(feedback, "Choose a JPG, PNG or WebP image smaller than 5 MB.", "error");
+    return;
+  }
+  if (!appSupabase || !appUser) {
+    setSettingsFeedback(feedback, "Sign in to update your profile.", "error");
+    return;
+  }
+  setSettingsFeedback(feedback, "");
+  runAction(async () => {
+    let avatarPath = "";
+    const previousAvatarUrl = state.profile.avatarUrl;
+    let avatarUrl = state.profile.avatarUrl || null;
+    if (photo) {
+      const extension = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" })[photo.type];
+      avatarPath = `${appUser.id}/${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await appSupabase.storage.from("profile-avatars")
+        .upload(avatarPath, photo, { contentType: photo.type, cacheControl: "3600" });
+      if (uploadError) throw uploadError;
+      avatarUrl = appSupabase.storage.from("profile-avatars").getPublicUrl(avatarPath).data.publicUrl;
+    }
+    const profileUpdate = {
+      full_name: name,
+      university,
+      bio,
+      avatar_url: avatarUrl,
+    };
+    if (accountSettingsColumnsAvailable) profileUpdate.phone_number = phoneNumber;
+    // The RPC also synchronizes private student identity and verification.
+    let result = await appSupabase.rpc("save_account_profile", {
+      p_full_name: name, p_university: university, p_bio: bio,
+      p_phone_number: phoneNumber, p_avatar_url: avatarUrl,
+    });
+    if (result.error?.code === "PGRST202") {
+      if (university !== state.profile.university) {
+        result.error.userMessage = "Campus changes are unavailable until the site setup is completed. Your changes have not been saved.";
+      } else {
+        delete profileUpdate.university;
+        result = await appSupabase.from("profiles").update(profileUpdate).eq("id", appUser.id);
+      }
+    }
+    const { error } = result;
+    if (error) {
+      if (avatarPath) {
+        const { error: cleanupError } = await appSupabase.storage.from("profile-avatars").remove([avatarPath]);
+        if (cleanupError) console.error("Could not remove the unused profile photo upload.", cleanupError);
+      }
+      throw error;
+    }
+    state.profile.name = name;
+    state.profile.university = university;
+    state.profile.bio = bio;
+    state.profile.phoneNumber = phoneNumber;
+    state.profile.avatarUrl = avatarUrl || "";
+    if (avatarPath && previousAvatarUrl) {
+      const prefix = `${window.SKILLMATE_SUPABASE_CONFIG.url}/storage/v1/object/public/profile-avatars/`;
+      if (previousAvatarUrl.startsWith(prefix)) {
+        const oldPath = previousAvatarUrl.slice(prefix.length).split("?")[0];
+        if (oldPath.startsWith(`${appUser.id}/`) && !oldPath.includes("..")) {
+          try {
+            const { error: cleanupError } = await appSupabase.storage.from("profile-avatars").remove([oldPath]);
+            if (cleanupError) console.error("Could not remove the replaced profile photo.", cleanupError);
+          } catch (cleanupError) {
+            console.error("Could not remove the replaced profile photo.", cleanupError);
+          }
+        }
+      }
+    }
+    if (campusChanged) {
+      // Reload the authoritative verification state after a campus change.
+      state.profile.verified = false;
+      const refreshed = await loadAccountProfile(appUser.id);
+      if (!refreshed.error) state.profile.verified = refreshed.data.campus_verified;
+    }
+    document.querySelector("#profile-name").value = name;
+    document.querySelector("#profile-bio").value = bio;
+    renderAll();
+    loadAccountSettings();
+    if (campusChanged) {
+      showToast("Campus updated. Submit a new campus verification request if needed.");
+    }
+    document.querySelector("#settings-avatar-file").value = "";
+    setSettingsFeedback(feedback, "Your profile has been saved.");
+  }, "Could not save your profile.", "Saving your profile…", {
+    inlineFeedback: feedback,
+    submitButton: form.querySelector('button[type="submit"]'),
+  });
+});
+document.querySelector("#password-change-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const feedback = document.querySelector("#password-change-feedback");
+  const password = document.querySelector("#settings-new-password").value;
+  const confirmation = document.querySelector("#settings-confirm-password").value;
+  if (password.length < 8 || password.length > 72) {
+    setSettingsFeedback(feedback, "Choose a password between 8 and 72 characters.", "error");
+    return;
+  }
+  if (password !== confirmation) {
+    setSettingsFeedback(feedback, "The new passwords do not match.", "error");
+    return;
+  }
+  runAction(async () => {
+    const { error } = await appSupabase.auth.updateUser({ password });
+    if (error) throw error;
+    form.reset();
+    setSettingsFeedback(feedback, "Your password has been updated.");
+  }, "Could not update your password.", "Updating your password…", {
+    inlineFeedback: feedback,
+    submitButton: form.querySelector('button[type="submit"]'),
+  });
+});
+document.querySelector("#settings-notifications-save").addEventListener("click", (event) => {
+  const button = event.currentTarget;
+  const feedback = document.querySelector("#notification-settings-feedback");
+  if (!accountSettingsColumnsAvailable) return;
+  runAction(async () => {
+    const notifyBookingUpdates = document.querySelector("#settings-notify-bookings").checked;
+    const notifyMessages = document.querySelector("#settings-notify-messages").checked;
+    const { error } = await appSupabase.from("profiles").update({
+      notify_booking_updates: notifyBookingUpdates,
+      notify_messages: notifyMessages,
+    }).eq("id", appUser.id);
+    if (error) throw error;
+    state.profile.notifyBookingUpdates = notifyBookingUpdates;
+    state.profile.notifyMessages = notifyMessages;
+    setSettingsFeedback(feedback, "Notification settings have been saved.");
+  }, "Could not save notification settings.", "Saving notification settings…", {
+    inlineFeedback: feedback,
+    submitButton: button,
+  });
+});
+document.querySelector("#support-ticket-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const feedback = document.querySelector("#support-ticket-feedback");
+  const button = document.querySelector("#support-ticket-submit");
+  const category = document.querySelector("#support-category").value;
+  const message = document.querySelector("#support-message").value.trim();
+  const screenshot = document.querySelector("#support-screenshot").files[0];
+  if (!["Booking", "Payment", "User behaviour", "Bug", "Other"].includes(category) || message.length < 10) {
+    setSettingsFeedback(feedback, "Choose a category and describe the issue in at least 10 characters.", "error");
+    return;
+  }
+  if (screenshot && (!["image/jpeg", "image/png", "image/webp"].includes(screenshot.type) || screenshot.size > 5_000_000)) {
+    setSettingsFeedback(feedback, "Choose a JPG, PNG or WebP screenshot smaller than 5 MB.", "error");
+    return;
+  }
+  if (!appSupabase || !appUser) {
+    setSettingsFeedback(feedback, "Sign in to send a support request.", "error");
+    return;
+  }
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  button.textContent = "Sending report…";
+  setSettingsFeedback(feedback, "Sending your report…", "loading");
+  (async () => {
+    let screenshotPath = null;
+    try {
+      const { error: setupError } = await appSupabase.from("support_tickets").select("id").limit(0);
+      if (setupError) throw setupError;
+      if (screenshot) {
+        const extension = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" })[screenshot.type];
+        screenshotPath = `${appUser.id}/${crypto.randomUUID()}.${extension}`;
+        const { error: uploadError } = await appSupabase.storage.from("support-screenshots")
+          .upload(screenshotPath, screenshot, { contentType: screenshot.type, cacheControl: "3600" });
+        if (uploadError) throw uploadError;
+      }
+      const { error } = await appSupabase.from("support_tickets").insert({
+        user_id: appUser.id,
+        category,
+        message,
+        screenshot_url: screenshotPath,
+      });
+      if (error) throw error;
+      form.reset();
+      setSettingsFeedback(feedback, "Your report was sent. Support will review it shortly.");
+    } catch (error) {
+      console.error("Could not submit the Skillmate support ticket.", error);
+      if (screenshotPath) {
+        const { error: cleanupError } = await appSupabase.storage.from("support-screenshots").remove([screenshotPath]);
+        if (cleanupError) console.error("Could not remove the unused support screenshot.", cleanupError);
+      }
+      setSettingsFeedback(feedback, ["PGRST205", "42P01"].includes(error.code)
+        ? "Support reports are unavailable until the site setup is completed. Your report has not been sent."
+        : "We could not send your report. Please try again.", "error");
+    } finally {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      button.textContent = "Send report";
+    }
+  })();
+});
+document.querySelector("#delete-account-open").addEventListener("click", () => {
+  document.querySelector("#delete-account-confirmation").value = "";
+  setSettingsFeedback(document.querySelector("#delete-account-feedback"), "");
+  openModal("delete-account-modal");
+});
+document.querySelector("#delete-account-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const feedback = document.querySelector("#delete-account-feedback");
+  const button = document.querySelector("#delete-account-submit");
+  const confirmation = document.querySelector("#delete-account-confirmation").value;
+  if (confirmation !== "DELETE") {
+    setSettingsFeedback(feedback, "Type DELETE exactly to confirm.", "error");
+    return;
+  }
+  runAction(async () => {
+    button.textContent = "Closing account…";
+    const response = await fetch("/api/account/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ confirmation }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      const error = new Error(result.error || "Account closure could not be completed.");
+      error.userMessage = error.message;
+      throw error;
+    }
+    try {
+      await appSupabase.auth.signOut({ scope: "local" });
+    } catch (error) {
+      console.error("The closed account's local Supabase session could not be cleared.", error);
+    }
+    try {
+      await window.clearSkillmateServerSession();
+    } catch (error) {
+      console.error("The closed account's server session could not be cleared.", error);
+    }
+    window.location.replace("login.html?account=closed");
+  }, "Could not close your account.", "Closing your account…", {
+    inlineFeedback: feedback,
+    submitButton: button,
+  }).finally(() => {
+    button.textContent = "Permanently delete account";
+  });
+});
 document.querySelector("#student-profile-link").addEventListener("click", (event) => {
   event.preventDefault();
   openStudentProfileEditor();
@@ -3132,24 +3473,6 @@ document.querySelector("#earnings-export").addEventListener("click", () => {
   link.href = url; link.download = "skillmate-earnings.csv"; link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   showToast(appSupabase ? "Your completed earnings were exported." : "Your completed demo earnings were exported.");
-});
-document.querySelector("#notifications-button").addEventListener("click", () => {
-  if (!appSupabase) {
-    showToast("You’re all caught up in this demo.");
-    return;
-  }
-  runAction(async () => {
-    const { data, error } = await appSupabase.from("notifications")
-      .select("id, title, body, read_at").order("created_at", { ascending: false }).limit(10);
-    if (error) throw error;
-    const unread = (data || []).filter((notification) => !notification.read_at);
-    if (unread.length) {
-      const { error: updateError } = await appSupabase.from("notifications")
-        .update({ read_at: new Date().toISOString() }).in("id", unread.map((item) => item.id));
-      if (updateError) throw updateError;
-    }
-    showToast(unread[0] ? `${unread[0].title}${unread[0].body ? `: ${unread[0].body}` : ""}` : "You’re all caught up.");
-  }, "Could not load your notifications.");
 });
 document.querySelector("#signout-button").addEventListener("click", () => {
   if (!appSupabase) {

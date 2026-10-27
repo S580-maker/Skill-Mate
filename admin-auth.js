@@ -78,6 +78,88 @@ async function refreshAdminSystemStatus() {
   }
 }
 
+async function fetchSupportTickets() {
+  const status = document.querySelector("#support-queue-status");
+  const rows = document.querySelector("#support-ticket-rows");
+  status.textContent = "Loading support tickets…";
+  try {
+    const { data, error } = await adminClient.from("support_tickets")
+      .select("id, user_id, category, message, status, screenshot_url, created_at")
+      .in("status", ["open", "reviewing"]).order("created_at", { ascending: true }).limit(50);
+    if (error) throw error;
+    rows.replaceChildren();
+    for (const ticket of data || []) {
+      const article = document.createElement("article");
+      article.className = "admin-report-row";
+      article.innerHTML = `<div><strong>${escapeAdminText(ticket.category)}</strong><small>${escapeAdminText(ticket.user_id)} · ${escapeAdminText(formatAdminDate(ticket.created_at))} · ${escapeAdminText(ticket.status)}</small><p class="support-ticket-message">${escapeAdminText(ticket.message)}</p></div><span class="report-actions"></span>`;
+      const actions = article.querySelector(".report-actions");
+      if (ticket.screenshot_url) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "review-button";
+        button.textContent = "View screenshot";
+        button.addEventListener("click", async () => {
+          button.disabled = true;
+          try {
+            const { data: signed, error: signError } = await adminClient.storage
+              .from("support-screenshots").createSignedUrl(ticket.screenshot_url, 300);
+            if (signError) throw signError;
+            const link = document.createElement("a");
+            link.href = signed.signedUrl;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = "Open screenshot (expires in 5 minutes)";
+            button.replaceWith(link);
+          } catch (error) {
+            console.error("Could not open support screenshot.", error);
+            showAdminToast("Could not open the screenshot. Try again.");
+            button.disabled = false;
+          }
+        });
+        actions.append(button);
+      }
+      for (const [value, label] of [["reviewing", "Review"], ["resolved", "Resolve"], ["dismissed", "Dismiss"]]) {
+        if (value === ticket.status) continue;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "review-button";
+        button.textContent = label;
+        button.addEventListener("click", async () => {
+          const controls = [...actions.querySelectorAll("button")];
+          controls.forEach((control) => { control.disabled = true; });
+          try {
+            const { data: updated, error: updateError } = await adminClient.from("support_tickets")
+              .update({ status: value }).eq("id", ticket.id).eq("status", ticket.status).select("id");
+            if (updateError) throw updateError;
+            if (!updated?.length) throw new Error("The ticket changed. Refresh the queue.");
+            showAdminToast("Support ticket updated.");
+            await fetchSupportTickets();
+          } catch (error) {
+            console.error("Could not update support ticket.", error);
+            showAdminToast("Could not update the ticket. Refresh and try again.");
+            controls.forEach((control) => { control.disabled = false; });
+          }
+        });
+        actions.append(button);
+      }
+      rows.append(article);
+    }
+    status.textContent = data?.length ? `${data.length} oldest active tickets (up to 50 shown).` : "No active support tickets.";
+  } catch (error) {
+    rows.replaceChildren();
+    console.error("Could not load support tickets.", error);
+    status.textContent = ["PGRST205", "42P01"].includes(error.code)
+      ? "Support tickets require the settings and support database migration."
+      : "Could not load support tickets. Refresh to try again.";
+  }
+}
+
+document.querySelector("#support-queue-refresh").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try { await fetchSupportTickets(); } finally { button.disabled = false; }
+});
+
 async function fetchAdminDashboard() {
   const ninetyDaysAgo = new Date();
   const activityStart = new Date();
@@ -172,6 +254,7 @@ async function fetchAdminDashboard() {
     students: activityStudents.data || [],
   };
   updateAdminChart(Number(document.querySelector("#period-select").value));
+  await fetchSupportTickets();
 
 }
 

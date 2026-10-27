@@ -6,12 +6,13 @@
     <title>Sign in | Skillmate</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="user.css?v=5" />
-    <link rel="stylesheet" href="auth.css?v=3" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500;1,600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="user.css?v=14" />
+    <link rel="stylesheet" href="auth.css?v=4" />
+    <link rel="stylesheet" href="auth-access.css?v=1" />
     <script src="theme.js?v=2"></script>
   </head>
-  <body>
+  <body class="auth-access" data-auth-mode="signin">
     <main class="auth-layout">
       <section class="auth-showcase" aria-label="About Skillmate">
         <a class="brand auth-brand" href="index.html">
@@ -19,43 +20,48 @@
           <span class="brand-name">skillmate<span>.</span></span>
         </a>
         <div class="showcase-copy">
-          <p class="showcase-kicker">YOUR CAMPUS. YOUR COMMUNITY.</p>
-          <h1>Good things happen when students share their skills.</h1>
-          <p>Find trusted help close to home, meet talented people on campus, and turn what you know into your next opportunity.</p>
-          <div class="showcase-highlights" aria-label="What you can do on Skillmate">
-            <div><span class="showcase-icon" aria-hidden="true">⌕</span><span><strong>Find your people</strong><small>Discover services from students around you.</small></span></div>
-            <div><span class="showcase-icon" aria-hidden="true">✳</span><span><strong>Share what you do</strong><small>Build your profile and offer your skills.</small></span></div>
-            <div><span class="showcase-icon" aria-hidden="true">✓</span><span><strong>Keep it on campus</strong><small>Connect through a community made for students.</small></span></div>
+          <p class="showcase-kicker"><span aria-hidden="true"></span> MADE FOR STUDENT LIFE</p>
+          <h1>A little help.<br /> A lot of <em>possibility.</em></h1>
+          <p>There is talent all around you. Find a helping hand on campus, or turn your own skills into someone's next big win.</p>
+          <div class="campus-scene" aria-label="Examples of skills you can find on Skillmate">
+            <div class="campus-scene-orbit" aria-hidden="true"></div>
+            <article class="campus-skill campus-skill-design"><span class="campus-skill-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m4 17-1 4 4-1L20 7l-3-3L4 17Zm10-10 3 3M4 17l3 3" /></svg></span><div><small>BRING YOUR IDEAS TO LIFE</small><strong>Design &amp; creativity</strong><span>Made by a fellow student</span></div><span class="campus-skill-arrow" aria-hidden="true">&#8599;</span></article>
+            <article class="campus-skill campus-skill-study"><span class="campus-skill-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5C8 2 4 3 2 4v15c4-1 7 0 10 2 3-2 6-3 10-2V4c-2-1-6-2-10 1v16M5 8l4 1m6 0 4-1" /></svg></span><div><small>MAKE THE HARD STUFF CLICK</small><strong>A study buddy, with skills.</strong><span>Tutoring, tech help &amp; more</span></div></article>
+            <span class="campus-scene-note"><span aria-hidden="true">&#10022;</span> Your next opportunity is closer than you think.</span>
           </div>
         </div>
-        <p class="showcase-footer">For students, by students.</p>
+        <div class="showcase-footer"><span>Find help. Share skills. Grow together.</span><span class="showcase-campus-label"><span aria-hidden="true">&#9679;</span> Your campus, connected.</span></div>
       </section>
       <section class="auth-panel" aria-label="Account access">
+        <div class="auth-access-top"><span>ONE COMMUNITY. ENDLESS POSSIBILITIES.</span><a href="index.html">Explore Skillmate <span aria-hidden="true">&#8599;</span></a></div>
         <div class="auth-card">
-          <p class="eyebrow">YOUR CAMPUS MARKETPLACE</p>
-          <h2 id="auth-title">Welcome to Skillmate</h2>
-          <p class="auth-intro" id="auth-intro">Sign in to find services, manage bookings, or earn with your skills.</p>
+          <p class="eyebrow">GOOD TO HAVE YOU HERE</p>
+          <h2 id="auth-title">Welcome back.</h2>
+          <p class="auth-intro" id="auth-intro">Your campus community is one sign-in away.</p>
           <div class="auth-tabs" id="auth-tabs" role="tablist" aria-label="Sign in or create an account">
-            <button class="auth-tab active" id="signin-tab" type="button" role="tab" aria-selected="true">Sign in</button>
-            <button class="auth-tab" id="signup-tab" type="button" role="tab" aria-selected="false">Create account</button>
+            <button class="auth-tab active" id="signin-tab" type="button" role="tab" aria-selected="true" aria-controls="auth-form" tabindex="0">Sign in</button>
+            <button class="auth-tab" id="signup-tab" type="button" role="tab" aria-selected="false" aria-controls="auth-form" tabindex="-1">Create account</button>
           </div>
-          <form id="auth-form">
+          <form id="auth-form" role="tabpanel" aria-labelledby="signin-tab">
             <label id="name-field" hidden>Your name<input id="auth-name" autocomplete="name" maxlength="80" placeholder="e.g. Alex Morgan" /></label>
-            <label id="university-field" hidden>Your university<input id="auth-university" autocomplete="organization" list="ghana-university-options" maxlength="120" placeholder="Start typing your university" /><datalist id="ghana-university-options"></datalist><small class="auth-field-note" id="university-directory-status">Type to search Ghanaian universities, or enter your school if it is not listed.</small></label>
-            <label id="student-id-field" hidden>Student ID number<input id="auth-student-id" autocomplete="off" minlength="3" maxlength="80" placeholder="Enter your student ID number" /><small class="auth-field-note">Your ID is stored privately with your account. It is not automatically verified.</small></label>
-            <label>Email address<input id="auth-email" type="email" autocomplete="email" required placeholder="you@university.edu" /></label>
-            <label><span id="password-label">Password</span><span class="auth-password-input"><input id="auth-password" type="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters" /><button class="auth-password-toggle" id="password-visibility" type="button" aria-label="Show password" aria-pressed="false">Show</button></span><small class="password-hint" id="password-hint" aria-live="polite" hidden>Use at least 8 characters.</small></label>
-            <label id="confirm-password-field" hidden>Confirm password<span class="auth-password-input"><input id="auth-confirm-password" type="password" autocomplete="new-password" minlength="8" placeholder="Enter your password again" /><button class="auth-password-toggle" id="confirm-password-visibility" type="button" aria-label="Show confirm password" aria-pressed="false">Show</button></span></label>
-            <label class="auth-consent" id="consent-field"><input id="auth-consent" type="checkbox" required /><span>I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>. Required to create an account or continue with Google or Apple.</span></label>
+            <label id="university-field" hidden>Your university<input id="auth-university" autocomplete="organization" list="ghana-university-options" maxlength="120" placeholder="Start typing your university" /><datalist id="ghana-university-options"></datalist><small class="auth-field-note" id="university-directory-status">Choose a suggestion or type your university name.</small></label>
+            <label id="student-id-field" hidden>Student ID number<input id="auth-student-id" autocomplete="off" minlength="3" maxlength="80" placeholder="Enter your student ID number" /><small class="auth-field-note">Stored privately. Adding your ID does not automatically verify it.</small></label>
+            <label id="email-field">Email address<input id="auth-email" aria-describedby="auth-message" type="email" autocomplete="email" required placeholder="you@university.edu" /></label>
+            <label id="password-field"><span id="password-label">Password</span><span class="auth-password-input"><input id="auth-password" type="password" autocomplete="current-password" required minlength="8" aria-describedby="password-hint" placeholder="Enter your password" /><button class="auth-password-toggle" id="password-visibility" type="button" aria-label="Show password" aria-pressed="false">Show</button></span><small class="password-hint" id="password-hint" aria-live="polite" hidden>Use at least 8 characters.</small></label>
+            <label id="confirm-password-field" hidden>Confirm password<span class="auth-password-input"><input id="auth-confirm-password" aria-describedby="auth-message" type="password" autocomplete="new-password" minlength="8" placeholder="Enter your password again" /><button class="auth-password-toggle" id="confirm-password-visibility" type="button" aria-label="Show confirm password" aria-pressed="false">Show</button></span></label>
+            <label class="auth-consent" id="consent-field"><input id="auth-consent" type="checkbox" required /><span>I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>. <small>Needed for a new account or to continue with Google or Apple.</small></span></label>
             <a class="auth-text-button" id="forgot-password-link" href="forgot-password.html">Forgot password?</a>
             <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
             <button class="button button-primary auth-submit" id="auth-submit" type="submit"><span class="auth-submit-spinner" aria-hidden="true" hidden></span><span id="auth-submit-label">Sign in</span></button>
             <button class="auth-text-button" id="return-to-signin" type="button" hidden>Back to sign in</button>
           </form>
-          <p class="auth-note">Use an email address you can access. We’ll send a confirmation email when you create an account.</p>
+
+          <div class="auth-social-section" id="auth-social-section"><p class="auth-divider"><span>or continue with</span></p><div class="auth-social-buttons">
+          <button class="auth-google" id="google-signin" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="var(--main)" d="M21.6 12.23c0-.72-.06-1.42-.18-2.1H12v3.97h5.38a4.6 4.6 0 0 1-2 3.02v2.47h3.24c1.9-1.75 2.98-4.33 2.98-7.36Z"/><path fill="var(--main)" d="M12 22c2.7 0 4.97-.9 6.62-2.42l-3.24-2.47c-.9.6-2.05.96-3.38.96-2.6 0-4.8-1.76-5.58-4.12H3.08v2.55A10 10 0 0 0 12 22Z"/><path fill="var(--main)" d="M6.42 13.95a6 6 0 0 1 0-3.9V7.5H3.08a10 10 0 0 0 0 9l3.34-2.55Z"/><path fill="var(--main)" d="M12 5.93c1.47 0 2.8.5 3.83 1.5l2.87-2.87A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.92 5.5l3.34 2.55C7.2 7.69 9.4 5.93 12 5.93Z"/></svg><span>Google</span></button>
+          <button class="auth-google" id="apple-signin" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.37 12.22c.02 2.13 1.87 2.84 1.89 2.85-.02.05-.3 1.04-.97 2.06-.58.88-1.18 1.75-2.13 1.77-.93.02-1.23-.57-2.3-.57-1.06 0-1.4.55-2.28.59-.91.03-1.6-.94-2.19-1.82-1.2-1.79-2.12-5.05-.88-7.25.62-1.09 1.72-1.78 2.92-1.8.91-.02 1.77.62 2.33.62.55 0 1.59-.77 2.68-.66.46.02 1.75.18 2.58 1.4-.07.04-1.54.9-1.65 2.81ZM14.6 6.25c.48-.58.81-1.39.72-2.2-.7.03-1.55.47-2.05 1.05-.45.52-.84 1.34-.73 2.13.78.06 1.58-.4 2.06-.98Z"/></svg><span>Apple</span></button>
+          </div></div>
+          <p class="auth-note" id="auth-note">A space to find help, offer your skills, and get things done.</p>
           <p class="auth-footer"><a href="terms.html">Terms</a><span aria-hidden="true"> · </span><a href="privacy.html">Privacy</a><span aria-hidden="true"> · </span><a href="index.html">Back to Skillmate</a></p>
-          <button class="auth-google" id="google-signin" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="var(--main)" d="M21.6 12.23c0-.72-.06-1.42-.18-2.1H12v3.97h5.38a4.6 4.6 0 0 1-2 3.02v2.47h3.24c1.9-1.75 2.98-4.33 2.98-7.36Z"/><path fill="var(--main)" d="M12 22c2.7 0 4.97-.9 6.62-2.42l-3.24-2.47c-.9.6-2.05.96-3.38.96-2.6 0-4.8-1.76-5.58-4.12H3.08v2.55A10 10 0 0 0 12 22Z"/><path fill="var(--main)" d="M6.42 13.95a6 6 0 0 1 0-3.9V7.5H3.08a10 10 0 0 0 0 9l3.34-2.55Z"/><path fill="var(--main)" d="M12 5.93c1.47 0 2.8.5 3.83 1.5l2.87-2.87A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.92 5.5l3.34 2.55C7.2 7.69 9.4 5.93 12 5.93Z"/></svg><span>Continue with Google</span></button>
-          <button class="auth-google" id="apple-signin" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.37 12.22c.02 2.13 1.87 2.84 1.89 2.85-.02.05-.3 1.04-.97 2.06-.58.88-1.18 1.75-2.13 1.77-.93.02-1.23-.57-2.3-.57-1.06 0-1.4.55-2.28.59-.91.03-1.6-.94-2.19-1.82-1.2-1.79-2.12-5.05-.88-7.25.62-1.09 1.72-1.78 2.92-1.8.91-.02 1.77.62 2.33.62.55 0 1.59-.77 2.68-.66.46.02 1.75.18 2.58 1.4-.07.04-1.54.9-1.65 2.81ZM14.6 6.25c.48-.58.81-1.39.72-2.2-.7.03-1.55.47-2.05 1.05-.45.52-.84 1.34-.73 2.13.78.06 1.58-.4 2.06-.98Z"/></svg><span>Continue with Apple</span></button>
         </div>
       </section>
     </main>
@@ -63,6 +69,6 @@
     <script src="supabase-config.js"></script>
     <script src="supabase-client.js?v=4"></script>
     <script src="ghana-universities.js"></script>
-    <script src="auth.js?v=4"></script>
+    <script src="auth.js?v=5"></script>
   </body>
 </html>

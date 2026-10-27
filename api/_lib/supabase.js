@@ -31,7 +31,12 @@ function getSupabaseConfig() {
     throw new Error("SUPABASE_ANON_KEY must be a public anon/publishable key, never a service-role/secret key.");
   }
 
-  return { url: projectUrl.origin, anonKey };
+  return {
+    url: projectUrl.origin, anonKey,
+    supportEmail: process.env.SUPPORT_EMAIL?.trim() || "ezekielnyarku1@gmail.com,steveobodai@gmail.com",
+    supportWhatsApp: process.env.SUPPORT_WHATSAPP?.trim() || "",
+    accountDeletionAvailable: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()),
+  };
 }
 
 async function getSupabaseUser(accessToken) {

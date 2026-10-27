@@ -56,7 +56,12 @@ function getSupabaseConfig() {
     throw new Error("SUPABASE_ANON_KEY must be a public anon/publishable key, never a service-role/secret key.");
   }
 
-  return { url: projectUrl.origin, anonKey };
+  return {
+    url: projectUrl.origin, anonKey,
+    supportEmail: process.env.SUPPORT_EMAIL?.trim() || "ezekielnyarku1@gmail.com,steveobodai@gmail.com",
+    supportWhatsApp: process.env.SUPPORT_WHATSAPP?.trim() || "",
+    accountDeletionAvailable: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()),
+  };
 }
 
 async function getSupabaseUser(accessToken) {
@@ -121,44 +126,7 @@ app.get("/supabase-config.js", (_request, response, next) => {
   }
 });
 
-app.get("/api/health", async (_request, response) => {
-  let config;
-  try {
-    config = getSupabaseConfig();
-  } catch {
-    response.set("Cache-Control", "no-store");
-    return response.status(503).json({
-      status: "unavailable",
-      supabaseConfigured: false,
-      services: { auth: "unavailable", database: "unavailable" },
-    });
-  }
-
-  const checkService = async (url) => {
-    try {
-      const result = await fetch(url, {
-        headers: { apikey: config.anonKey },
-        signal: AbortSignal.timeout(5000),
-      });
-      return result.ok ? "ok" : "unavailable";
-    } catch {
-      return "unavailable";
-    }
-  };
-  const [auth, database] = await Promise.all([
-    checkService(`${config.url}/auth/v1/health`),
-    checkService(`${config.url}/rest/v1/profiles?select=id&limit=0`),
-  ]);
-  const healthy = auth === "ok" && database === "ok";
-  response
-    .set("Cache-Control", "no-store")
-    .status(healthy ? 200 : 503)
-    .json({
-      status: healthy ? "ok" : "degraded",
-      supabaseConfigured: true,
-      services: { auth, database },
-    });
-});
+app.get("/api/health", require("./api/health"));
 
 app.post(
   "/api/session",
@@ -188,6 +156,11 @@ app.post(
 app.delete("/api/session", (_request, response) => {
   response.clearCookie(sessionCookieName, sessionCookieOptions);
   response.status(204).end();
+});
+
+app.post("/api/account/delete", (request, response) => {
+  const { handleAccountDelete } = require("./api/_lib/account-delete");
+  return handleAccountDelete(request, response, request.cookies[sessionCookieName]);
 });
 
 app.get("/admin.html", async (request, response) => {

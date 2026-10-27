@@ -18,6 +18,9 @@ create table public.profiles (
   onboarding_completed boolean not null default false,
   bio text not null default '' check (char_length(bio) <= 500),
   avatar_url text,
+  phone_number text not null default '' check (char_length(phone_number) <= 32),
+  notify_booking_updates boolean not null default true,
+  notify_messages boolean not null default true,
   university_email text,
   campus_verified boolean not null default false,
   role public.account_role not null default 'student',
@@ -192,6 +195,97 @@ create table public.notifications (
   created_at timestamptz not null default now()
 );
 
+create table public.support_tickets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  category text not null check (category in ('Booking', 'Payment', 'User behaviour', 'Bug', 'Other')),
+  message text not null check (char_length(message) between 10 and 3000),
+  screenshot_url text,
+  status text not null default 'open' check (status in ('open', 'reviewing', 'resolved', 'dismissed')),
+  created_at timestamptz not null default now()
+);
+
+create index support_tickets_user_created_idx on public.support_tickets(user_id, created_at desc);
+
+create function public.anonymize_closed_account(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if p_user_id is null then
+    raise exception 'A user id is required.';
+  end if;
+
+  update public.profiles
+  set full_name = 'Deleted student',
+      university = 'Account closed',
+      course = '',
+      bio = '',
+      avatar_url = null,
+      phone_number = '',
+      university_email = null,
+      notify_booking_updates = false,
+      notify_messages = false,
+      updated_at = now()
+  where id = p_user_id;
+
+  if not found then
+    raise exception 'The user profile no longer exists.';
+  end if;
+
+  update public.services
+  set is_active = false,
+      title = 'Unavailable service',
+      description = 'This service is no longer available.',
+      updated_at = now()
+  where provider_id = p_user_id;
+
+  update public.bookings
+  set note = '', location = '', updated_at = now()
+  where customer_id = p_user_id or provider_id = p_user_id;
+
+  update public.group_bookings
+  set title = 'Group booking (account closed)',
+      invite_message = '',
+      status = 'cancelled',
+      updated_at = now()
+  where host_id = p_user_id or provider_id = p_user_id;
+
+  delete from public.group_booking_members where student_id = p_user_id;
+
+  update public.messages
+  set body = 'Message removed after account closure.'
+  where sender_id = p_user_id;
+
+  update public.reviews
+  set body = 'Review author closed their account.'
+  where reviewer_id = p_user_id;
+
+  update public.reports
+  set reason = 'Account closed',
+      details = 'Report details removed after account closure.'
+  where reporter_id = p_user_id;
+
+  update public.support_tickets
+  set message = 'Ticket details removed after account closure.',
+      screenshot_url = null
+  where user_id = p_user_id;
+
+  delete from public.student_identifiers where student_id = p_user_id;
+  delete from public.user_locations where user_id = p_user_id;
+  delete from public.saved_services where user_id = p_user_id;
+  delete from public.user_blocks where blocker_id = p_user_id or blocked_id = p_user_id;
+  delete from public.notifications where user_id = p_user_id;
+  delete from public.verification_requests where student_id = p_user_id;
+  delete from public.portfolio_items where provider_id = p_user_id;
+end;
+$$;
+
+revoke all on function public.anonymize_closed_account(uuid) from public, anon, authenticated;
+grant execute on function public.anonymize_closed_account(uuid) to service_role;
+
 create function public.notify_booking_participants()
 returns trigger
 language plpgsql
@@ -205,13 +299,21 @@ begin
   select title into v_service_title from public.services where id = new.service_id;
   if tg_op = 'INSERT' then
     insert into public.notifications (user_id, kind, title, body, target_path)
-    values (new.provider_id, 'booking_request', 'New booking request',
-      coalesce(v_service_title, 'A service') || ' has a new booking request.', 'bookings');
+    select new.provider_id, 'booking_request', 'New booking request',
+      coalesce(v_service_title, 'A service') || ' has a new booking request.', 'bookings'
+    where exists (
+      select 1 from public.profiles
+      where id = new.provider_id and notify_booking_updates
+    );
   elsif old.status is distinct from new.status then
     v_recipient_id := case when auth.uid() = new.customer_id then new.provider_id else new.customer_id end;
     insert into public.notifications (user_id, kind, title, body, target_path)
-    values (v_recipient_id, 'booking_update', 'Booking updated',
-      coalesce(v_service_title, 'Your booking') || ' is now ' || new.status::text || '.', 'bookings');
+    select v_recipient_id, 'booking_update', 'Booking updated',
+      coalesce(v_service_title, 'Your booking') || ' is now ' || new.status::text || '.', 'bookings'
+    where exists (
+      select 1 from public.profiles
+      where id = v_recipient_id and notify_booking_updates
+    );
   end if;
   return new;
 end;
@@ -234,6 +336,7 @@ begin
   insert into public.notifications (user_id, kind, title, body, target_path)
   select member.user_id, 'message', 'New message', left(new.body, 160), 'messages'
   from public.conversation_members member
+  join public.profiles recipient on recipient.id = member.user_id and recipient.notify_messages
   where member.conversation_id = new.conversation_id
     and member.user_id <> new.sender_id;
   return new;
@@ -947,6 +1050,7 @@ alter table public.saved_services enable row level security;
 alter table public.user_blocks enable row level security;
 alter table public.reports enable row level security;
 alter table public.notifications enable row level security;
+alter table public.support_tickets enable row level security;
 alter table public.verification_requests enable row level security;
 
 create policy "Profiles are readable by their owner and admins"
@@ -1152,6 +1256,17 @@ on public.notifications for update to authenticated
 using (user_id = (select auth.uid()))
 with check (user_id = (select auth.uid()));
 
+create policy "Users read their own support tickets"
+on public.support_tickets for select to authenticated
+using (user_id = (select auth.uid()) or (select public.is_admin()));
+create policy "Users create their own support tickets"
+on public.support_tickets for insert to authenticated
+with check (user_id = (select auth.uid()));
+create policy "Admins manage support tickets"
+on public.support_tickets for update to authenticated
+using ((select public.is_admin()))
+with check ((select public.is_admin()));
+
 grant usage on schema public to authenticated;
 grant select on public.provider_directory to authenticated;
 grant select on public.group_directory to authenticated;
@@ -1160,7 +1275,7 @@ grant select on public.conversation_directory to authenticated;
 grant select on public.profiles to authenticated;
 grant select on public.student_identifiers to authenticated;
 grant select, insert, update, delete on public.user_locations to authenticated;
-grant update (full_name, university, course, skills, onboarding_completed, avatar_url, bio) on public.profiles to authenticated;
+grant update (full_name, university, course, skills, onboarding_completed, avatar_url, bio, phone_number, notify_booking_updates, notify_messages) on public.profiles to authenticated;
 grant select, insert, update, delete on public.services to authenticated;
 grant select, insert on public.bookings to authenticated;
 grant select on public.group_bookings to authenticated;
@@ -1180,6 +1295,9 @@ grant select, insert, delete on public.user_blocks to authenticated;
 grant select, insert, update on public.reports to authenticated;
 grant select on public.notifications to authenticated;
 grant update (read_at) on public.notifications to authenticated;
+grant select on public.support_tickets to authenticated;
+grant insert (user_id, category, message, screenshot_url) on public.support_tickets to authenticated;
+grant update (status) on public.support_tickets to authenticated;
 grant select, insert on public.verification_requests to authenticated;
 do $$
 begin
@@ -1206,6 +1324,39 @@ on storage.objects for delete to authenticated
 using (
   bucket_id = 'portfolio-images'
   and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+insert into storage.buckets (id, name, public)
+values ('profile-avatars', 'profile-avatars', true)
+on conflict (id) do nothing;
+create policy "Authenticated students upload their own profile avatars"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id = 'profile-avatars'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+create policy "Authenticated students delete their own profile avatars"
+on storage.objects for delete to authenticated
+using (
+  bucket_id = 'profile-avatars'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+insert into storage.buckets (id, name, public)
+values ('support-screenshots', 'support-screenshots', false)
+on conflict (id) do nothing;
+create policy "Authenticated students upload their own support screenshots"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id = 'support-screenshots'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+create policy "Users and admins read support screenshots"
+on storage.objects for select to authenticated
+using (
+  bucket_id = 'support-screenshots'
+  and (
+    (storage.foldername(name))[1] = (select auth.uid())::text
+    or (select public.is_admin())
+  )
 );
 revoke all on function public.create_group_booking(uuid, text, text, timestamptz, smallint, numeric) from public, anon;
 revoke all on function public.join_group_booking(uuid) from public, anon;
@@ -1239,3 +1390,158 @@ grant execute on function public.complete_profile_identity(text, text) to authen
 -- update public.profiles
 -- set role = 'admin'
 -- where id = (select id from auth.users where email = 'admin@your-university.edu');
+
+-- Apply after 20261026140000_profile_settings_and_support.sql.
+-- Keep private identity and verification consistent for every campus update.
+create or replace function public.sync_profile_campus()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.university is distinct from old.university then
+    if char_length(btrim(new.university)) not between 2 and 120 then
+      raise exception 'Enter a university between 2 and 120 characters.';
+    end if;
+    update public.student_identifiers
+    set university_name = btrim(new.university) where student_id = new.id;
+    update public.profiles set campus_verified = false, university_email = null
+    where id = new.id;
+    update public.verification_requests
+    set status = 'dismissed', reviewed_at = now()
+    where student_id = new.id and status in ('open', 'reviewing');
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.sync_profile_campus() from public, anon, authenticated;
+drop trigger if exists sync_profile_campus on public.profiles;
+create trigger sync_profile_campus after update of university on public.profiles
+for each row execute function public.sync_profile_campus();
+
+create or replace function public.save_account_profile(
+  p_full_name text, p_university text, p_bio text,
+  p_phone_number text, p_avatar_url text
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then raise exception 'Sign in to update your profile.'; end if;
+  if char_length(btrim(coalesce(p_full_name, ''))) not between 2 and 80
+    or char_length(btrim(coalesce(p_university, ''))) not between 2 and 120
+    or char_length(coalesce(p_bio, '')) > 500
+    or char_length(coalesce(p_phone_number, '')) > 32 then
+    raise exception 'Check the name, university, bio and phone number lengths.';
+  end if;
+  update public.profiles
+  set full_name = btrim(p_full_name), university = btrim(p_university),
+      bio = coalesce(p_bio, ''), phone_number = coalesce(p_phone_number, ''),
+      avatar_url = p_avatar_url
+  where id = auth.uid();
+  if not found then raise exception 'Your profile no longer exists.'; end if;
+end;
+$$;
+
+revoke all on function public.save_account_profile(text, text, text, text, text) from public, anon;
+grant execute on function public.save_account_profile(text, text, text, text, text) to authenticated;
+
+drop policy if exists "Students delete their unused support screenshots" on storage.objects;
+create policy "Students delete their unused support screenshots"
+on storage.objects for delete to authenticated
+using (
+  bucket_id = 'support-screenshots'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+  and not exists (
+    select 1 from public.support_tickets ticket
+    where ticket.user_id = (select auth.uid()) and ticket.screenshot_url = name
+  )
+);
+
+notify pgrst, 'reload schema';
+
+-- Invoker permissions preserve message RLS; explicit membership also excludes
+-- conversations the caller does not belong to. Each chat gets its own limit.
+create or replace function public.recent_conversation_messages(
+  conversation_ids uuid[], page_size integer default 30
+)
+returns setof public.messages
+language sql stable security invoker
+set search_path = public
+as $$
+  select recent.*
+  from (
+    select distinct member.conversation_id
+    from public.conversation_members member
+    where member.user_id = (select auth.uid())
+      and member.conversation_id = any(conversation_ids)
+    order by member.conversation_id
+    limit 20
+  ) allowed
+  cross join lateral (
+    select message.* from public.messages message
+    where message.conversation_id = allowed.conversation_id
+    order by message.created_at desc, message.id desc
+    limit greatest(1, least(coalesce(page_size, 30), 30))
+  ) recent
+  order by allowed.conversation_id, recent.created_at desc, recent.id desc;
+$$;
+revoke all on function public.recent_conversation_messages(uuid[], integer) from public, anon;
+grant execute on function public.recent_conversation_messages(uuid[], integer) to authenticated;
+
+-- Approved local migration. Apply through the project's normal migration process.
+begin;
+alter table public.services
+  add column if not exists cover_image_path text,
+  add column if not exists delivery_method text,
+  add column if not exists estimated_delivery text,
+  add column if not exists price_type text not null default 'fixed';
+
+alter table public.services
+  add constraint services_delivery_method_check check (delivery_method in ('online', 'in_person', 'both')),
+  add constraint services_estimated_delivery_check check (char_length(estimated_delivery) <= 80),
+  add constraint services_price_type_check check (price_type in ('fixed', 'starting')),
+  add constraint services_cover_path_check check (
+    cover_image_path is null or (
+      split_part(cover_image_path, '/', 1) = provider_id::text
+      and cover_image_path ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}\.(jpg|png|webp)$'
+    )
+  );
+
+-- Append public listing metadata; keep the existing filters, grants and view security mode.
+create or replace view public.provider_directory
+with (security_invoker = false)
+as select
+  p.id as provider_id, p.full_name, p.university, p.course, p.bio,
+  p.avatar_url, p.campus_verified,
+  s.id as service_id, s.title as service_title, s.category,
+  s.description as service_description, s.price, s.currency,
+  s.accepts_groups, s.created_at as service_created_at,
+  s.cover_image_path, s.delivery_method, s.estimated_delivery, s.price_type
+from public.profiles p
+join public.services s on s.provider_id = p.id
+where s.is_active and not public.is_blocked_between(p.id);
+
+-- Listing covers are public marketing images. Never use this bucket for private files.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('service-covers', 'service-covers', true, 5000000,
+  array['image/jpeg', 'image/png', 'image/webp']);
+
+create policy "Students upload their own service covers"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id = 'service-covers'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+  and name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}\.(jpg|png|webp)$'
+);
+create policy "Students delete their own service covers"
+on storage.objects for delete to authenticated
+using (bucket_id = 'service-covers' and (storage.foldername(name))[1] = (select auth.uid())::text);
+create policy "Students inspect their own service covers"
+on storage.objects for select to authenticated
+using (bucket_id = 'service-covers' and (storage.foldername(name))[1] = (select auth.uid())::text);
+commit;

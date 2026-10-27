@@ -17,6 +17,12 @@ Open the Supabase **SQL Editor**, paste the full contents of `supabase/schema.sq
 
 The schema file is an initial setup, not a repeatable migration. Do not run it a second time on the same project; use a new migration for later schema changes.
 
+For existing projects, apply `supabase/migrations/20261026140000_profile_settings_and_support.sql` once in the SQL Editor to add profile phone/notification preferences, support tickets and their row-level security, and the profile-avatar and private support-screenshot buckets. New projects include these objects in `supabase/schema.sql`. The migration can also be applied after the initial schema if needed.
+
+Configure `SUPABASE_SERVICE_ROLE_KEY` as a **server-only** environment variable to enable account closure. It is optional for other app features and must never be added to browser configuration, client-side environment variables, or public source control. Set it in the local server `.env` or the hosting provider's server environment (including Vercel Functions if deployed there). Account closure anonymizes the profile and authored content, deactivates listings, removes account storage files, replaces the account email, and permanently bans sign-in.
+
+Support contact placeholders in the Help & Support page (`support@your-domain.example` and the WhatsApp number) should be replaced with your real support contact details before launch.
+
 New accounts must provide a university and student ID number. The ID number is stored in the private `student_identifiers` table and is readable only by its owner and administrators. This collects and stores the number; it does not check that the number is valid or confirm current enrollment. Do not describe an account as verified based on this field alone.
 
 Users may optionally save a hostel or campus location in **Edit profile**. It is private by default and is shared with the other participant only while a booking is confirmed. The app currently collects place names, not coordinates, so it cannot calculate distance. On an existing project, apply `supabase/migrations/20261024_user_locations.sql` once in the SQL Editor; on a new project, the main schema already includes it.
@@ -83,7 +89,7 @@ Configure email/password sign-in and decide whether email confirmation is requir
    SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
    ```
 
-   Use the Supabase **Project URL** and public **anon/publishable** key. Do not add a service-role key. The app does not need a `PORT` variable on Vercel.
+   Use the Supabase **Project URL** and public **anon/publishable** key. If you want account closure enabled on Vercel, also add `SUPABASE_SERVICE_ROLE_KEY` as a **server-only** environment variable; never use it in client-side variables or frontend code. The app does not need a `PORT` variable on Vercel.
 3. Deploy the project. `vercel.json` routes the runtime Supabase configuration and session endpoints to Vercel Functions, and routes `/admin.html` through a server-side administrator-role check. The admin function includes the HTML file in its deployment bundle.
 4. Copy the final production domain from Vercel and add it to Supabase **Authentication → URL Configuration** as the Site URL. Add the exact production callback URLs shown above using your domain.
 5. Visit the Vercel URL, create/sign in to an account, and test the main marketplace and administrator route. Promote the intended admin account using the SQL in the next section.
@@ -167,3 +173,13 @@ Sign in using **Admin dashboard** from the student app or visit `login.html?next
 - Portfolio images are stored in a public bucket so marketplace profiles can display them. Do not upload identity documents, private photos, or other sensitive files there.
 - Booking requests do not process payments. Verification requests require a human administrator to review and approve them.
 - Test the schema and workflows in a disposable Supabase project before using real student data.
+
+## Profile settings and support setup
+
+Existing projects: run the entire file `supabase/apply_settings_support.sql` in the trusted Supabase SQL Editor. It applies both settings/support migrations in one transaction, adds the profile save RPC, synchronizes campus identity and resets verification on campus changes, and permits cleanup of unused support screenshots. It is safe to rerun. New projects already include these definitions in `supabase/schema.sql`.
+
+Set `SUPABASE_SERVICE_ROLE_KEY` on the local server and deployment to enable account closure. Keep it server-only. The app publishes only whether closure is configured. Without the key, closure is disabled before any account changes. Closure disables sign-in before anonymization and storage cleanup; if cleanup fails, an administrator must finish it for the user ID recorded in server logs. Never restore sign-in to a partly closed account.
+
+Support contacts default to ezekielnyarku1@gmail.com and steveobodai@gmail.com. Override with comma-separated `SUPPORT_EMAIL`. Set `SUPPORT_WHATSAPP` to international phone digits to show WhatsApp; otherwise it stays hidden. Restart the local server or redeploy after environment changes.
+
+The admin dashboard's Support tickets section lists the 50 oldest active tickets, supports Review/Resolve/Dismiss, and generates five-minute private screenshot links. Resolved and dismissed tickets remain in the database. Ticket submission stores a request; it does not send email. Direct email links open the user's mail app.

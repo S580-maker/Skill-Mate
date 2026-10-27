@@ -1,67 +1,23 @@
 (() => {
   const container = document.querySelector("#profile-completeness-root");
-  if (!window.React || !window.ReactDOM) {
-    console.error("The profile completeness card could not load because React is unavailable.");
-    return;
-  }
-  const root = ReactDOM.createRoot(container);
-
-  function ProfileCompleteness({ profile }) {
-    if (profile.identityComplete) return null;
-
-    const fields = [
-      Boolean(profile.name?.trim()),
-      Boolean(profile.university?.trim()),
-      Boolean(profile.studentIdNumber?.trim()),
-    ];
-    const completed = fields.filter(Boolean).length;
-    const percentage = Math.round((completed / fields.length) * 100);
-    const missing = [
-      !fields[0] && "your name",
-      !fields[1] && "your university",
-      !fields[2] && "your student ID number",
-    ].filter(Boolean);
-    const detail = `Add ${missing.join(" and ")} to finish setting up your student profile.`;
-
-    return React.createElement(
-      "section",
-      { className: "profile-completeness panel", "aria-labelledby": "profile-completeness-title" },
-      React.createElement(
-        "div",
-        { className: "profile-completeness-copy" },
-        React.createElement("p", { className: "eyebrow" }, "YOUR STUDENT PROFILE"),
-        React.createElement("h2", { id: "profile-completeness-title" }, "Complete your student profile"),
-        React.createElement("p", { className: "profile-completeness-detail" }, detail),
-      ),
-      React.createElement(
-        "div",
-        { className: "profile-completeness-progress" },
-        React.createElement(
-          "div",
-          { className: "profile-completeness-value" },
-          React.createElement("strong", null, `${percentage}%`),
-          React.createElement("span", null, `${completed} of ${fields.length} details added`),
-        ),
-        React.createElement(
-          "div",
-          { className: "profile-completeness-track", role: "progressbar", "aria-label": "Profile completeness", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": percentage },
-          React.createElement("span", { style: { width: `${percentage}%` } }),
-        ),
-      ),
-      React.createElement(
-        "button",
-        {
-          className: "button button-outline profile-completeness-action",
-          type: "button",
-          onClick: () => window.dispatchEvent(new Event("skillmate:edit-profile")),
-        },
-        "Complete profile",
-        React.createElement("span", { "aria-hidden": "true" }, "→"),
-      ),
-    );
-  }
-
+  if (!container) return;
   window.renderProfileCompleteness = (profile) => {
-    root.render(React.createElement(ProfileCompleteness, { profile }));
+    container.replaceChildren();
+    const fields = [profile.name, profile.university, profile.studentIdNumber].map(value => Boolean(value?.trim()));
+    if (profile.identityComplete || fields.every(Boolean)) return;
+    const completed = fields.filter(Boolean).length;
+    const percentage = Math.round(completed / fields.length * 100);
+    const missing = ["your name", "your university", "your student ID number"].filter((_, index) => !fields[index]);
+    const section = document.createElement("section");
+    section.className = "profile-completeness panel";
+    section.setAttribute("aria-labelledby", "profile-completeness-title");
+    section.innerHTML = '<div class="profile-completeness-copy"><p class="eyebrow">YOUR STUDENT PROFILE</p><h2 id="profile-completeness-title">Complete your student profile</h2><p class="profile-completeness-detail"></p></div><div class="profile-completeness-progress"><div class="profile-completeness-value"><strong></strong><span></span></div><div class="profile-completeness-track" role="progressbar" aria-label="Profile completeness" aria-valuemin="0" aria-valuemax="100"><span></span></div></div><button class="button button-outline profile-completeness-action" type="button">Complete profile <span aria-hidden="true">&rarr;</span></button>';
+    section.querySelector(".profile-completeness-detail").textContent = "Add " + missing.join(" and ") + " to finish setting up your student profile.";
+    section.querySelector(".profile-completeness-value strong").textContent = percentage + "%";
+    section.querySelector(".profile-completeness-value span").textContent = completed + " of 3 details added";
+    section.querySelector("[role=progressbar]").setAttribute("aria-valuenow", percentage);
+    section.querySelector(".profile-completeness-track span").style.width = percentage + "%";
+    section.querySelector("button").addEventListener("click", () => window.dispatchEvent(new Event("skillmate:edit-profile")));
+    container.append(section);
   };
 })();

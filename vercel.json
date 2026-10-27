@@ -21,6 +21,10 @@
     {
       "source": "/admin.html",
       "destination": "/api/admin"
+    },
+    {
+      "source": "/api/account/delete",
+      "destination": "/api/account-delete"
     }
   ],
   "headers": [

@@ -85,6 +85,10 @@ function setAuthMode(mode) {
   const signup = mode === "signup";
   const recovery = mode === "recovery";
   const signin = !signup && !recovery;
+  document.body.dataset.authMode = mode;
+  authForm.setAttribute("aria-labelledby", recovery ? "auth-title" : signup ? "signup-tab" : "signin-tab");
+  document.querySelector("#signin-tab").tabIndex = signin ? 0 : -1;
+  document.querySelector("#signup-tab").tabIndex = signup ? 0 : -1;
   document.querySelector("#auth-tabs").dataset.mode = signup ? "signup" : "signin";
   setPasswordVisibility(passwordInput, passwordVisibility, false, "password");
   setPasswordVisibility(confirmPasswordInput, confirmPasswordVisibility, false, "confirm password");
@@ -100,26 +104,35 @@ function setAuthMode(mode) {
   document.querySelector("#auth-name").required = signup;
   document.querySelector("#auth-university").required = signup;
   document.querySelector("#auth-student-id").required = signup;
+  for (const id of ["auth-name", "auth-university", "auth-student-id", "auth-confirm-password"]) {
+    document.getElementById(id).disabled = !signup;
+  }
   document.querySelector("#confirm-password-field").hidden = !signup;
   confirmPasswordInput.required = signup;
   if (!signup) confirmPasswordInput.value = "";
   document.querySelector("#auth-consent").required = signup;
-  document.querySelector("#consent-field").hidden = false;
+  document.querySelector("#consent-field").hidden = recovery;
   document.querySelector("#google-signin").hidden = recovery;
   document.querySelector("#apple-signin").hidden = recovery;
+  document.querySelector("#auth-social-section").hidden = recovery;
   document.querySelector("#forgot-password-link").hidden = !signin;
   document.querySelector("#password-hint").hidden = signin;
   document.querySelector("#auth-password").autocomplete = signin ? "current-password" : "new-password";
   document.querySelector("#auth-password").minLength = signin ? 0 : 8;
   document.querySelector("#password-label").textContent = recovery ? "New password" : "Password";
-  document.querySelector("#auth-title").textContent = signup ? "Create your account" : recovery ? "Choose a new password" : "Welcome to Skillmate";
+  document.querySelector("#auth-title").textContent = signup ? "Create your account" : recovery ? "Choose a new password" : "Welcome back.";
   document.querySelector("#auth-intro").textContent = recovery
     ? "Enter a new password for your Skillmate account."
     : signup
-    ? "Create one account to find services and offer your own skills. Add your university and student ID number; it will be stored privately but is not automatically verified."
-    : "Sign in to find services, manage bookings, or earn with your skills.";
+    ? "Find help, share your skills, and make campus life a little easier. Your student ID stays private."
+    : "Your campus community is one sign-in away.";
   document.querySelector("#auth-submit-label").textContent = signup ? "Create account" : recovery ? "Save new password" : "Sign in";
   document.querySelector("#return-to-signin").hidden = !recovery;
+  passwordInput.placeholder = signin ? "Enter your password" : "At least 8 characters";
+  document.querySelector("#auth-note").textContent = signup
+    ? "We will send a confirmation link to your email. Use an address you can access."
+    : recovery ? "Choose a password you have not used on another account."
+    : "A space to find help, offer your skills, and get things done.";
   updatePasswordHint();
   authMessage.textContent = "";
   authMessage.classList.remove("success");
@@ -160,8 +173,15 @@ async function loadGhanaianUniversities() {
   }
 }
 
-document.querySelector("#signin-tab").addEventListener("click", () => setAuthMode("signin"));
-document.querySelector("#signup-tab").addEventListener("click", () => setAuthMode("signup"));
+document.querySelector("#signin-tab").addEventListener("click", () => { if (!authSubmitting) setAuthMode("signin"); });
+document.querySelector("#signup-tab").addEventListener("click", () => { if (!authSubmitting) setAuthMode("signup"); });
+document.querySelector("#auth-tabs").addEventListener("keydown", (event) => {
+  if (authSubmitting || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const mode = event.key === "Home" ? "signin" : event.key === "End" ? "signup" : authMode === "signin" ? "signup" : "signin";
+  setAuthMode(mode);
+  document.querySelector(mode === "signup" ? "#signup-tab" : "#signin-tab").focus();
+});
 passwordInput.addEventListener("input", updatePasswordHint);
 passwordVisibility.addEventListener("click", () => {
   setPasswordVisibility(passwordInput, passwordVisibility, passwordInput.type === "password", "password");
@@ -215,7 +235,8 @@ document.querySelector("#return-to-signin").addEventListener("click", () => {
   setAuthMode("signin");
 });
 loadGhanaianUniversities();
-setAuthMode(new URLSearchParams(window.location.search).get("mode") === "recovery" ? "recovery" : "signin");
+const requestedAuthMode = new URLSearchParams(window.location.search).get("mode");
+setAuthMode(["signup", "recovery"].includes(requestedAuthMode) ? requestedAuthMode : "signin");
 if (authClient) {
   window.skillmateRestoreSession().then(redirectForSession).catch((error) => {
     console.error("Could not restore the Skillmate sign-in session.", error);
@@ -229,6 +250,7 @@ authClient?.auth.onAuthStateChange((_event, session) => {
 
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (authSubmitting) return;
   if (!authClient) {
     authMessage.textContent = "Configure Supabase in .env and start the Skillmate server before signing in.";
     return;
