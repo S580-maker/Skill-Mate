@@ -1,5 +1,4 @@
 window.SKILLMATE_UNIVERSITY_DIRECTORY = {
-  endpoint: "https://universities.hipolabs.com/search?country=Ghana",
   fallback: [
     "Academic City University",
     "Accra Institute of Technology",

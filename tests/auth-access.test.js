@@ -27,7 +27,7 @@ function fixture() {
     setPasswordVisibility() {}, updatePasswordHint() {}, authMode: "signin", authSubmitting: false,
   };
   vm.createContext(context);
-  vm.runInContext(source.slice(source.indexOf("function setAuthMode(mode)"), source.indexOf("async function loadGhanaianUniversities")), context);
+  vm.runInContext(source.slice(source.indexOf("function setAuthMode(mode)"), source.indexOf("function loadGhanaianUniversities()")), context);
   return { context, get };
 }
 
@@ -64,6 +64,25 @@ test("arrow keys select and focus the account tab; mode changes are blocked duri
   context.authSubmitting = true;
   get("#signin-tab").handlers.click();
   assert.equal(context.authMode, "signup");
+});
+
+test("Ghana university suggestions load from the built-in directory without a network request", () => {
+  const { context, get } = fixture();
+  const universities = ["University of Ghana", "Ashesi University"];
+  const options = get("#ghana-university-options");
+  const status = get("#university-directory-status");
+  options.replaceChildren = (...items) => { options.children = items; };
+  context.window = { SKILLMATE_UNIVERSITY_DIRECTORY: { fallback: universities } };
+  context.document.createElement = () => ({ value: "" });
+  vm.runInContext(source.slice(
+    source.indexOf("function loadGhanaianUniversities()"),
+    source.indexOf('document.querySelector("#signin-tab").addEventListener'),
+  ), context);
+
+  context.loadGhanaianUniversities();
+
+  assert.deepEqual(options.children.map(option => option.value), universities);
+  assert.equal(status.textContent, "Choose a suggestion or type your university name.");
 });
 
 test("duplicate password sign-in submissions share the in-flight operation", async () => {

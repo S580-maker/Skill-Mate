@@ -138,39 +138,16 @@ function setAuthMode(mode) {
   authMessage.classList.remove("success");
 }
 
-async function loadGhanaianUniversities() {
+function loadGhanaianUniversities() {
   const directory = window.SKILLMATE_UNIVERSITY_DIRECTORY;
   const options = document.querySelector("#ghana-university-options");
   const status = document.querySelector("#university-directory-status");
-  let universities = directory.fallback;
-  const renderOptions = () => {
-    options.replaceChildren(...universities.map((university) => {
-      const option = document.createElement("option");
-      option.value = university;
-      return option;
-    }));
-  };
-  renderOptions();
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 5000);
-  try {
-    const response = await fetch(directory.endpoint, { signal: controller.signal });
-    if (!response.ok) throw new Error(`University directory returned HTTP ${response.status}.`);
-    const results = await response.json();
-    const fetched = results
-      .filter((university) => university.country === "Ghana" && university.name)
-      .map((university) => university.name.trim())
-      .filter(Boolean);
-    if (!fetched.length) throw new Error("University directory returned no Ghanaian institutions.");
-    universities = [...new Set([...fetched, ...directory.fallback])].sort((a, b) => a.localeCompare(b));
-    status.textContent = "Search the Ghana university directory. If your school is missing, enter its name.";
-  } catch {
-    console.info("Using the built-in Ghana university list because the live directory is unavailable.");
-    status.textContent = "Live school search is unavailable. Choose a suggestion or type your university name.";
-  } finally {
-    window.clearTimeout(timeout);
-    renderOptions();
-  }
+  options.replaceChildren(...directory.fallback.map((university) => {
+    const option = document.createElement("option");
+    option.value = university;
+    return option;
+  }));
+  status.textContent = "Choose a suggestion or type your university name.";
 }
 
 document.querySelector("#signin-tab").addEventListener("click", () => { if (!authSubmitting) setAuthMode("signin"); });
