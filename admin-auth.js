@@ -52,11 +52,17 @@ function showAdminToast(message) {
 async function refreshAdminSystemStatus() {
   const status = document.querySelector("#system-status");
   const label = status.querySelector("span");
+  const authStatus = document.querySelector("#auth-service-status");
+  const databaseStatus = document.querySelector("#database-service-status");
+  const configurationStatus = document.querySelector("#configuration-service-status");
   try {
     const response = await fetch("/api/health", { cache: "no-store" });
     const result = await response.json();
     const authReady = result.services?.auth === "ok";
     const databaseReady = result.services?.database === "ok";
+    authStatus.textContent = authReady ? "Operational" : "Unavailable";
+    databaseStatus.textContent = databaseReady ? "Operational" : "Unavailable";
+    configurationStatus.textContent = result.supabaseConfigured ? "Configured" : "Not configured";
     if (response.ok && result.status === "ok" && authReady && databaseReady) {
       status.dataset.status = "ok";
       label.textContent = "All systems operational";
@@ -75,6 +81,9 @@ async function refreshAdminSystemStatus() {
     console.error("Could not check Skillmate system status.", error);
     status.dataset.status = "unavailable";
     label.textContent = "System status unavailable";
+    authStatus.textContent = "Unavailable";
+    databaseStatus.textContent = "Unavailable";
+    configurationStatus.textContent = "Could not verify";
   }
 }
 

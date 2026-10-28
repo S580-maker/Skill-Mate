@@ -910,6 +910,20 @@ function providerReviewSummary(provider) {
   const totalRating = provider.rating * provider.reviews + reviews.reduce((sum, review) => sum + review.rating, 0);
   return { rating: totalReviews ? (totalRating / totalReviews).toFixed(1) : "New", count: totalReviews };
 }
+function marketplaceSearchScore(provider, query) {
+  const normalizedQuery = window.skillmateSmartSearch.normalize(query);
+  const fields = [
+    [provider.service, 12],
+    [provider.category, 9],
+    [provider.name, 7],
+    [[provider.description, provider.course, provider.campus].join(" "), 2],
+  ];
+  return fields.reduce((score, [value, weight]) => {
+    const text = window.skillmateSmartSearch.normalize(value);
+    if (text.includes(normalizedQuery)) return score + weight * 2;
+    return score + normalizedQuery.split(" ").filter((term) => text.split(" ").some((word) => word.startsWith(term))).length * weight;
+  }, 0);
+}
 function renderMarketplace(targetId = "marketplace-grid", providers = appSupabase ? connectedProviders : seedProviders) {
   const target = document.getElementById(targetId);
   if (!target) return;
@@ -921,23 +935,14 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   });
   const visible = query
     ? matching.sort((left, right) => {
-      const normalizedQuery = window.skillmateSmartSearch.normalize(query);
-      const score = (provider) => {
-        const service = window.skillmateSmartSearch.normalize(provider.service);
-        const category = window.skillmateSmartSearch.normalize(provider.category);
-        const name = window.skillmateSmartSearch.normalize(provider.name);
-        return (service.includes(normalizedQuery) ? 3 : 0)
-          + (category.includes(normalizedQuery) ? 2 : 0)
-          + (name.includes(normalizedQuery) ? 1 : 0);
-      };
-      return score(right) - score(left);
+      return marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query);
     })
     : matching;
   if (targetId === "marketplace-grid") {
     const status = document.querySelector("#search-status");
     status.hidden = !query;
     status.textContent = query
-      ? `${visible.length} ${visible.length === 1 ? "service" : "services"} found. Search also understands related skills and small typos.`
+      ? `${visible.length} ${visible.length === 1 ? "service" : "services"} found for “${query}”. Related skills and common typos are included.`
       : "";
   }
   target.innerHTML = visible.length ? visible.map((provider) => `
@@ -954,9 +959,21 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
 function renderSearchSuggestions() {
   const target = document.querySelector("#search-suggestions");
   const query = globalSearch.value.trim();
-  if (!document.body.classList.contains("search-open") || window.skillmateSmartSearch.normalize(query).length < 2) {
+  if (!document.body.classList.contains("search-open")) {
     target.hidden = true;
     target.innerHTML = "";
+    return;
+  }
+
+  if (!query) {
+    const popularSearches = ["Laptop help", "Braids", "Tutoring", "Design", "Lunch"];
+    target.innerHTML = `<p class="search-suggestions-heading">Popular searches</p><div class="search-popular-list">${popularSearches.map((term) => `<button class="search-popular" type="button" data-search-suggestion="${escapeHTML(term)}">${escapeHTML(term)}</button>`).join("")}</div><p class="search-suggestions-hint">Search services, skills, or a provider name</p>`;
+    target.hidden = false;
+    return;
+  }
+  if (window.skillmateSmartSearch.normalize(query).length < 2) {
+    target.innerHTML = `<p class="search-suggestions-empty">Type at least 2 letters to find a service.</p>`;
+    target.hidden = false;
     return;
   }
 
@@ -965,10 +982,11 @@ function renderSearchSuggestions() {
     .filter((provider) => !state.blocked.includes(provider.id)
       && (selectedCategory === "All" || provider.category === selectedCategory)
       && window.skillmateSmartSearch.matches(provider, query))
+    .sort((left, right) => marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query))
     .slice(0, 6);
 
   target.innerHTML = matches.length
-    ? `<p class="search-suggestions-heading">Suggested services</p>${matches.map((provider) => `
+    ? `<p class="search-suggestions-heading">${matches.length} matching ${matches.length === 1 ? "service" : "services"}</p>${matches.map((provider) => `
       <button class="search-suggestion" type="button" data-search-suggestion="${escapeHTML(provider.service)}">
         <span class="search-suggestion-icon" aria-hidden="true">${getCategoryIcon(provider.category)}</span>
         <span class="search-suggestion-copy"><strong>${escapeHTML(provider.service)}</strong><small>${escapeHTML(provider.category)} · ${escapeHTML(provider.name)}</small></span>
@@ -2239,16 +2257,24 @@ document.querySelector("#category-strip").addEventListener("click", (event) => {
     chip.setAttribute("aria-pressed", String(selected));
   });
   renderMarketplace();
+  renderSearchSuggestions();
 });
 document.querySelector("#global-search").addEventListener("input", () => {
+  document.querySelector("#search-clear").hidden = !globalSearch.value;
   window.clearTimeout(globalSearchTimer);
+  renderSearchSuggestions();
+  if (!globalSearch.value.trim()) {
+    renderMarketplace();
+    return;
+  }
   globalSearchTimer = window.setTimeout(() => {
     if (document.querySelector("#global-search").value.trim() && state.activePage !== "home") showPage("home");
     renderMarketplace();
-    renderSearchSuggestions();
-  }, 300);
+  }, 180);
 });
 const globalSearch = document.querySelector("#global-search");
+const searchSuggestions = document.querySelector("#search-suggestions");
+const searchClear = document.querySelector("#search-clear");
 const mobileHeader = document.querySelector(".topbar");
 let previousScrollY = window.scrollY;
 window.addEventListener("scroll", () => {
@@ -2267,20 +2293,59 @@ globalSearch.addEventListener("focus", () => {
   mobileHeader.classList.remove("is-hidden");
   document.body.classList.add("search-open");
   globalSearch.setAttribute("aria-expanded", "true");
+  searchClear.hidden = !globalSearch.value;
   renderSearchSuggestions();
 });
 globalSearch.addEventListener("blur", () => {
   window.setTimeout(() => {
-    if (document.querySelector("#search-suggestions").contains(document.activeElement)) return;
+    if (searchSuggestions.contains(document.activeElement)) return;
     document.body.classList.remove("search-open");
     globalSearch.setAttribute("aria-expanded", "false");
     renderSearchSuggestions();
   }, 0);
 });
-document.querySelector("#search-suggestions").addEventListener("pointerdown", (event) => {
+globalSearch.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    if (globalSearch.value) {
+      globalSearch.value = "";
+      globalSearch.dispatchEvent(new Event("input", { bubbles: true }));
+    } else {
+      globalSearch.blur();
+    }
+    return;
+  }
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    const suggestions = [...searchSuggestions.querySelectorAll("[data-search-suggestion]")];
+    if (!suggestions.length) return;
+    event.preventDefault();
+    suggestions[event.key === "ArrowDown" ? 0 : suggestions.length - 1].focus();
+  }
+});
+searchClear.addEventListener("click", () => {
+  globalSearch.value = "";
+  globalSearch.dispatchEvent(new Event("input", { bubbles: true }));
+  globalSearch.focus();
+});
+searchSuggestions.addEventListener("keydown", (event) => {
+  const suggestions = [...searchSuggestions.querySelectorAll("[data-search-suggestion]")];
+  const index = suggestions.indexOf(document.activeElement);
+  if (event.key === "Escape") {
+    event.preventDefault();
+    globalSearch.focus();
+    globalSearch.blur();
+  } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const next = event.key === "ArrowDown"
+      ? (index + 1) % suggestions.length
+      : (index - 1 + suggestions.length) % suggestions.length;
+    suggestions[next]?.focus();
+  }
+});
+searchSuggestions.addEventListener("pointerdown", (event) => {
   if (event.target.closest("[data-search-suggestion]")) event.preventDefault();
 });
-document.querySelector("#search-suggestions").addEventListener("click", (event) => {
+searchSuggestions.addEventListener("click", (event) => {
   const suggestion = event.target.closest("[data-search-suggestion]");
   if (!suggestion) return;
   globalSearch.value = suggestion.dataset.searchSuggestion;

@@ -8,7 +8,28 @@ function getBookingRows() {
 }
 const emptyState = document.querySelector("#empty-state");
 const toast = document.querySelector("#toast");
+const adminViews = [...document.querySelectorAll(".admin-view")];
 let toastTimer;
+
+function showAdminView() {
+  if (!adminViews.length) return;
+
+  const hash = window.location.hash.slice(1) || "overview";
+  const target = document.getElementById(hash);
+  const view = target?.closest(".admin-view") || adminViews.find((item) => item.id === hash);
+  if (!view) return;
+
+  adminViews.forEach((item) => { item.hidden = item !== view; });
+  document.querySelectorAll(".side-nav .nav-link").forEach((link) => {
+    link.classList.toggle("active", link.hash === `#${view.id}`);
+  });
+
+  const activeLink = document.querySelector(`.side-nav .nav-link[href="#${view.id}"]`);
+  const pageTitle = activeLink?.querySelector("span:not(.nav-count):not(.nav-dot)")?.textContent.trim()
+    || view.querySelector("h1")?.textContent.trim();
+  const breadcrumb = document.querySelector("#admin-page-title");
+  if (breadcrumb && pageTitle) breadcrumb.textContent = pageTitle;
+}
 
 function showToast(message) {
   toast.textContent = message;
@@ -40,11 +61,19 @@ sidebarBackdrop.addEventListener("click", () => closeSidebar(true));
 
 document.querySelectorAll(".side-nav .nav-link").forEach((link) => {
   link.addEventListener("click", () => {
-    document.querySelectorAll(".side-nav .nav-link").forEach((item) => item.classList.remove("active"));
-    link.classList.add("active");
+    if (adminViews.length) showAdminView();
+    else {
+      document.querySelectorAll(".side-nav .nav-link").forEach((item) => item.classList.remove("active"));
+      link.classList.add("active");
+    }
     closeSidebar(true);
   });
 });
+
+if (adminViews.length) {
+  window.addEventListener("hashchange", showAdminView);
+  showAdminView();
+}
 
 globalSearch.addEventListener("input", () => {
   const query = globalSearch.value.trim().toLocaleLowerCase();

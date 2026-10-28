@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=3" />
+    <link rel="stylesheet" href="styles.css?v=5" />
     <script src="theme.js?v=2"></script>
   </head>
   <body class="admin-locked">
@@ -57,6 +57,14 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 20v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V20M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM16 4.2a4 4 0 0 1 0 7.6M17 14.6a4 4 0 0 1 4 3.9V20" /></svg>
             <span>Needs attention</span>
           </a>
+          <a class="nav-link" href="#verification">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v13H4zM8 9h8M8 13h5" /></svg>
+            <span>Verification queue</span>
+          </a>
+          <a class="nav-link" href="#support-tickets">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 9 9 0 0 1-4-.9L3 20l1.8-4A7.2 7.2 0 0 1 4 12c0-4.1 3.6-7.5 8-7.5s8 3.1 8 7Z" /><path d="M8 12h.01M12 12h.01M16 12h.01" /></svg>
+            <span>Support tickets</span>
+          </a>
           <a class="nav-link" href="#services">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 5.2 5.7.8-4.1 4 .9 5.7-5-2.7-5 2.7.9-5.7-4.1-4 5.7-.8L12 3Z" /></svg>
             <span>Services</span>
@@ -95,12 +103,12 @@
       </aside>
       <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close navigation" hidden></button>
 
-      <main class="main-content" id="overview">
+      <main class="main-content">
         <header class="topbar">
           <button class="icon-button menu-toggle" id="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
           </button>
-          <div class="breadcrumbs"><span>Pages</span><span class="crumb-slash">/</span><strong>Overview</strong></div>
+          <div class="breadcrumbs"><span>Pages</span><span class="crumb-slash">/</span><strong id="admin-page-title">Overview</strong></div>
           <div class="topbar-actions">
             <label class="search-box">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
@@ -112,15 +120,16 @@
               <span class="notification-dot"></span>
             </button>
             <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to dark mode"><span data-theme-icon aria-hidden="true">☾</span></button>
-            <a class="student-profile-link" href="#admin-profile" aria-label="Go to administrator profile">EN</a>
+            <a class="student-profile-link" href="#overview" aria-label="Go to overview">EN</a>
           </div>
         </header>
 
         <div class="page-content">
+          <section class="admin-view" id="overview" aria-labelledby="overview-title">
           <section class="welcome-row">
             <div>
               <p class="eyebrow" id="admin-date">ADMINISTRATION <span class="demo-pill">LOADING LIVE DATA</span></p>
-              <h1>Good morning, Alex <span aria-hidden="true">✦</span></h1>
+              <h1 id="overview-title">Good morning, Alex <span aria-hidden="true">✦</span></h1>
               <p class="welcome-copy">Here’s what’s happening across your Skillmate community today.</p>
             </div>
             <button class="button button-primary" id="export-button" type="button">
@@ -156,8 +165,16 @@
             </article>
           </section>
 
-          <section class="content-grid">
-            <article class="panel performance-panel" id="performance">
+          <section class="admin-shortcuts" aria-label="Quick links">
+            <a class="admin-shortcut" href="#bookings"><strong>Bookings</strong><span>Review appointments and booking activity.</span><span class="text-link">Open bookings →</span></a>
+            <a class="admin-shortcut" href="#students"><strong>Needs attention</strong><span>Review verification requests and support tickets.</span><span class="text-link">Open tasks →</span></a>
+            <a class="admin-shortcut" href="#safety"><strong>Trust &amp; safety</strong><span>Monitor verification health and community reports.</span><span class="text-link">Open safety center →</span></a>
+          </section>
+          </section>
+
+          <section class="admin-view" id="performance" aria-labelledby="performance-title" hidden>
+            <div class="admin-page-heading"><p class="eyebrow">INSIGHTS</p><h1 id="performance-title">Analytics</h1><p>Track bookings and new student activity over time.</p></div>
+            <article class="panel performance-panel" id="performance-chart">
               <div class="panel-heading">
                 <div><h2>Marketplace activity</h2><p>Bookings and new students over time</p></div>
                 <label class="select-wrap">
@@ -193,8 +210,11 @@
                 </div>
               </div>
             </article>
+          </section>
 
-            <article class="panel attention-panel" id="students">
+          <section class="admin-view" id="students" aria-labelledby="students-title" hidden>
+            <div class="admin-page-heading"><p class="eyebrow">ADMINISTRATION</p><h1 id="students-title">Needs attention</h1><p>Review verification requests and student support tickets.</p></div>
+            <article class="panel attention-panel" id="attention-panel">
               <div class="panel-heading">
                 <div><h2>Needs your attention</h2><p>A few things to review</p></div>
                 <span class="attention-total">0</span>
@@ -220,8 +240,9 @@
             </article>
           </section>
 
-          <section class="content-grid lower-grid">
-            <article class="panel bookings-panel" id="bookings">
+          <section class="admin-view" id="bookings" aria-labelledby="bookings-title" hidden>
+            <div class="admin-page-heading"><p class="eyebrow">MARKETPLACE</p><h1 id="bookings-title">Bookings</h1><p>Review appointments and group booking activity.</p></div>
+            <article class="panel bookings-panel" id="booking-list">
               <div class="panel-heading">
                 <div><h2>Recent bookings</h2><p>Keep track of what’s happening</p></div>
                 <a class="text-link" href="#bookings">View all <span aria-hidden="true">→</span></a>
@@ -239,8 +260,11 @@
                 <p class="empty-state" id="empty-state" hidden>No bookings match your search.</p>
               </div>
             </article>
+          </section>
 
-            <article class="panel services-panel" id="services">
+          <section class="admin-view" id="services" aria-labelledby="services-title" hidden>
+            <div class="admin-page-heading"><p class="eyebrow">MARKETPLACE</p><h1 id="services-title">Services</h1><p>Explore active service categories across the community.</p></div>
+            <article class="panel services-panel" id="service-list">
               <div class="panel-heading">
                 <div><h2>Active service categories</h2><p>Current live listings</p></div>
               </div>
@@ -249,8 +273,9 @@
             </article>
           </section>
 
-          <section class="content-grid final-grid">
-            <article class="panel verification-panel" id="verification">
+          <section class="admin-view" id="verification" aria-labelledby="verification-title" hidden>
+            <div class="admin-page-heading"><p class="eyebrow">STUDENT TRUST</p><h1 id="verification-title">Verification queue</h1><p>Review student requests to verify their campus affiliation.</p></div>
+            <article class="panel verification-panel" id="verification-queue">
               <div class="panel-heading">
                 <div><h2>Verification queue</h2><p>Help keep the community trusted</p></div>
                 <span class="queue-count">12 pending</span>
@@ -258,7 +283,11 @@
               <p class="empty-state">No pending verification requests.</p>
               <a class="text-link" href="#verification">Verification queue <span aria-hidden="true">→</span></a>
             </article>
-            <article class="panel safety-panel" id="safety">
+          </section>
+
+          <section class="admin-view" id="safety" aria-labelledby="safety-title" hidden>
+            <div class="admin-page-heading"><p class="eyebrow">STUDENT TRUST</p><h1 id="safety-title">Trust &amp; safety</h1><p>Monitor verification health and review community reports.</p></div>
+            <article class="panel safety-panel" id="safety-panel">
               <div class="safety-heading">
                 <span class="safety-shield"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5.5c0 4.6-3.3 7.8-8 9.5-4.7-1.7-8-4.9-8-9.5V6l8-3Z" /><path d="m8.5 12 2.2 2.2 4.8-4.8" /></svg></span>
                 <span><h2>Community trust</h2><p>Monitor verification and safety reports</p></span>
@@ -271,24 +300,36 @@
             </article>
           </section>
 
-          <section class="panel" id="support-tickets" aria-labelledby="support-queue-title">
-            <div class="panel-heading"><div><h2 id="support-queue-title">Support tickets</h2><p>Review student requests and update their status.</p></div><button class="review-button" type="button" id="support-queue-refresh">Refresh tickets</button></div>
-            <p id="support-queue-status" role="status" aria-live="polite"></p>
-            <div id="support-ticket-rows"></div>
+          <section class="admin-view" id="support-tickets" aria-labelledby="support-title" hidden>
+            <div class="admin-page-heading"><p class="eyebrow">STUDENT SUPPORT</p><h1 id="support-title">Support tickets</h1><p>Review student requests and update their status.</p></div>
+            <section class="panel" id="support-queue" aria-labelledby="support-queue-title">
+              <div class="panel-heading"><div><h2 id="support-queue-title">Open support requests</h2><p>Manage reports submitted by students.</p></div><button class="review-button" type="button" id="support-queue-refresh">Refresh tickets</button></div>
+              <p id="support-queue-status" role="status" aria-live="polite"></p>
+              <div id="support-ticket-rows"></div>
+            </section>
           </section>
 
-          <footer class="page-footer" id="activity">
-            <span>© 2026 Skillmate. Built for student communities.</span>
-            <span id="system-status" data-status="checking"><i class="online-dot"></i><span>Checking system status…</span></span>
-          </footer>
+          <section class="admin-view" id="activity" aria-labelledby="activity-title" hidden>
+            <div class="admin-page-heading"><p class="eyebrow">SYSTEM</p><h1 id="activity-title">System status</h1><p>Current availability of Skillmate services.</p></div>
+            <section class="panel system-status-panel" aria-label="Current system status">
+              <div class="panel-heading"><div><h2>Service health</h2><p>Live checks update automatically every minute.</p></div></div>
+              <p class="system-status-message" id="system-status" data-status="checking"><i class="online-dot"></i><span>Checking system status…</span></p>
+              <div class="system-service-list">
+                <div><span>Authentication</span><strong id="auth-service-status">Checking…</strong></div>
+                <div><span>Database</span><strong id="database-service-status">Checking…</strong></div>
+                <div><span>Supabase configuration</span><strong id="configuration-service-status">Checking…</strong></div>
+              </div>
+            </section>
+            <footer class="page-footer"><span>© 2026 Skillmate. Built for student communities.</span></footer>
+          </section>
         </div>
       </main>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="script.js"></script>
+    <script src="script.js?v=2"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
     <script src="supabase-client.js?v=4"></script>
-    <script src="admin-auth.js?v=20261026-6"></script>
+    <script src="admin-auth.js?v=20261027-1"></script>
   </body>
 </html>

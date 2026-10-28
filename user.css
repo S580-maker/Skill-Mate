@@ -107,6 +107,10 @@ body.sidebar-open { overflow: hidden; }
 .search-suggestions { position: fixed; z-index: 102; top: 94px; right: 24px; left: 276px; max-height: min(48vh, 390px); overflow: auto; padding: 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 24px 70px color-mix(in srgb, var(--shadow-color) 22%, transparent); animation: search-suggestions-in .22s ease both; }
 .search-suggestions[hidden] { display: none; }
 .search-suggestions-heading { margin: 2px 9px 7px; color: var(--dark); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.search-popular-list { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 8px 8px; }
+.search-popular { min-height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; color: var(--dark); background: var(--surface); font: inherit; font-size: 12px; cursor: pointer; transition: border-color .16s, background-color .16s; }
+.search-popular:hover, .search-popular:focus-visible { outline: none; border-color: var(--main); background: var(--bg); }
+.search-suggestions-hint { margin: 7px 9px 3px; color: var(--muted); font-size: 12px; }
 .search-suggestion { display: flex; width: 100%; min-height: 54px; align-items: center; gap: 11px; padding: 8px 10px; border: 0; border-radius: 9px; color: var(--dark); background: transparent; text-align: left; cursor: pointer; transition: background-color .16s, transform .16s; }
 .search-suggestion:hover, .search-suggestion:focus-visible { transform: translateX(2px); outline: none; background: var(--bg); }
 .search-suggestion-icon { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border-radius: 9px; color: var(--main); background: var(--bg); font-size: 15px; }
@@ -130,6 +134,9 @@ body.sidebar-open { overflow: hidden; }
 .search-box > svg { width: 16px; flex: 0 0 16px; fill: none; stroke: var(--dark); stroke-linecap: round; stroke-width: 1.7; }
 .search-box input { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; color: var(--dark); background: transparent; font-size: 12px; }
 .search-box input::placeholder { color: var(--muted); }
+.search-clear { display: grid; width: 26px; height: 26px; flex: 0 0 26px; place-items: center; padding: 0; border: 0; border-radius: 50%; color: var(--muted); background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
+.search-clear:hover, .search-clear:focus-visible { outline: none; color: var(--dark); background: var(--bg); }
+.search-clear[hidden] { display: none; }
 .search-box kbd { white-space: nowrap; padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--dark); background: var(--surface); font-family: inherit; font-size: 12px; }
 .notification-button { position: relative; color: var(--dark); }
 .notification-dot { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border: 1.5px solid var(--border); border-radius: 50%; background: var(--main-soft); }
@@ -769,6 +776,11 @@ img[loading="lazy"] { background-color: var(--main-soft); }
   .card-message { display: none; }
   .subtle-button { font-size: 12px; }
   .safety-note small { line-height: 1.5; }
+}
+@media (max-width: 480px) {
+  .marketplace-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .provider-card-cover { height: 64px; }
+  .provider-card-body { padding: 12px; }
 }
 
 /* Keep supporting text comfortably readable without changing the layout scale. */

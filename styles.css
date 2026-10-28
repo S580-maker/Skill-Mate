@@ -508,9 +508,40 @@ button, a, input, select, textarea, .panel, .stat-card, .button, .theme-toggle {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
-#support-tickets { margin-top: 24px; padding: 20px; }
+#support-queue { padding: 20px; }
 .support-ticket-message { white-space: pre-wrap; overflow-wrap: anywhere; }
 #support-ticket-rows .report-actions { flex-wrap: wrap; gap: 8px; }
+
+.admin-view[hidden] { display: none !important; }
+.admin-page-heading { margin-bottom: 20px; }
+.admin-page-heading .eyebrow { margin-bottom: 5px; }
+.admin-page-heading > p:last-child { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+.admin-view > .panel { width: 100%; }
+.performance-panel { margin-bottom: 16px; }
+.admin-shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; margin-top: 20px; }
+.admin-shortcut { display: grid; min-height: 135px; align-content: start; gap: 8px; padding: 17px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); transition: border-color .16s, transform .16s; }
+.admin-shortcut:hover { border-color: var(--main); transform: translateY(-2px); }
+.admin-shortcut > strong { color: var(--dark); font-size: 14px; }
+.admin-shortcut > span:not(.text-link) { color: var(--muted); font-size: 12px; }
+.admin-shortcut .text-link { margin-top: auto; }
+.system-status-panel { padding: 20px; }
+.system-status-message { margin: 20px 0 14px; color: var(--dark); font-weight: 600; }
+.system-service-list { display: grid; gap: 0; }
+.system-service-list > div { display: flex; justify-content: space-between; gap: 15px; padding: 13px 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+.system-service-list strong { color: var(--dark); font-weight: 600; }
+.system-status-panel + .page-footer { margin-top: 22px; }
+@media (max-width: 760px) {
+  .admin-shortcuts { grid-template-columns: 1fr; }
+}
+@media (max-width: 360px) {
+  .topbar { padding-right: 10px; padding-left: 10px; }
+  .topbar-actions { gap: 4px; }
+  .student-profile-link { display: none; }
+}
+@media (max-width: 600px) {
+  .admin-view .bookings-panel { overflow-x: hidden; }
+  .admin-view .bookings-panel .table-wrap { min-width: 0; }
+}
 
 /* Shared admin readability and keyboard controls. */
 body { font-size: 14px; line-height: 1.5; }
