@@ -36,14 +36,16 @@ test("account modes switch visible fields, validation and the active accessible 
   context.setAuthMode("signup");
   assert.equal(context.document.body.dataset.authMode, "signup");
   assert.equal(get("#name-field").hidden, false);
-  assert.equal(get("#auth-student-id").required, true);
-  assert.equal(get("#auth-student-id").disabled, false);
+  assert.equal(get("#auth-university").required, true);
+  assert.equal(get("#auth-confirm-password").required, false);
+  assert.equal(get("#auth-confirm-password").disabled, true);
+  assert.equal(get("#consent-field").hidden, false);
   assert.equal(get("#auth-password").autocomplete, "new-password");
   assert.equal(get("#signup-tab").tabIndex, 0);
   assert.equal(get("#auth-form").attributes["aria-labelledby"], "signup-tab");
   context.setAuthMode("signin");
   assert.equal(get("#name-field").hidden, true);
-  assert.equal(get("#auth-student-id").disabled, true);
+  assert.equal(get("#consent-field").hidden, true);
   assert.equal(get("#auth-confirm-password").disabled, true);
   assert.equal(get("#auth-password").minLength, 0);
   assert.equal(get("#forgot-password-link").hidden, false);
@@ -52,6 +54,8 @@ test("account modes switch visible fields, validation and the active accessible 
   assert.equal(get("#auth-tabs").hidden, true);
   assert.equal(get("#auth-social-section").hidden, true);
   assert.equal(get("#consent-field").hidden, true);
+  assert.equal(get("#auth-confirm-password").required, true);
+  assert.equal(get("#auth-confirm-password").disabled, false);
   assert.equal(get("#auth-form").attributes["aria-labelledby"], "auth-title");
 });
 

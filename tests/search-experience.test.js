@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
 const smartSearch = require("../smart-search.js");
+const marketplace = require("../marketplace-utils.js");
 const read = file => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 
 test("marketplace search ranking prioritizes service names over provider details", () => {
@@ -34,7 +35,7 @@ test("search suggestions show popular starting points and ranked matching servic
       body: { classList: { contains: () => true } },
       querySelector: () => target,
     },
-    window: { skillmateSmartSearch: smartSearch },
+    window: { skillmateSmartSearch: smartSearch, skillmateMarketplace: marketplace },
     appSupabase: null,
     seedProviders: providers,
     state: { blocked: [] },
@@ -43,6 +44,7 @@ test("search suggestions show popular starting points and ranked matching servic
     getCategoryIcon: () => "•",
   };
   vm.createContext(context);
+  vm.runInContext(source.slice(source.indexOf("function marketplaceSearchScore"), source.indexOf("function renderMarketplace")), context);
   vm.runInContext(source.slice(start, end), context);
 
   context.renderSearchSuggestions();

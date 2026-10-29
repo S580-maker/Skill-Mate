@@ -6,8 +6,6 @@ const onboardingSubmitLabel = document.querySelector("#onboarding-submit-label")
 const onboardingSpinner = onboardingSubmit.querySelector(".auth-submit-spinner");
 const onboardingName = document.querySelector("#onboarding-name");
 const onboardingCampus = document.querySelector("#onboarding-campus");
-const onboardingStudentId = document.querySelector("#onboarding-student-id");
-const onboardingStudentIdField = document.querySelector("#onboarding-student-id-field");
 const onboardingPhoto = document.querySelector("#onboarding-photo");
 const avatarPreview = document.querySelector("#onboarding-avatar-preview");
 const avatarFallback = document.querySelector("#onboarding-avatar-fallback");
@@ -17,7 +15,6 @@ const selectedSkills = new Map();
 let currentUser = null;
 let existingAvatarUrl = "";
 let previewUrl = "";
-let requiresSocialOnboarding = false;
 
 function setOnboardingError(message) {
   onboardingMessage.textContent = message;
@@ -108,7 +105,6 @@ async function loadOnboarding() {
     return;
   }
   currentUser = sessionResult.data.session.user;
-  requiresSocialOnboarding = ["google", "apple"].includes(currentUser.app_metadata?.provider);
   const { data: profile, error } = await onboardingClient.from("profiles")
     .select("full_name, university, skills, avatar_url, onboarding_completed")
     .eq("id", currentUser.id)
@@ -118,16 +114,13 @@ async function loadOnboarding() {
     window.location.replace("index.html");
     return;
   }
-  if (requiresSocialOnboarding) {
-    const providerName = currentUser.app_metadata.provider === "apple" ? "Apple" : "Google";
-    onboardingStudentIdField.hidden = false;
-    onboardingStudentId.required = true;
+  if (!profile.university) {
     document.querySelector("#onboarding-skip").hidden = true;
     document.querySelector("#onboarding-skip-mobile").hidden = true;
     document.querySelector(".onboarding-card > .auth-intro").textContent =
-      `Your ${providerName} account is connected. Add your name, university or campus, and student ID number to finish creating your Skillmate profile. A profile photo and skills are optional.`;
+      "Choose your campus to find services nearby. Your name is filled in; photos and skills can wait.";
   }
-  onboardingName.value = getOAuthFullName(currentUser.user_metadata) || profile.full_name || currentUser.email?.split("@")[0] || "";
+  onboardingName.value = profile.full_name || getOAuthFullName(currentUser.user_metadata) || currentUser.email?.split("@")[0] || "";
   onboardingCampus.value = profile.university || "";
   existingAvatarUrl = profile.avatar_url || currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || "";
   if (existingAvatarUrl) {
@@ -151,9 +144,9 @@ async function loadOnboarding() {
 function getOAuthFullName(metadata = {}) {
   if (typeof metadata.full_name === "string" && metadata.full_name.trim()) return metadata.full_name.trim();
   if (typeof metadata.name === "string" && metadata.name.trim()) return metadata.name.trim();
-  const appleName = metadata.name && typeof metadata.name === "object" ? metadata.name : {};
-  const firstName = appleName.firstName || appleName.first_name || metadata.given_name || metadata.first_name || "";
-  const lastName = appleName.lastName || appleName.last_name || metadata.family_name || metadata.last_name || "";
+  const structuredName = metadata.name && typeof metadata.name === "object" ? metadata.name : {};
+  const firstName = structuredName.firstName || structuredName.first_name || metadata.given_name || metadata.first_name || "";
+  const lastName = structuredName.lastName || structuredName.last_name || metadata.family_name || metadata.last_name || "";
   return `${firstName} ${lastName}`.trim();
 }
 
@@ -162,16 +155,13 @@ async function saveOnboarding(skip = false) {
     setOnboardingError("Your session is unavailable. Sign in again before saving your profile.");
     return;
   }
-  if (requiresSocialOnboarding && skip) return;
-  if (requiresSocialOnboarding && onboardingStudentId.value.trim().length < 3) {
-    setOnboardingError("Enter a student ID number with at least 3 characters to finish creating your account.");
-    onboardingStudentId.focus();
+  if (skip && onboardingCampus.value.trim().length < 2) {
+    setOnboardingError("Choose your campus so we can show relevant services.");
+    onboardingCampus.focus();
     return;
   }
-  if (!skip && (!onboardingName.value.trim() || onboardingCampus.value.trim().length < 2)) {
-    setOnboardingError(requiresSocialOnboarding
-      ? "Enter your name and university or campus to finish creating your account."
-      : "Enter your name and university or campus, or skip this step for now.");
+  if (onboardingName.value.trim().length < 2 || onboardingCampus.value.trim().length < 2) {
+    setOnboardingError("Enter your name and university or campus to continue.");
     return;
   }
   onboardingSubmit.disabled = true;
@@ -196,23 +186,13 @@ async function saveOnboarding(skip = false) {
       const { data } = onboardingClient.storage.from("portfolio-images").getPublicUrl(imagePath);
       avatarUrl = data.publicUrl;
     }
-    const { error } = requiresSocialOnboarding
-      ? await onboardingClient.rpc("complete_social_onboarding", {
-        p_full_name: onboardingName.value.trim(),
-        p_university: onboardingCampus.value.trim(),
-        p_student_id_number: onboardingStudentId.value.trim(),
-        p_skills: [...selectedSkills.values()],
-        p_avatar_url: avatarUrl || null,
-      })
-      : await onboardingClient.from("profiles").update(skip
-        ? { onboarding_completed: true }
-        : {
-          full_name: onboardingName.value.trim(),
-          university: onboardingCampus.value.trim(),
-          skills: [...selectedSkills.values()],
-          avatar_url: avatarUrl || null,
-          onboarding_completed: true,
-        }).eq("id", currentUser.id);
+    const { error } = await onboardingClient.from("profiles").update({
+      full_name: onboardingName.value.trim(),
+      university: onboardingCampus.value.trim(),
+      skills: [...selectedSkills.values()],
+      avatar_url: avatarUrl || null,
+      onboarding_completed: true,
+    }).eq("id", currentUser.id);
     if (error) throw error;
     const { data: sessionData, error: sessionError } = await onboardingClient.auth.getSession();
     if (sessionError) throw sessionError;

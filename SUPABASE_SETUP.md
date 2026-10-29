@@ -98,9 +98,9 @@ Configure email/password sign-in and decide whether email confirmation is requir
 
 The repository includes Vercel configuration and does not include `.env` or local dependency files in Git. Changing Vercel environment variables requires a new deployment to take effect. Local development remains available with `npm start`.
 
-### Configure Google and Apple sign-in
+### Configure Google sign-in
 
-The login page uses Supabase Auth's browser OAuth redirect flow. The existing Google button is `#google-signin`; Apple is `#apple-signin`. OAuth provider credentials stay in Supabase and are never added to `.env` or browser code.
+The app supports email/password and Google. Configure Google in Supabase; provider secrets never belong in browser code.
 
 **Google (manual console setup)**
 
@@ -110,44 +110,13 @@ The login page uses Supabase Auth's browser OAuth redirect flow. The existing Go
 4. In **Authorized redirect URIs**, add the exact callback URL shown on the Supabase Google provider setup page. For the standard Supabase domain it is `https://<project-ref>.supabase.co/auth/v1/callback`. This is Supabase's callback, not the Skillmate URL.
 5. In Supabase **Authentication → Sign In / Providers → Google**, enable Google and paste the Google OAuth client ID and client secret. Skillmate asks Google to show an account chooser on each Google sign-in attempt.
 
-**Apple (manual Apple Developer and Supabase setup; requires Apple Developer Program membership)**
+In Supabase Authentication > URL Configuration, allow the exact local and production callback URLs for index.html and admin.html. The protected admin route still checks the account role after sign-in.
 
-1. In Apple Developer **Certificates, Identifiers & Profiles → Identifiers**, create a primary **App ID** for your app and enable the **Sign in with Apple** capability.
-2. Create a **Services ID** for web sign-in. Enable **Sign in with Apple**, associate it with the primary App ID, and configure its web domain and return URL. In **Domains and Subdomains**, enter your Supabase project host (`<project-ref>.supabase.co`, without `https://` or a path). In **Return URLs**, enter the exact callback shown in Supabase's Apple provider settings (standard format: `https://<project-ref>.supabase.co/auth/v1/callback`).
-3. In Apple Developer **Keys**, create a key with **Sign in with Apple** enabled and associate it with the primary App ID. Download its `.p8` private key once and store it securely.
-4. In Supabase **Authentication → Sign In / Providers → Apple**, enable Apple. Enter the Services ID as the provider client ID and configure the Apple client-secret JWT. Generate/sign that JWT using the Apple Team ID, Key ID, and `.p8` private key, following the fields/instructions shown in the Supabase provider form.
-5. In Supabase **Authentication → URL Configuration → Redirect URLs**, allow `http://localhost:3000/index.html`, `http://localhost:3000/admin.html`, `https://skillmate-six.vercel.app/index.html`, and `https://skillmate-six.vercel.app/admin.html`. Replace the example production host with your actual Vercel domain. Set the Site URL to that production origin.
+New Google users confirm their name and campus during onboarding. A photo, skills and student ID are optional; student IDs remain private and do not automatically verify an account. Email sign-up collects name and campus once and skips duplicate onboarding.
 
-Apple's web OAuth flow does **not** return a user's full name. Apple exposes the name only on the first authorization through its native/Sign in with Apple JS flows; this web redirect implementation cannot capture that one-time value. Skillmate therefore asks new social-login users to enter or confirm their name in the existing onboarding form and saves it to `profiles.full_name`. Apple's private-relay addresses are kept as Supabase returns them; the app does not validate or rewrite them as university emails.
+For existing projects, apply the profile onboarding and identity migrations in the order listed in the migrations directory. Run supabase/apply_settings_support.sql to repair settings, support, storage and atomic student-profile saving together. New projects use supabase/schema.sql.
 
-For web-based Apple OAuth, schedule a reminder to rotate the Apple client-secret JWT every six months using the same `.p8` key, Team ID, Key ID, and Services ID. Keep the `.p8` key private.
-
-This is a browser web app, so Google and Apple use full-page redirects; no iOS/Android URL schemes or deep links are needed. Supabase returns users to the allowed `redirectTo` page after OAuth. If the user starts from **Admin dashboard**, the app returns to the protected admin route; admin role checks still apply.
-
-The app reads its Supabase project URL and public anon/publishable key from server environment configuration. The local `.env` format is:
-
-```dotenv
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
-```
-
-Set the same two values in Vercel **Project Settings → Environment Variables** for the environments you deploy. Never use a service-role key here. For exact provider behavior, see the Supabase guides for [Google](https://supabase.com/docs/guides/auth/social-sign-in/auth-google) and [Apple](https://supabase.com/docs/guides/auth/social-sign-in/auth-apple).
-
-**Session helpers available to existing UI code**
-
-The Supabase client restores its persisted session on page load. `window.skillmateSession` exposes the current session, and the `skillmate:auth-state-change` event reports changes. Call `await window.skillmateRestoreSession()` to read the restored session, or `await window.skillmateSignOut()` to sign out and clear the secure server cookie.
-
-**Common OAuth errors**
-
-- `redirect_uri_mismatch`: the Google/Apple console callback must exactly match Supabase's callback URL. Separately, add the Skillmate return page (`localhost` or your Vercel domain) to Supabase's redirect allow list.
-- `invalid_client`: check that the provider is enabled and its client ID/secret belongs to the same Google/Apple project and Supabase provider configuration.
-- Google selects the wrong account: sign out of Skillmate, then choose the intended Google account in the Google account chooser. The email typed into Skillmate's email/password field does not choose the Google identity.
-- Apple name is blank: expected for web OAuth. Apple does not return a full name through this redirect flow; ask the user to enter it in onboarding. A returning Apple user will not resend first-authorization details.
-- Apple relay email: `privaterelay.appleid.com` addresses are valid Apple relay addresses and are stored as returned; do not reject or rewrite them.
-
-On existing projects, apply `supabase/migrations/20261025_profile_onboarding.sql`, `supabase/migrations/20261025120000_social_onboarding.sql`, and `supabase/migrations/20261025230000_profile_identity_completion.sql` once each in that order. The first migration adds the profile `skills` and `onboarding_completed` columns and updates the new-user trigger for OAuth accounts. The second securely saves student IDs during social onboarding. The third enables existing users with missing university or student ID details to complete them from their dashboard; IDs remain private in `student_identifiers`. New Google and Apple accounts must enter their name, university or campus, and student ID number before continuing; photo and skills are optional. New projects include the functions in `supabase/schema.sql`.
-
-The Terms and Privacy pages are marked **Draft, pending review** and contain placeholders. Replace and approve their text before publishing them as final policies.
+The Terms and Privacy pages are drafts that require your review before publishing them as final policies.
 
 ## 6. Promote the first administrator
 

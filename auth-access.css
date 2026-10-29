@@ -64,7 +64,7 @@
 .auth-access .auth-submit:hover { background: var(--auth-action-hover); }
 .auth-divider { display: flex; align-items: center; gap: 14px; margin: 22px 0 16px; color: var(--muted); font-size: 11px; }
 .auth-divider::before, .auth-divider::after { height: 1px; flex: 1; background: var(--border); content: ""; }
-.auth-social-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.auth-social-buttons { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .auth-access .auth-google { min-height: 46px; margin: 0; gap: 9px; border-radius: 10px; font-size: 13px; font-weight: 500; }
 .auth-access .auth-note { margin-top: 20px; color: var(--muted); font-size: 11px; line-height: 1.75; text-align: center; }
 .auth-access .auth-footer { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 16px; color: var(--border); font-size: 10px; }
@@ -110,4 +110,23 @@
   .campus-skill { animation: campus-card-appear 400ms ease-out both; }
   .campus-skill-study { animation-delay: 80ms; }
   @keyframes campus-card-appear { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+}
+
+.auth-about { position: relative; font-size: 12px; letter-spacing: 0; }
+.auth-about summary { min-height: 36px; color: var(--main); cursor: pointer; }
+.auth-about p { position: absolute; z-index: 5; top: 100%; right: 0; width: min(300px, calc(100vw - 40px)); margin: 0; padding: 18px; border: 1px solid var(--border); border-radius: 12px; color: var(--dark); background: var(--surface); font-size: 14px; line-height: 1.7; box-shadow: 0 8px 24px #0f172a12; }
+.auth-access [hidden] { display: none !important; }
+.auth-access #auth-form .auth-consent { font-size: 12px !important; }
+.auth-access .auth-password-toggle { min-width: 48px; min-height: 44px; font-size: 12px; }
+@media (max-width: 760px) {
+  .auth-access .auth-showcase { padding: 20px; }
+  .auth-access .showcase-copy { padding-top: 18px; }
+  .auth-access .showcase-copy h1 { margin-bottom: 0; font-size: 27px; }
+  .auth-access .auth-panel { padding: 24px 20px max(28px, env(safe-area-inset-bottom)); }
+  .auth-access .auth-access-top { display: flex; justify-content: flex-start; margin-bottom: 12px; }
+  .auth-access .auth-access-top > span { display: none; }
+  .auth-about p { right: auto; left: 0; }
+  .auth-access .auth-intro { margin-bottom: 18px; }
+  .auth-access .auth-tabs { margin-bottom: 20px; }
+  .auth-access .auth-card h2 { font-size: 28px; }
 }

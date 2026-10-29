@@ -177,7 +177,7 @@
     byId("price-type").value = service?.priceType || "fixed";
     byId("estimate").value = service?.estimatedDelivery || "";
     byId("group").checked = Boolean(service?.groups);
-    byId("options").open = false;
+    byId("options").open = true;
     byId("modal-title").textContent = service ? "Edit your service" : "Add a service";
     setReview(false, false);
     updateHints();

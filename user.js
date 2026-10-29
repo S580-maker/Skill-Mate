@@ -108,6 +108,8 @@ let selectedCategory = "All";
 let activeConversationId = null;
 let restoreConversationOnMessagesOpen = false;
 let activeBookingFilter = "all";
+let bookingDirection = "made";
+let groupProviderFilter = null;
 let pendingReplyId = null;
 let messageMetadataAvailable = null;
 let messageMetadataWarningShown = false;
@@ -474,6 +476,7 @@ async function retryQueuedMessages() {
 }
 
 function loadState() {
+  if (window.skillmateSupabase) return { ...structuredClone(defaultState), bookings: [], services: [], groups: [], saved: [], blocked: [], reviews: [], portfolio: [], messages: [] };
   try {
     const saved = localStorage.getItem(storageKey);
     if (!saved) return structuredClone(defaultState);
@@ -889,10 +892,13 @@ function renderServiceCategories() {
   const strip = document.querySelector("#category-strip");
   const currentCategory = serviceCategories.includes(selectedCategory) ? selectedCategory : "All";
   selectedCategory = currentCategory;
-  strip.innerHTML = ["All", ...serviceCategories].map((category) => `
+  const popular = window.skillmateMarketplace.popularCategories;
+  const categoryButton = (category) => `
     <button class="category-chip ${category === currentCategory ? "selected" : ""}" data-category="${escapeHTML(category)}" type="button" aria-pressed="${category === currentCategory}">
-      ${getCategoryIcon(category)} <span>${category === "All" ? "Everything" : escapeHTML(category)}</span>
-    </button>`).join("");
+      <span aria-hidden="true">${getCategoryIcon(category)}</span> <span>${category === "All" ? "All services" : escapeHTML(category)}</span>
+    </button>`;
+  strip.innerHTML = popular.map(categoryButton).join("") + `<button class="category-chip more-categories ${popular.includes(currentCategory) ? "" : "selected"}" type="button" data-open="category-modal" aria-haspopup="dialog" aria-controls="category-modal">${popular.includes(currentCategory) ? "More" : escapeHTML(currentCategory)} <span aria-hidden="true">＋</span></button>`;
+  document.querySelector("#all-categories").innerHTML = ["All", ...serviceCategories.filter(category => !Object.values(window.skillmateMarketplace.categoryFamilies).some(family => family.slice(1).includes(category)))].map(categoryButton).join("");
 
   const select = document.querySelector("#service-category");
   const selectedValue = serviceCategories.includes(select.value) ? select.value : serviceCategories[0];
@@ -906,8 +912,8 @@ function renderServiceCategories() {
 }
 function providerReviewSummary(provider) {
   const reviews = state.reviews.filter((review) => review.providerId === provider.id);
-  const totalReviews = provider.reviews + reviews.length;
-  const totalRating = provider.rating * provider.reviews + reviews.reduce((sum, review) => sum + review.rating, 0);
+  const totalReviews = (appSupabase ? 0 : Number(provider.reviews) || 0) + reviews.length;
+  const totalRating = (appSupabase ? 0 : provider.rating * provider.reviews) + reviews.reduce((sum, review) => sum + Number(review.rating), 0);
   return { rating: totalReviews ? (totalRating / totalReviews).toFixed(1) : "New", count: totalReviews };
 }
 function marketplaceSearchScore(provider, query) {
@@ -924,13 +930,30 @@ function marketplaceSearchScore(provider, query) {
     return score + normalizedQuery.split(" ").filter((term) => text.split(" ").some((word) => word.startsWith(term))).length * weight;
   }, 0);
 }
+function providerAvatarMarkup(provider) {
+  const image = window.skillmateMarketplace.safeImageUrl(provider.avatarUrl);
+  return `<span class="provider-avatar avatar-${escapeHTML(provider.color)}"><span>${escapeHTML(provider.initials)}</span>${image ? `<img src="${escapeHTML(image)}" alt="" loading="lazy" decoding="async" />` : ""}</span>`;
+}
+function listingImage(provider) {
+  const work = (provider.portfolio || []).find(item => typeof item === "object" && item.image);
+  return window.skillmateMarketplace.safeImageUrl(serviceCoverUrl(provider) || work?.image);
+}
+function marketplaceEntries(providers) {
+  return appSupabase ? window.skillmateMarketplace.expandListings(providers, connectedServices) : providers;
+}
 function renderMarketplace(targetId = "marketplace-grid", providers = appSupabase ? connectedProviders : seedProviders) {
   const target = document.getElementById(targetId);
   if (!target) return;
-  const query = document.querySelector("#global-search").value.trim();
-  const matching = providers.filter((provider) => {
+  if (appSupabase && !dashboardDataLoaded && targetId === "marketplace-grid") {
+    target.setAttribute("aria-busy", "true");
+    target.innerHTML = '<div class="marketplace-loading" role="status"><span class="loading-spinner" aria-hidden="true"></span> Finding services on your campus…</div>';
+    return;
+  }
+  target.removeAttribute("aria-busy");
+  const query = targetId === "saved-grid" ? "" : document.querySelector("#global-search").value.trim();
+  const matching = marketplaceEntries(providers).filter((provider) => {
     if (state.blocked.includes(provider.id)) return false;
-    if (selectedCategory !== "All" && provider.category !== selectedCategory) return false;
+    if (targetId !== "saved-grid" && !window.skillmateMarketplace.matchesCategory(provider.category, selectedCategory)) return false;
     return window.skillmateSmartSearch.matches(provider, query);
   });
   const visible = query
@@ -939,6 +962,8 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
     })
     : matching;
   if (targetId === "marketplace-grid") {
+    document.querySelector("#marketplace-result-count").textContent = `${visible.length} ${visible.length === 1 ? "service" : "services"}`;
+    document.querySelector("#marketplace-heading").textContent = query ? "Search results" : selectedCategory === "All" ? "Services on your campus" : selectedCategory;
     const status = document.querySelector("#search-status");
     status.hidden = !query;
     status.textContent = query
@@ -947,14 +972,15 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   }
   target.innerHTML = visible.length ? visible.map((provider) => `
     <article class="provider-card">
-      <div class="provider-card-cover cover-${escapeHTML(provider.color)}">${serviceCoverUrl(provider) ? `<img class="service-marketplace-cover" src="${escapeHTML(serviceCoverUrl(provider))}" alt="" loading="lazy" />` : `<span class="cover-symbol">${getCategoryIcon(provider.category)}</span>`}${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
+      <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><button class="listing-cover-button" type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="View ${escapeHTML(provider.service)}"><span class="cover-fallback"><span aria-hidden="true">${getCategoryIcon(provider.category)}</span><strong>${escapeHTML(provider.category)}</strong><small>Skills from your campus</small></span>${listingImage(provider) ? `<img class="service-marketplace-cover" src="${escapeHTML(listingImage(provider))}" alt="${escapeHTML(provider.service)}" loading="lazy" decoding="async" />` : ""}</button>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-pressed="${state.saved.includes(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
       <div class="provider-card-body">
-        <div class="provider-card-person"><span class="provider-avatar avatar-${escapeHTML(provider.color)}">${escapeHTML(provider.initials)}</span>        <span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? '<i class="verified-dot">✓</i> Campus verified' : escapeHTML(provider.campus)}</small></span><span class="rating">★ ${providerReviewSummary(provider).rating}<small> (${providerReviewSummary(provider).count})</small></span></div>
-        <p class="service-category">${escapeHTML(provider.category)}</p><h3>${escapeHTML(provider.service)}</h3><p class="provider-description">${escapeHTML(provider.description)}</p><p class="service-delivery-label">${escapeHTML(serviceDetailLabel(provider))}</p>
-        <div class="provider-card-footer"><span class="price">${servicePriceLabel(provider)}</span>${provider.id === appUser?.id ? "" : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" aria-label="Message ${escapeHTML(provider.name)}">▤</button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}">Request booking</button></span>`}</div>
-        ${provider.id === appUser?.id ? "" : `<div class="provider-card-tools"><button type="button" data-profile="${escapeHTML(provider.id)}">View provider details <span aria-hidden="true">→</span></button></div>`}
+        <div class="listing-category-row"><p class="service-category">${escapeHTML(provider.category)}</p><span class="rating">${providerReviewSummary(provider).count ? `★ ${providerReviewSummary(provider).rating}<small> (${providerReviewSummary(provider).count})</small>` : "New provider"}</span></div>
+        <h3><button type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">${escapeHTML(provider.service)}</button></h3><p class="provider-description">${escapeHTML(provider.description)}</p>
+        <div class="provider-card-person">${providerAvatarMarkup(provider)}<span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? '<i class="verified-dot">✓</i> Campus verified' : escapeHTML(provider.campus)}</small></span></div>
+        ${serviceDetailLabel(provider) ? `<p class="service-delivery-label">${escapeHTML(serviceDetailLabel(provider))}</p>` : ""}
+        <div class="provider-card-footer"><span class="price"><small>${provider.priceType === "starting" ? "Starting at" : "Listed price"}</small>${currency(provider.price)}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">Request booking</button></span>`}</div>
       </div>
-    </article>`).join("") : `<div class="empty-card"><span>⌕</span><strong>No services found</strong><small>Try another search or choose a different category.</small></div>`;
+    </article>`).join("") : `<div class="empty-card"><span aria-hidden="true">⌕</span><strong>${targetId === "saved-grid" ? "Your shortlist starts here" : "No services found"}</strong><small>${targetId === "saved-grid" ? "Tap the heart on a service to save its provider for later." : "Try another skill or browse all categories."}</small><button class="button button-outline" type="button" ${targetId === "saved-grid" ? 'data-page-link="home"' : 'data-clear-search'}>Explore services</button></div>`;
 }
 function renderSearchSuggestions() {
   const target = document.querySelector("#search-suggestions");
@@ -978,9 +1004,9 @@ function renderSearchSuggestions() {
   }
 
   const providers = appSupabase ? connectedProviders : seedProviders;
-  const matches = providers
+  const matches = marketplaceEntries(providers)
     .filter((provider) => !state.blocked.includes(provider.id)
-      && (selectedCategory === "All" || provider.category === selectedCategory)
+      && window.skillmateMarketplace.matchesCategory(provider.category, selectedCategory)
       && window.skillmateSmartSearch.matches(provider, query))
     .sort((left, right) => marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query))
     .slice(0, 6);
@@ -997,13 +1023,15 @@ function renderSearchSuggestions() {
 }
 function renderGroups() {
   const target = document.querySelector("#group-grid");
-  const groups = state.groups.filter((group) => ["Open", "Full"].includes(group.status) && !state.blocked.includes(group.providerId));
+  const groups = state.groups.filter((group) => ["Open", "Full"].includes(group.status) && !state.blocked.includes(group.providerId)
+    && (!groupProviderFilter || group.providerId === groupProviderFilter)
+    && group.date >= localDateInputValue());
   target.innerHTML = groups.length ? groups.map((group) => {
     const provider = getProvider(group.providerId);
     const joined = appSupabase ? Boolean(group.joinedByMe) : state.joinedGroups.includes(group.id);
     const full = group.joined >= group.capacity;
     const percent = Math.min(100, group.joined / group.capacity * 100);
-    return `<article class="group-card"><div class="group-card-heading"><span class="group-icon">${getCategoryIcon(provider?.category || "Other")}</span><span class="group-open">${full ? "Almost full" : "Open to join"}</span></div><h3>${escapeHTML(group.title)}</h3><p>${escapeHTML(group.service)} <span>· hosted by ${escapeHTML(group.host)}</span></p><div class="group-date">◷ ${formatDate(group.date)}</div><div class="group-progress"><span style="width:${percent}%"></span></div><div class="group-seats"><span>${group.joined} of ${group.capacity} students joined</span><strong>${currency(group.price)} <small>/ person</small></strong></div><button class="button ${joined ? "button-joined" : "button-outline"} group-join" type="button" data-join-group="${escapeHTML(group.id)}" ${full && !joined ? "disabled" : ""}>${joined ? "✓ You’re in — leave group" : full ? "Group is full" : "Join group · save together"}</button><button class="group-message-link" type="button" data-message="${escapeHTML(group.providerId)}">Ask ${escapeHTML(provider?.name || "provider")} a question</button></article>`;
+    return `<article class="group-card"><div class="group-card-heading"><span class="group-icon">${getCategoryIcon(provider?.category || "Other")}</span><span class="group-open">${full ? "Full" : "Open to join"}</span></div><h3>${escapeHTML(group.title)}</h3><p>${escapeHTML(group.service)} <span>· hosted by ${escapeHTML(group.host)}</span></p><div class="group-date">◷ ${formatDate(group.date)}</div><div class="group-progress"><span style="width:${percent}%"></span></div><div class="group-seats"><span>${group.joined} of ${group.capacity} students joined</span><strong>${currency(group.price)} <small>/ person</small></strong></div><button class="button ${joined ? "button-joined" : "button-outline"} group-join" type="button" data-join-group="${escapeHTML(group.id)}" ${full && !joined ? "disabled" : ""}>${joined ? "✓ You’re in — leave group" : full ? "Group is full" : "Join group"}</button><button class="group-message-link" type="button" data-message="${escapeHTML(group.providerId)}">Ask ${escapeHTML(provider?.name || "provider")} a question</button></article>`;
   }).join("") : '<div class="empty-card"><strong>No open groups yet</strong><small>Start one and invite students on your campus.</small></div>';
 }
 function formatDate(dateString) {
@@ -1033,17 +1061,18 @@ function parseLocalAppointment(dateValue, timeValue) {
 function renderBookingList(targetId, list, options = {}) {
   const target = document.getElementById(targetId);
   if (!target) return;
+  if (options.provider) list = window.skillmateMarketplace.filterBookings(list, { direction: "received", ownId: ownProviderId() });
   target.innerHTML = list.length ? list.map((booking) => {
     const provider = getProvider(booking.providerId);
     const status = booking.status;
     const providerView = options.provider || isOwnBooking(booking);
     const actions = providerView
-      ? `${booking.status === "Pending" ? `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button><button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : booking.status === "Confirmed" ? `<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : `<span class="status status-${status.toLowerCase()}">${escapeHTML(status)}</span>`}<button class="subtle-button" data-message="customer:${escapeHTML(booking.id)}">Message student</button>`
-      : `${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-outline" data-review="${escapeHTML(booking.id)}">Leave a review</button>` : `<span class="status status-${status.toLowerCase()}">${escapeHTML(status)}</span>`}${!booking.groupId && ["Pending", "Confirmed"].includes(status) ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
+      ? `${booking.status === "Pending" ? `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button><button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : booking.status === "Confirmed" ? `<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : ""}<button class="subtle-button" data-message="customer:${escapeHTML(booking.id)}">Message student</button>`
+      : `${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-outline" data-review="${escapeHTML(booking.id)}">Leave a review</button>` : ""}${!booking.groupId && ["Pending", "Confirmed"].includes(status) ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
     const location = status === "Confirmed" && booking.otherLocation
       ? `<div class="booking-location"><strong>${providerView ? "Customer" : "Provider"}’s hostel or campus: ${escapeHTML(booking.otherLocation)}</strong><small>Shared for this confirmed booking. Approximate distance isn’t available without map pins.</small></div>`
       : "";
-    return `<article class="booking-card"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${booking.note ? `<small class="booking-note">“${escapeHTML(booking.note)}”</small>` : ""}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
+    return `<article class="booking-card"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span><span class="status status-${escapeHTML(status.toLowerCase())}">${escapeHTML(status === "Pending" ? providerView ? "Needs your reply" : "Awaiting confirmation" : status)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${booking.note ? `<small class="booking-note">“${escapeHTML(booking.note)}”</small>` : ""}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
   }).join("") : '<div class="empty-card"><span>◷</span><strong>Nothing here just yet</strong><small>Your bookings and requests will appear here.</small></div>';
 }
 function resizeChatInput(input) {
@@ -1093,6 +1122,9 @@ function renderConversations(options = {}) {
   const messageCountBadge = document.querySelector("#message-count");
   messageCountBadge.textContent = String(totalUnread);
   messageCountBadge.classList.toggle("has-unread", totalUnread > 0);
+  const mobileBadge = document.querySelector("#mobile-message-count");
+  mobileBadge.textContent = totalUnread > 99 ? "99+" : String(totalUnread);
+  mobileBadge.hidden = totalUnread === 0;
   target.replaceChildren();
   const matching = conversations.filter((chat) => {
     const provider = getProvider(chat.providerId);
@@ -1440,12 +1472,9 @@ function renderEarnings() {
   renderBookingList("earnings-list", completed, { provider: true });
 }
 function bookingsForActiveFilter() {
-  return state.bookings.filter((booking) => {
-    if (activeBookingFilter === "upcoming") return ["Confirmed", "Pending"].includes(booking.status);
-    if (activeBookingFilter === "requests") return booking.status === "Pending";
-    if (activeBookingFilter === "completed") return booking.status === "Completed";
-    return true;
-  });
+  const bookings = window.skillmateMarketplace.filterBookings(state.bookings, { direction: bookingDirection, filter: activeBookingFilter, ownId: ownProviderId() });
+  document.querySelector("#all-booking-count").textContent = String(state.bookings.filter(booking => isOwnBooking(booking) === (bookingDirection === "received")).length);
+  return bookings;
 }
 function renderBookingActivity() {
   renderBookingList("user-booking-list", bookingsForActiveFilter());
@@ -1458,7 +1487,6 @@ function renderBookingActivity() {
   document.querySelector("#booking-count").textContent = String(
     state.bookings.filter((booking) => !["Declined", "Cancelled", "Completed"].includes(booking.status)).length,
   );
-  document.querySelector("#all-booking-count").textContent = String(state.bookings.length);
   document.querySelector("#provider-request-count").textContent = String(
     state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Pending").length,
   );
@@ -1473,18 +1501,17 @@ function renderAll() {
     day: "numeric",
     year: "numeric",
   }).format(new Date()).toUpperCase();
-  document.querySelector("#provider-setup-banner").hidden = state.services.length > 0;
+  syncSellerNavigation();
   renderMarketplace();
   renderGroups();
   renderBookingList("user-booking-list", bookingsForActiveFilter());
   renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true });
   renderListings();
   renderPortfolio();
-  renderConversations();
+  renderConversations({ preserveChatState: true });
   renderEarnings();
   const count = state.bookings.filter((booking) => !["Declined", "Cancelled", "Completed"].includes(booking.status)).length;
   document.querySelector("#booking-count").textContent = count;
-  document.querySelector("#all-booking-count").textContent = state.bookings.length;
   document.querySelector("#provider-request-count").textContent = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Pending").length;
   document.querySelector("#active-listings-count").textContent = state.services.filter((service) => service.active).length;
   const verified = state.profile.verified;
@@ -1501,7 +1528,6 @@ function renderAll() {
   ratingStat.querySelector("strong").textContent = `${ownRating} ★`;
   ratingStat.querySelector("small").textContent = `From ${appSupabase ? ownReviews.length : 23 + ownReviews.length} student reviews`;
   if (appUser) {
-    document.querySelector("#view-home h1").innerHTML = `Welcome, ${escapeHTML(state.profile.name)} <span aria-hidden="true">✦</span>`;
     document.querySelector(".campus-card strong").textContent = state.profile.university || "University not set";
     document.querySelector(".campus-card small").textContent = state.profile.course || "STUDENT ACCOUNT";
     const providerHeading = document.querySelector(".provider-profile-main");
@@ -1604,7 +1630,7 @@ async function loadSupabaseState() {
     appSupabase.from("user_blocks").select("blocked_id").eq("blocker_id", appUser.id),
     appSupabase.from("reviews").select("booking_id, provider_id, rating, body, created_at"),
     appSupabase.from("portfolio_items").select("*").eq("provider_id", appUser.id).order("created_at", { ascending: false }),
-    appSupabase.from("portfolio_items").select("provider_id, title").order("created_at", { ascending: false }),
+    appSupabase.from("portfolio_items").select("provider_id, title, description, image_path").order("created_at", { ascending: false }),
     conversationDirectoryRequest,
     appSupabase.from("verification_requests").select("id, status").eq("student_id", appUser.id).eq("status", "open").maybeSingle(),
     groupedMessagesRequest,
@@ -1645,7 +1671,7 @@ async function loadSupabaseState() {
   const providerMap = new Map();
   for (const row of directory.data || []) {
     if (!providerMap.has(row.provider_id)) providerMap.set(row.provider_id, {
-      id: row.provider_id, name: row.full_name, initials: initialsFor(row.full_name), campus: row.university || "Campus not set",
+      id: row.provider_id, name: row.full_name, initials: initialsFor(row.full_name), avatarUrl: row.avatar_url || "", campus: row.university || "Campus not set",
       course: row.course || "Student", category: row.category, service: row.service_title,
       description: row.service_description, price: Number(row.price), currency: row.currency,
       rating: 0, reviews: 0, bookings: 0, color: "blue", verified: row.campus_verified,
@@ -1655,7 +1681,7 @@ async function loadSupabaseState() {
   const ownActiveService = (ownServices.data || []).find((service) => service.is_active);
   if (ownActiveService && !providerMap.has(appUser.id)) {
     providerMap.set(appUser.id, {
-      id: appUser.id, name: profile.full_name, initials: initialsFor(profile.full_name),
+      id: appUser.id, name: profile.full_name, initials: initialsFor(profile.full_name), avatarUrl: profile.avatar_url || "",
       campus: profile.university || "Campus not set", course: profile.course || "Student",
       category: ownActiveService.category, service: ownActiveService.title,
       description: ownActiveService.description, price: Number(ownActiveService.price),
@@ -1667,7 +1693,10 @@ async function loadSupabaseState() {
   connectedProviders = [...providerMap.values()];
   for (const item of portfolioDirectory.data || []) {
     const provider = providerMap.get(item.provider_id);
-    if (provider) provider.portfolio.push(item.title);
+    if (provider) provider.portfolio.push({
+      title: item.title, description: item.description || "",
+      image: item.image_path ? appSupabase.storage.from("portfolio-images").getPublicUrl(item.image_path).data.publicUrl : "",
+    });
   }
   state.bookings = (bookings.data || []).map((booking) => {
     const otherUserId = booking.customer_id === appUser.id ? booking.provider_id : booking.customer_id;
@@ -1676,7 +1705,7 @@ async function loadSupabaseState() {
       id: booking.id, providerId: booking.provider_id, customerId: booking.customer_id,
       customer: booking.customer_name || "Student", service: booking.service_title || "Service",
       category: booking.category || "Other", price: Number(booking.agreed_price),
-      currency: booking.currency, date: booking.scheduled_at.slice(0, 10),
+      currency: booking.currency, scheduledAt: booking.scheduled_at, date: localDateInputValue(new Date(booking.scheduled_at)),
       time: new Date(booking.scheduled_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       status, otherLocation: status === "Confirmed"
         ? (userLocations.data || []).find((item) => item.user_id === otherUserId)?.location_name || ""
@@ -1753,7 +1782,7 @@ async function refreshLiveBookings() {
       id: booking.id, providerId: booking.provider_id, customerId: booking.customer_id,
       customer: booking.customer_name || "Student", service: booking.service_title || "Service",
       category: booking.category || "Other", price: Number(booking.agreed_price),
-      currency: booking.currency, date: booking.scheduled_at.slice(0, 10),
+      currency: booking.currency, scheduledAt: booking.scheduled_at, date: localDateInputValue(new Date(booking.scheduled_at)),
       time: new Date(booking.scheduled_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       status, otherLocation: status === "Confirmed"
         ? (userLocations.data || []).find((item) => item.user_id === otherUserId)?.location_name || ""
@@ -1905,42 +1934,29 @@ function showConnectedApp() {
   status.classList.add("is-exiting");
   window.setTimeout(() => { status.hidden = true; }, 250);
 }
+function syncSellerNavigation() {
+  const isSeller = state.services.length > 0;
+  document.querySelectorAll('[data-seller-only], .side-nav [data-page="provider"], .side-nav [data-page="earnings"]').forEach(element => { element.hidden = !isSeller; });
+  document.querySelector("#mode-switch-label").textContent = isSeller ? "Manage my services" : "Offer a service";
+  document.querySelector("#seller-entry-title").textContent = isSeller ? "Your skills, your business." : "Good at something?";
+  document.querySelector("#seller-entry-description").textContent = isSeller ? "Manage your listings, requests and completed jobs." : "Create a listing and help someone on campus.";
+}
 function initializeDashboard() {
-  const modeSwitch = document.querySelector("#mode-switch");
-  const syncModeSwitchLabel = () => {
-    const offering = modeSwitch.getAttribute("aria-pressed") === "true";
-    const label = offering ? "Switch to finding services" : "Switch to offering services";
-    modeSwitch.setAttribute("aria-label", label);
-    modeSwitch.title = label;
-  };
   const accountStatus = document.querySelector(".demo-pill");
   accountStatus.textContent = appSupabase ? "ONLINE" : "DEMO · LOCAL DATA";
-  accountStatus.classList.toggle("account-online", Boolean(appSupabase));
+  accountStatus.hidden = Boolean(appSupabase);
   document.querySelector("#signout-button").hidden = !appSupabase;
   if (!appSupabase) {
     state.profile.verified = false;
-    seedProviders.forEach((provider) => { provider.verified = false; });
+    seedProviders.forEach(provider => { provider.verified = false; });
     document.querySelector("#safety-modal .modal-footnote").textContent = "Demo reports remain in this browser and are not sent to a safety team.";
   }
   populateServiceSelects();
   updateGroupPrice();
   renderAll();
   const pageFromHash = window.location.hash.slice(1);
-  const requestedPage = ["home", "bookings", "messages", "saved", "provider", "earnings", "profile-settings", "help-support"].includes(pageFromHash)
-    ? pageFromHash
-    : state.activePage;
-  if (requestedPage && requestedPage !== "home") showPage(requestedPage);
-  if (state.mode === "offer") {
-    modeSwitch.setAttribute("aria-pressed", "true");
-    document.querySelector("#mode-switch-label").textContent = "Find services";
-    document.querySelector("#mode-switch-short").textContent = "Find";
-    document.querySelector("#mode-heading").textContent = "Need a hand with something on campus?";
-    document.querySelector("#mode-description").textContent = "Browse student services, compare prices, and find someone to help.";
-    document.querySelector("#banner-mode-button").textContent = "Browse services →";
-    showPage("provider");
-  }
-  syncModeSwitchLabel();
-  modeSwitch.addEventListener("click", () => window.setTimeout(syncModeSwitchLabel, 0));
+  const requestedPage = ["home", "bookings", "messages", "saved", "provider", "earnings", "profile-settings", "help-support"].includes(pageFromHash) ? pageFromHash : "home";
+  showPage(requestedPage);
 }
 async function bootstrapStudentApp() {
   if (!appSupabase) {
@@ -1973,6 +1989,13 @@ async function bootstrapStudentApp() {
   }
   const { data: profile, error: profileError } = await loadAccountProfile(data.session.user.id);
   if (profileError) throw profileError;
+  // Email sign-up already collected these details; do not ask for them again.
+  if (!profile.onboarding_completed && data.session.user.app_metadata?.provider === "email"
+    && profile.full_name?.trim().length >= 2 && profile.university?.trim().length >= 2) {
+    const { error: completionError } = await appSupabase.from("profiles").update({ onboarding_completed: true }).eq("id", data.session.user.id);
+    if (completionError) throw completionError;
+    profile.onboarding_completed = true;
+  }
   if (!profile.onboarding_completed) {
     window.location.replace("onboarding.html");
     return;
@@ -2027,13 +2050,14 @@ async function bootstrapStudentApp() {
     document.querySelector(".campus-card small").textContent = state.profile.course || "Student account";
   } catch (refreshError) {
     dashboardDataLoaded = true;
+    renderMarketplace();
     console.error("Could not refresh Skillmate account data.", refreshError);
     showToast("Some account data could not be refreshed. Your cached conversations are still available.", "error");
   }
   document.querySelector("#booking-count").textContent = String(
     state.bookings.filter((booking) => !["Declined", "Cancelled", "Completed"].includes(booking.status)).length,
   );
-  document.querySelector("#message-count").textContent = String(state.messages.length);
+  renderConversations({ preserveChatState: true });
   if (window.location.hash === "#profile") {
     openStudentProfileEditor();
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
@@ -2054,11 +2078,13 @@ async function bootstrapStudentApp() {
   }
 }
 function showPage(page) {
+  if (page === "profile") page = "profile-settings";
   const view = document.querySelector(`[data-view="${page}"]`);
   if (!view) return;
+  document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
   const pageHash = `#${page}`;
   if (window.location.hash !== pageHash) {
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${pageHash}`);
+    window.history.pushState(null, "", `${window.location.pathname}${window.location.search}${pageHash}`);
   }
   if (page === "messages") {
     restoreConversationOnMessagesOpen = true;
@@ -2069,10 +2095,22 @@ function showPage(page) {
   if (page === "messages") startMessagePolling();
   else stopMessagePolling();
   document.querySelectorAll(".view").forEach((element) => element.classList.toggle("active-view", element === view));
-  document.querySelectorAll(".nav-link[data-page]").forEach((element) => element.classList.toggle("active", element.dataset.page === page));
+  document.querySelectorAll(".nav-link[data-page]").forEach((element) => {
+    element.classList.toggle("active", element.dataset.page === page);
+    if (element.dataset.page === page) element.setAttribute("aria-current", "page");
+    else element.removeAttribute("aria-current");
+  });
+  const mobilePage = ["home", "bookings", "messages"].includes(page) ? page : "profile-settings";
+  document.querySelectorAll(".mobile-nav [data-page-link]").forEach(element => {
+    if (element.dataset.pageLink === mobilePage) element.setAttribute("aria-current", "page");
+    else element.removeAttribute("aria-current");
+  });
+  document.body.classList.remove("search-open");
+  globalSearch.setAttribute("aria-expanded", "false");
+  document.querySelector("#search-suggestions").hidden = true;
   document.querySelector("#breadcrumb-title").textContent = {
     home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers",
-    provider: "My services", earnings: "Earnings", "profile-settings": "Profile & Settings",
+    provider: "My services", earnings: "Estimated earnings", "profile-settings": "Your profile",
     "help-support": "Help & Support",
   }[page];
   closeSidebar(sidebar.contains(document.activeElement));
@@ -2086,52 +2124,75 @@ function showPage(page) {
   }
   if (page === "provider") { renderListings(); renderPortfolio(); renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true }); }
   if (page === "earnings") renderEarnings();
+  if (page === "bookings") renderBookingList("user-booking-list", bookingsForActiveFilter());
   window.scrollTo({ top: 0, behavior: "auto" });
   if (appSupabase && appUser && ["home", "bookings", "messages", "provider", "earnings"].includes(page)) {
     refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate activity for this page.", error));
   }
 }
-function openBooking(providerId) {
+function openBooking(providerId, serviceId) {
   const provider = getProvider(providerId);
   const services = providerServices(providerId);
   if (!provider || !services.length) { showToast("This provider hasn’t listed an active service yet."); return; }
   document.querySelector("#booking-provider-id").value = providerId;
   document.querySelector("#booking-description").textContent = `Choose a service from ${provider.name}. You can confirm the details together in messages.`;
   document.querySelector("#booking-service").innerHTML = services.map((service) => `<option value="${escapeHTML(service.id)}">${escapeHTML(service.title)} · ${servicePriceLabel(service)}</option>`).join("");
+  if (serviceId && services.some(service => service.id === serviceId)) document.querySelector("#booking-service").value = serviceId;
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   document.querySelector("#booking-date").min = localDateInputValue();
   document.querySelector("#booking-date").value = localDateInputValue(tomorrow);
+  document.querySelector("#booking-time").value = "10:00";
+  document.querySelector("#booking-note").value = "";
+  updateBookingSummary();
   openModal("booking-modal");
 }
-function openProviderProfile(providerId) {
+function updateBookingSummary() {
+  const providerId = document.querySelector("#booking-provider-id").value;
+  const service = providerServices(providerId).find(item => item.id === document.querySelector("#booking-service").value);
+  if (!service) return;
+  document.querySelector("#booking-price-label").textContent = service.priceType === "starting" ? "Starting price" : "Listed price";
+  document.querySelector("#booking-price").textContent = currency(service.price);
+  document.querySelector("#booking-price-detail").textContent = [serviceDetailLabel(service), service.priceType === "starting" ? "The final price depends on the work agreed with your provider." : "For the scope described in this listing."].filter(Boolean).join(" · ");
+}
+document.querySelector("#booking-service").addEventListener("change", updateBookingSummary);
+function openProviderProfile(providerId, serviceId) {
   const provider = getProvider(providerId);
   if (!provider) return;
   const rating = providerReviewSummary(provider);
   const services = providerServices(providerId);
+  const selectedService = services.find(service => service.id === serviceId) || services[0];
   const profile = document.querySelector("#provider-detail-content");
   profile.innerHTML = `
     <div class="detail-profile-heading">
-      <span class="provider-avatar avatar-${escapeHTML(provider.color)}">${escapeHTML(provider.initials)}</span>
+      ${providerAvatarMarkup(provider)}
       <div><span class="verified-pill">${provider.verified ? "✓ Campus verified" : "Campus verification pending"}</span><h2>${escapeHTML(provider.name)}</h2><p>${escapeHTML(provider.course)} · ${escapeHTML(provider.campus)}</p></div>
     </div>
     <div class="detail-rating"><strong>★ ${escapeHTML(rating.rating)}</strong><span>${rating.count} student reviews</span></div>
     <section class="detail-section"><h3>Services</h3>${services.map((service) => `<div class="detail-service"><span><strong>${escapeHTML(service.title)}</strong><small>${escapeHTML(service.category)} · ${servicePriceLabel(service)}</small><small>${escapeHTML(serviceDetailLabel(service))}</small></span>${service.groups ? '<span class="detail-group-tag">Group bookings welcome</span>' : ""}</div>`).join("")}</section>
     <section class="detail-section"><h3>About</h3><p>${escapeHTML(provider.description)}</p><div class="detail-facts"><span>Availability</span><strong>${escapeHTML(provider.available)}</strong><span>Completed bookings</span><strong>${provider.bookings}</strong></div></section>
-    <section class="detail-section"><h3>Portfolio highlights</h3><div class="detail-portfolio">${(provider.portfolio || []).map((item) => `<span>${escapeHTML(item)}</span>`).join("")}</div></section>`;
-  document.querySelector("#provider-detail-title").textContent = provider.service;
+    <section class="detail-section"><h3>Work &amp; portfolio</h3><div class="detail-portfolio">${(provider.portfolio || []).map(item => {
+      const work = typeof item === "string" ? { title: item } : item;
+      const image = window.skillmateMarketplace.safeImageUrl(work.image);
+      return `<figure>${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(work.title)}" loading="lazy" decoding="async" />` : `<div class="portfolio-placeholder" aria-hidden="true">${getCategoryIcon(provider.category)}</div>`}<figcaption><strong>${escapeHTML(work.title)}</strong>${work.description ? `<p>${escapeHTML(work.description)}</p>` : ""}</figcaption></figure>`;
+    }).join("") || '<p class="detail-empty">No work samples added yet. Ask the provider about their experience.</p>'}</div></section>
+    ${services.some(service => service.groups) ? `<section class="detail-section group-detail-callout"><div><h3>Need help as a group?</h3><p>This provider welcomes group requests.</p></div><button class="button button-outline" type="button" data-open="groups-modal" data-group-provider="${escapeHTML(providerId)}">Book with friends</button></section>` : ""}`;
+  document.querySelector("#provider-detail-title").textContent = selectedService?.title || provider.service;
   document.querySelector("#provider-detail-book").dataset.book = providerId;
+  document.querySelector("#provider-detail-book").dataset.service = selectedService?.id || "";
   document.querySelector("#provider-detail-message").dataset.message = providerId;
+  document.querySelector("#provider-detail-message").dataset.service = selectedService?.id || "";
   document.querySelector("#provider-detail-report").dataset.report = providerId;
   openModal("provider-detail-modal");
 }
-function openMessage(providerId, messageFor = "provider") {
+function openMessage(providerId, messageFor = "provider", serviceId) {
   const provider = providerId.startsWith("customer:") ? getProvider(providerId) : getProvider(providerId);
   if (!provider || state.blocked.includes(providerId)) { showToast("You can’t message this student."); return; }
+  const service = serviceId && providerServices(providerId).find(item => item.id === serviceId);
   document.querySelector("#message-provider-id").value = providerId;
   document.querySelector("#message-modal-title").textContent = `Message ${provider.name}`;
   document.querySelector("#message-modal-description").textContent = messageFor === "customer"
     ? `Coordinate your appointment for ${provider.service || "your booking"}.`
-    : `Ask about ${provider.service || "their services"} or find a time that works.`;
+    : `Ask about ${service?.title || provider.service || "their services"} or find a time that works.`;
   document.querySelector("#message-first-text").value = "";
   openModal("message-modal");
 }
@@ -2209,13 +2270,23 @@ document.querySelectorAll(".nav-link[data-page]").forEach((link) => link.addEven
   event.preventDefault();
   showPage(link.dataset.page);
 }));
-document.querySelectorAll("[data-page-link]").forEach((button) => button.addEventListener("click", () => showPage(button.dataset.pageLink)));
+document.addEventListener("click", event => {
+  const link = event.target.closest("[data-page-link]");
+  if (!link) return;
+  event.preventDefault();
+  showPage(link.dataset.pageLink);
+});
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-open]");
   if (!button) return;
   const modalId = button.dataset.open;
+  if (modalId === "profile-modal") { openStudentProfileEditor(); return; }
   if (modalId === "service-modal") window.skillmateServiceEditor.prepare();
   if (modalId === "blocked-modal") renderBlocked();
+  if (modalId === "groups-modal") {
+    groupProviderFilter = button.dataset.groupProvider || null;
+    renderGroups();
+  }
   if (modalId === "report-modal") {
     document.querySelector("#report-provider-id").value = "";
     document.querySelector("#report-target").value = "";
@@ -2226,6 +2297,10 @@ document.addEventListener("click", (event) => {
     document.querySelector("#report-block").checked = false;
   }
   if (modalId === "group-modal") {
+    if (groupProviderFilter) {
+      const service = providerServices(groupProviderFilter).find(item => item.groups);
+      if (service) document.querySelector("#group-service").value = appSupabase ? service.id : groupProviderFilter;
+    }
     const date = document.querySelector("#group-date");
     const today = localDateInputValue();
     date.min = today;
@@ -2247,17 +2322,38 @@ document.querySelectorAll("[data-close]").forEach((button) => button.addEventLis
 document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("click", (event) => {
   if (event.target === dialog) dialog.close();
 }));
-document.querySelector("#category-strip").addEventListener("click", (event) => {
+document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-category]");
   if (!button) return;
   selectedCategory = button.dataset.category;
-  document.querySelectorAll(".category-chip").forEach((chip) => {
-    const selected = chip.dataset.category === selectedCategory;
-    chip.classList.toggle("selected", selected);
-    chip.setAttribute("aria-pressed", String(selected));
-  });
+  const fromDialog = document.querySelector("#category-modal").open;
+  document.querySelector("#category-modal").close();
+  renderServiceCategories();
+  if (fromDialog) (document.querySelector(`.category-strip [data-category="${CSS.escape(selectedCategory)}"]`) || document.querySelector(".more-categories")).focus({ preventScroll: true });
   renderMarketplace();
   renderSearchSuggestions();
+});
+document.addEventListener("click", event => {
+  if (!event.target.closest("[data-clear-search]")) return;
+  globalSearch.value = "";
+  selectedCategory = "All";
+  searchClear.hidden = true;
+  renderServiceCategories();
+  renderMarketplace();
+  renderSearchSuggestions();
+});
+document.addEventListener("error", event => {
+  if (event.target instanceof HTMLImageElement && event.target.closest(".provider-card, .detail-portfolio, .detail-profile-heading")) event.target.hidden = true;
+}, true);
+document.querySelector(".booking-directions").addEventListener("click", event => {
+  const button = event.target.closest("[data-booking-direction]");
+  if (!button) return;
+  bookingDirection = button.dataset.bookingDirection;
+  document.querySelectorAll("[data-booking-direction]").forEach(item => {
+    item.classList.toggle("active", item === button);
+    item.setAttribute("aria-pressed", String(item === button));
+  });
+  renderBookingList("user-booking-list", bookingsForActiveFilter());
 });
 document.querySelector("#global-search").addEventListener("input", () => {
   document.querySelector("#search-clear").hidden = !globalSearch.value;
@@ -2275,20 +2371,13 @@ document.querySelector("#global-search").addEventListener("input", () => {
 const globalSearch = document.querySelector("#global-search");
 const searchSuggestions = document.querySelector("#search-suggestions");
 const searchClear = document.querySelector("#search-clear");
+window.addEventListener("popstate", () => showPage(window.location.hash.slice(1) || "home"));
+window.addEventListener("hashchange", () => {
+  const page = window.location.hash.slice(1) || "home";
+  if (page !== state.activePage) showPage(page);
+});
+if (navigator.platform?.toLowerCase().includes("mac")) document.querySelector(".search-box kbd").textContent = "⌘ K";
 const mobileHeader = document.querySelector(".topbar");
-let previousScrollY = window.scrollY;
-window.addEventListener("scroll", () => {
-  const currentScrollY = window.scrollY;
-  if (window.innerWidth > 768 || document.activeElement === globalSearch) {
-    mobileHeader.classList.remove("is-hidden");
-    previousScrollY = currentScrollY;
-    return;
-  }
-  const scrollDelta = currentScrollY - previousScrollY;
-  if (Math.abs(scrollDelta) < 8) return;
-  mobileHeader.classList.toggle("is-hidden", currentScrollY > 80 && scrollDelta > 0);
-  previousScrollY = currentScrollY;
-}, { passive: true });
 globalSearch.addEventListener("focus", () => {
   mobileHeader.classList.remove("is-hidden");
   document.body.classList.add("search-open");
@@ -2298,7 +2387,7 @@ globalSearch.addEventListener("focus", () => {
 });
 globalSearch.addEventListener("blur", () => {
   window.setTimeout(() => {
-    if (searchSuggestions.contains(document.activeElement)) return;
+    if (document.activeElement === globalSearch || document.activeElement === searchClear || searchSuggestions.contains(document.activeElement)) return;
     document.body.classList.remove("search-open");
     globalSearch.setAttribute("aria-expanded", "false");
     renderSearchSuggestions();
@@ -2307,6 +2396,7 @@ globalSearch.addEventListener("blur", () => {
 globalSearch.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     event.preventDefault();
+    event.stopPropagation();
     if (globalSearch.value) {
       globalSearch.value = "";
       globalSearch.dispatchEvent(new Event("input", { bubbles: true }));
@@ -2362,36 +2452,30 @@ menuToggle.addEventListener("click", () => {
 });
 sidebarBackdrop.addEventListener("click", () => closeSidebar(true));
 document.querySelector("#mode-switch").addEventListener("click", () => {
-  state.mode = state.mode === "find" ? "offer" : "find";
-  saveState();
-  const offer = state.mode === "offer";
-  document.querySelector("#mode-switch").setAttribute("aria-pressed", String(offer));
-  document.querySelector("#mode-switch-label").textContent = offer ? "Find services" : "Earn with skills";
-  document.querySelector("#mode-switch-short").textContent = offer ? "Find" : "Earn";
-  document.querySelector("#mode-switch").setAttribute("aria-label", offer ? "Switch to finding services" : "Switch to offering services");
-  document.querySelector("#mode-heading").textContent = offer ? "Need a hand with something on campus?" : "Good at something? Make it your side hustle.";
-  document.querySelector("#mode-description").textContent = offer ? "Browse student services, compare prices, and find someone to help." : "Create a profile, list your service, and accept bookings from other students.";
-  document.querySelector("#banner-mode-button").textContent = offer ? "Browse services →" : "Set up your profile →";
-  showPage(offer ? "provider" : "home");
+  if (state.services.length) showPage("provider");
+  else {
+    window.skillmateServiceEditor.prepare();
+    openModal("service-modal");
+  }
 });
-document.querySelector("#banner-mode-button").addEventListener("click", () => showPage(state.mode === "offer" ? "home" : "provider"));
+
 document.querySelector("#marketplace-grid").addEventListener("click", handleCardAction);
 document.querySelector("#saved-grid").addEventListener("click", handleCardAction);
 document.querySelector("#provider-detail-modal").addEventListener("click", (event) => {
   const button = event.target.closest("[data-book], [data-message], [data-report]");
   if (!button) return;
-  if (button.dataset.book) { document.querySelector("#provider-detail-modal").close(); openBooking(button.dataset.book); }
-  if (button.dataset.message) { document.querySelector("#provider-detail-modal").close(); openMessage(button.dataset.message); }
+  if (button.dataset.book) { document.querySelector("#provider-detail-modal").close(); openBooking(button.dataset.book, button.dataset.service); }
+  if (button.dataset.message) { document.querySelector("#provider-detail-modal").close(); openMessage(button.dataset.message, "provider", button.dataset.service); }
   if (button.dataset.report) openReport(button.dataset.report);
 });
 function handleCardAction(event) {
   const button = event.target.closest("button");
   if (!button) return;
-  if (button.dataset.book) openBooking(button.dataset.book);
-  if (button.dataset.message) openMessage(button.dataset.message);
+  if (button.dataset.book) openBooking(button.dataset.book, button.dataset.service);
+  if (button.dataset.message) openMessage(button.dataset.message, "provider", button.dataset.service);
   if (button.dataset.report) openReport(button.dataset.report);
   if (button.dataset.profile) {
-    openProviderProfile(button.dataset.profile);
+    openProviderProfile(button.dataset.profile, button.dataset.service);
   }
   if (button.dataset.save) {
     const id = button.dataset.save;
@@ -2846,6 +2930,23 @@ document.querySelector("#listing-list").addEventListener("click", (event) => {
     showToast(service.active ? "Service is active." : "Service paused. It won’t appear in search.");
   }
 });
+async function persistStudentProfileDetails(details) {
+  const result = await appSupabase.rpc("save_student_profile", {
+    p_full_name: details.name, p_university: details.university, p_bio: details.bio,
+    p_location: details.location, p_student_id_number: details.studentIdNumber,
+  });
+  if (result.error?.code !== "PGRST202") return result;
+  // A legacy deployment may save a bio/name edit without touching private identity.
+  // Refuse multi-part edits until the atomic profile function is available.
+  if (details.university !== state.profile.university
+    || details.location !== (state.profile.location || "")
+    || (details.studentIdNumber && details.studentIdNumber !== (state.profile.studentIdNumber || ""))) {
+    const error = new Error("Student details are temporarily unavailable. Your changes have not been saved.");
+    error.userMessage = error.message;
+    throw error;
+  }
+  return appSupabase.from("profiles").update({ full_name: details.name, bio: details.bio }).eq("id", appUser.id);
+}
 document.querySelector("#profile-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const name = document.querySelector("#profile-name").value.trim();
@@ -2854,32 +2955,34 @@ document.querySelector("#profile-form").addEventListener("submit", (event) => {
   const bio = document.querySelector("#profile-bio").value.trim();
   const email = document.querySelector("#profile-email").value.trim();
   const location = document.querySelector("#profile-location").value.trim();
+  if (name.length < 2 || university.length < 2 || (studentIdNumber && studentIdNumber.length < 3)) {
+    showToast("Enter your name and campus. A student ID is optional, with at least 3 characters if provided.", "error");
+    return;
+  }
   if (appSupabase) {
     runAction(async () => {
-      const { error } = await appSupabase.from("profiles").update({ full_name: name, bio }).eq("id", appUser.id);
+      const { error } = await persistStudentProfileDetails({ name, university, bio, location, studentIdNumber });
       if (error) throw error;
-      if (!state.profile.identityComplete) {
-        const { error: identityError } = await appSupabase.rpc("complete_profile_identity", {
-          p_university: university,
-          p_student_id_number: studentIdNumber,
-        });
-        if (identityError) throw identityError;
-      }
-      const locationResult = location
-        ? await appSupabase.from("user_locations").upsert({ user_id: appUser.id, location_name: location })
-        : await appSupabase.from("user_locations").delete().eq("user_id", appUser.id);
-      if (locationResult.error) throw locationResult.error;
+      if (university !== state.profile.university) state.profile.verified = false;
+      Object.assign(state.profile, { name, university, bio, location });
+      if (studentIdNumber) state.profile.studentIdNumber = studentIdNumber;
+      state.profile.identityComplete = Boolean(name && university && state.profile.studentIdNumber);
       const emailChanged = email && email !== appUser.email;
+      let emailError = null;
       if (emailChanged) {
-        const { error: emailError } = await appSupabase.auth.updateUser({ email });
-        if (emailError) throw emailError;
+        try { ({ error: emailError } = await appSupabase.auth.updateUser({ email })); }
+        catch (error) { emailError = error; }
       }
-      await refreshSupabaseState();
+      let refreshFailed = false;
+      try { await refreshSupabaseState(); }
+      catch (error) { refreshFailed = true; console.error("Profile saved, but refresh failed.", error); }
       renderAll();
+      loadAccountSettings();
       event.target.closest("dialog").close();
-      showToast(emailChanged
-        ? "Profile updated. Confirm the email change using the link sent to your new address."
-        : "Your student profile has been updated.");
+      showToast(emailError ? "Your profile was saved, but the email change could not be requested. Try changing the email again."
+        : refreshFailed ? "Your profile was saved. Reload to refresh the latest account details."
+          : emailChanged ? "Profile updated. Confirm the email change using the link sent to your new address."
+            : "Your student profile has been updated.", emailError || refreshFailed ? "error" : "success");
     }, "Could not update your profile.");
     return;
   }
@@ -2899,16 +3002,16 @@ function openStudentProfileEditor() {
   document.querySelector("#profile-name").value = state.profile.name;
   document.querySelector("#profile-university").value = state.profile.university || "";
   document.querySelector("#profile-student-id").value = state.profile.studentIdNumber || "";
-  document.querySelector("#profile-university-field").hidden = state.profile.identityComplete;
+  document.querySelector("#profile-university-field").hidden = false;
   document.querySelector("#profile-student-id-field").hidden = state.profile.identityComplete;
-  document.querySelector("#profile-university").required = !state.profile.identityComplete;
-  document.querySelector("#profile-student-id").required = !state.profile.identityComplete;
+  document.querySelector("#profile-university").required = true;
+  document.querySelector("#profile-student-id").required = false;
   document.querySelector("#profile-bio").value = state.profile.bio;
   document.querySelector("#profile-email").value = state.profile.email;
   document.querySelector("#profile-location").value = state.profile.location || "";
   openModal("profile-modal");
 }
-document.querySelector("#profile-menu").addEventListener("click", openStudentProfileEditor);
+document.querySelector("#profile-menu").addEventListener("click", () => showPage("profile-settings"));
 function loadAccountSettings() {
   document.querySelector("#settings-full-name").value = state.profile.name || "";
   document.querySelector("#settings-email").value = appUser?.email || "";
@@ -3210,11 +3313,7 @@ document.querySelector("#delete-account-form").addEventListener("submit", (event
     button.textContent = "Permanently delete account";
   });
 });
-document.querySelector("#student-profile-link").addEventListener("click", (event) => {
-  event.preventDefault();
-  openStudentProfileEditor();
-});
-document.addEventListener("skillmate:edit-profile", openStudentProfileEditor);
+window.addEventListener("skillmate:edit-profile", openStudentProfileEditor);
 document.querySelector("#verification-open").addEventListener("click", () => {
   if (appSupabase && document.querySelector("#verification-open").dataset.requested === "open") {
     showToast("Your campus verification request is waiting for review.");
@@ -3493,14 +3592,14 @@ document.querySelector("#provider-booking-list").addEventListener("click", (even
   if (appSupabase) {
     runAction(async () => {
       await persistBookingStatus(booking.id, button.dataset.decision);
-      showToast(button.dataset.decision === "Confirmed" ? "Booking accepted. The student can see the confirmation." : "Booking request declined.");
+      showToast(button.dataset.decision === "Confirmed" ? "Booking accepted. The student can see the confirmation." : button.dataset.decision === "Completed" ? "Booking marked as completed." : "Booking request declined.");
     }, "Could not update this booking.");
     return;
   }
   booking.status = button.dataset.decision;
   saveState();
   renderAll();
-  showToast(booking.status === "Confirmed" ? "Booking accepted. Your student can see the confirmation." : "Booking request declined.");
+  showToast(booking.status === "Confirmed" ? "Booking accepted. Your student can see the confirmation." : booking.status === "Completed" ? "Booking marked as completed." : "Booking request declined.");
 });
 document.querySelector("#earnings-list").addEventListener("click", (event) => {
   const messageButton = event.target.closest("[data-message]");
@@ -3551,7 +3650,7 @@ document.querySelector("#signout-button").addEventListener("click", () => {
   }, "Could not sign out.");
 });
 document.addEventListener("keydown", (event) => {
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); document.querySelector("#global-search").focus(); }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); if (state.activePage !== "home") showPage("home"); globalSearch.focus(); }
   if (event.key === "Escape" && document.body.classList.contains("search-open")) {
     event.preventDefault();
     globalSearch.blur();

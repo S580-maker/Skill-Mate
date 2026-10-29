@@ -37,10 +37,10 @@ function friendlyAuthError(error, mode) {
     return "Your sign-in session expired. Please sign in again.";
   }
   if (message.includes("redirect_uri_mismatch")) {
-    return "The provider redirect URL does not match its console settings. Add Supabase’s exact callback URL in Google Cloud or Apple Developer.";
+    return "Social sign-in is temporarily unavailable. Try signing in with email.";
   }
   if (code === "invalid_client" || message.includes("invalid_client")) {
-    return "The Google or Apple client ID/secret is invalid. Check the provider credentials in Supabase.";
+    return "Social sign-in is temporarily unavailable. Try signing in with email.";
   }
   if (code === "email_not_confirmed" || message.includes("email not confirmed")) {
     return "Please confirm your email using the link we sent before signing in.";
@@ -100,20 +100,18 @@ function setAuthMode(mode) {
   document.querySelector("#signup-tab").setAttribute("aria-selected", String(signup));
   document.querySelector("#name-field").hidden = !signup;
   document.querySelector("#university-field").hidden = !signup;
-  document.querySelector("#student-id-field").hidden = !signup;
   document.querySelector("#auth-name").required = signup;
   document.querySelector("#auth-university").required = signup;
-  document.querySelector("#auth-student-id").required = signup;
-  for (const id of ["auth-name", "auth-university", "auth-student-id", "auth-confirm-password"]) {
+  for (const id of ["auth-name", "auth-university"]) {
     document.getElementById(id).disabled = !signup;
   }
-  document.querySelector("#confirm-password-field").hidden = !signup;
-  confirmPasswordInput.required = signup;
+  document.querySelector("#confirm-password-field").hidden = !recovery;
+  confirmPasswordInput.required = recovery;
+  confirmPasswordInput.disabled = !recovery;
   if (!signup) confirmPasswordInput.value = "";
   document.querySelector("#auth-consent").required = signup;
-  document.querySelector("#consent-field").hidden = recovery;
+  document.querySelector("#consent-field").hidden = !signup;
   document.querySelector("#google-signin").hidden = recovery;
-  document.querySelector("#apple-signin").hidden = recovery;
   document.querySelector("#auth-social-section").hidden = recovery;
   document.querySelector("#forgot-password-link").hidden = !signin;
   document.querySelector("#password-hint").hidden = signin;
@@ -124,13 +122,13 @@ function setAuthMode(mode) {
   document.querySelector("#auth-intro").textContent = recovery
     ? "Enter a new password for your Skillmate account."
     : signup
-    ? "Find help, share your skills, and make campus life a little easier. Your student ID stays private."
+    ? "Just the basics. You can add a photo and verify your student status later."
     : "Your campus community is one sign-in away.";
   document.querySelector("#auth-submit-label").textContent = signup ? "Create account" : recovery ? "Save new password" : "Sign in";
   document.querySelector("#return-to-signin").hidden = !recovery;
   passwordInput.placeholder = signin ? "Enter your password" : "At least 8 characters";
   document.querySelector("#auth-note").textContent = signup
-    ? "We will send a confirmation link to your email. Use an address you can access."
+    ? "Use an email address you can access. You may be asked to confirm it."
     : recovery ? "Choose a password you have not used on another account."
     : "A space to find help, offer your skills, and get things done.";
   updatePasswordHint();
@@ -171,11 +169,12 @@ confirmPasswordVisibility.addEventListener("click", () => {
     "confirm password",
   );
 });
-async function signInWithSocialProvider(provider, button) {
+async function signInWithGoogle(button) {
   if (!authClient || authSubmitting) return;
   const consent = document.querySelector("#auth-consent");
   if (!consent.checked) {
-    authMessage.textContent = `Agree to the Terms and Privacy Policy before continuing with ${provider === "apple" ? "Apple" : "Google"}.`;
+    document.querySelector("#consent-field").hidden = false;
+    authMessage.textContent = "Agree to the Terms and Privacy Policy before continuing with Google.";
     consent.focus();
     return;
   }
@@ -185,16 +184,15 @@ async function signInWithSocialProvider(provider, button) {
   authMessage.textContent = "";
   try {
     const { error } = await authClient.auth.signInWithOAuth({
-      provider,
+      provider: "google",
       options: {
         redirectTo: new URL(getPostAuthUrl(), window.location.href).href,
-        ...(provider === "apple" ? { scopes: "name email" } : {}),
-        ...(provider === "google" ? { queryParams: { prompt: "select_account" } } : {}),
+        queryParams: { prompt: "select_account" },
       },
     });
     if (error) throw error;
   } catch (error) {
-    console.error(`Skillmate ${provider} sign-in failed.`, error);
+    console.error("Skillmate Google sign-in failed.", error);
     authMessage.textContent = friendlyAuthError(error, authMode);
     authSubmitting = false;
     button.disabled = false;
@@ -202,10 +200,7 @@ async function signInWithSocialProvider(provider, button) {
   }
 }
 document.querySelector("#google-signin").addEventListener("click", (event) => {
-  signInWithSocialProvider("google", event.currentTarget);
-});
-document.querySelector("#apple-signin").addEventListener("click", (event) => {
-  signInWithSocialProvider("apple", event.currentTarget);
+  signInWithGoogle(event.currentTarget);
 });
 document.querySelector("#return-to-signin").addEventListener("click", () => {
   window.history.replaceState(null, "", window.location.pathname);
@@ -229,7 +224,7 @@ authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (authSubmitting) return;
   if (!authClient) {
-    authMessage.textContent = "Configure Supabase in .env and start the Skillmate server before signing in.";
+    authMessage.textContent = "Sign-in is temporarily unavailable. Please try again shortly.";
     return;
   }
   const email = document.querySelector("#auth-email").value.trim();
@@ -237,11 +232,10 @@ authForm.addEventListener("submit", async (event) => {
   const confirmPassword = confirmPasswordInput.value;
   const fullName = document.querySelector("#auth-name").value.trim();
   const university = document.querySelector("#auth-university").value.trim();
-  const studentIdNumber = document.querySelector("#auth-student-id").value.trim();
   const submit = document.querySelector("#auth-submit");
   const submitLabel = document.querySelector("#auth-submit-label");
   const submitSpinner = submit.querySelector(".auth-submit-spinner");
-  if (authMode === "signup" && password !== confirmPassword) {
+  if (authMode === "recovery" && password !== confirmPassword) {
     authMessage.textContent = "Your passwords do not match.";
     confirmPasswordInput.focus();
     return;
@@ -257,8 +251,9 @@ authForm.addEventListener("submit", async (event) => {
 
   try {
     if (authMode === "signup") {
-      if (fullName.length < 2 || university.length < 2 || studentIdNumber.length < 3) {
-        throw new Error("Enter your name, university, and student ID number to create an account.");
+      if (fullName.length < 2 || university.length < 2) {
+        authMessage.textContent = "Enter your name and university to create an account.";
+        return;
       }
       const { data, error } = await authClient.auth.signUp({
         email,
@@ -267,7 +262,6 @@ authForm.addEventListener("submit", async (event) => {
           data: {
             full_name: fullName,
             university,
-            student_id_number: studentIdNumber,
           },
           emailRedirectTo: new URL("index.html", window.location.href).href,
         },
@@ -316,6 +310,6 @@ authForm.addEventListener("submit", async (event) => {
 });
 
 if (!authClient) {
-  authMessage.textContent = window.skillmateSupabaseError
-    || "Supabase is not connected yet. Configure the server environment in .env to enable account sign-in.";
+  console.error("Skillmate sign-in unavailable:", window.skillmateSupabaseError);
+  authMessage.textContent = "Sign-in is temporarily unavailable. Please try again shortly.";
 }

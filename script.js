@@ -102,7 +102,9 @@ document.querySelector("#export-button").addEventListener("click", () => {
         cells[0].querySelector("strong").textContent,
         cells[1].querySelector("strong").textContent,
         cells[1].querySelector("small").textContent,
-        `${cells[2].childNodes[0].textContent.trim()} ${cells[2].querySelector("small").textContent}`,
+        [...(cells[2].querySelector(".date-cell") || cells[2]).childNodes]
+          .filter((node) => node.nodeType === Node.TEXT_NODE)
+          .map((node) => node.textContent).join("").trim(),
         cells[3].textContent.trim().replace(/\s+/g, " "),
         cells[4].textContent.trim(),
       ];
