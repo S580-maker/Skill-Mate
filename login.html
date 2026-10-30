@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500;1,600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="user.css?v=14" />
     <link rel="stylesheet" href="auth.css?v=4" />
-    <link rel="stylesheet" href="auth-access.css?v=3" />
+    <link rel="stylesheet" href="auth-access.css?v=4" />
     <script src="theme.js?v=2"></script>
   </head>
   <body class="auth-access" data-auth-mode="signin">
@@ -53,6 +53,26 @@
             <button class="auth-text-button" id="return-to-signin" type="button" hidden>Back to sign in</button>
           </form>
 
+          <section class="auth-otp" id="auth-otp" aria-labelledby="otp-title" hidden>
+            <div class="auth-otp-mark" aria-hidden="true"><svg class="auth-otp-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3M12 14v3"/></svg><svg class="auth-otp-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></div>
+            <h2 id="otp-title">Verify it’s you</h2>
+            <p class="auth-otp-copy">Enter the 6-digit code we just sent to <strong id="otp-email"></strong></p>
+            <form id="otp-form" novalidate>
+              <div class="auth-otp-inputs" role="group" aria-label="Six-digit verification code">
+                <input aria-label="Digit 1" inputmode="numeric" autocomplete="one-time-code" maxlength="1" pattern="[0-9]" required />
+                <input aria-label="Digit 2" inputmode="numeric" maxlength="1" pattern="[0-9]" required />
+                <input aria-label="Digit 3" inputmode="numeric" maxlength="1" pattern="[0-9]" required />
+                <input aria-label="Digit 4" inputmode="numeric" maxlength="1" pattern="[0-9]" required />
+                <input aria-label="Digit 5" inputmode="numeric" maxlength="1" pattern="[0-9]" required />
+                <input aria-label="Digit 6" inputmode="numeric" maxlength="1" pattern="[0-9]" required />
+              </div>
+              <p class="auth-message" id="otp-message" role="status" aria-live="polite"></p>
+              <button class="button button-primary auth-submit" id="otp-submit" type="submit" disabled><span class="auth-submit-spinner" aria-hidden="true" hidden></span><span id="otp-submit-label">Verify code</span></button>
+            </form>
+            <div class="auth-otp-resend"><span>Didn’t get a code?</span><button class="auth-text-button" id="otp-resend" type="button" disabled><span id="otp-resend-prefix">Resend in </span><span id="otp-countdown">0:30</span></button></div>
+            <button class="auth-text-button auth-otp-back" id="otp-back" type="button">Back to sign in</button>
+          </section>
+
           <div class="auth-social-section" id="auth-social-section"><p class="auth-divider"><span>or continue with</span></p><div class="auth-social-buttons">
           <button class="auth-google" id="google-signin" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="var(--main)" d="M21.6 12.23c0-.72-.06-1.42-.18-2.1H12v3.97h5.38a4.6 4.6 0 0 1-2 3.02v2.47h3.24c1.9-1.75 2.98-4.33 2.98-7.36Z"/><path fill="var(--main)" d="M12 22c2.7 0 4.97-.9 6.62-2.42l-3.24-2.47c-.9.6-2.05.96-3.38.96-2.6 0-4.8-1.76-5.58-4.12H3.08v2.55A10 10 0 0 0 12 22Z"/><path fill="var(--main)" d="M6.42 13.95a6 6 0 0 1 0-3.9V7.5H3.08a10 10 0 0 0 0 9l3.34-2.55Z"/><path fill="var(--main)" d="M12 5.93c1.47 0 2.8.5 3.83 1.5l2.87-2.87A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.92 5.5l3.34 2.55C7.2 7.69 9.4 5.93 12 5.93Z"/></svg><span>Continue with Google</span></button>
 
@@ -66,6 +86,6 @@
     <script src="supabase-config.js"></script>
     <script src="supabase-client.js?v=4"></script>
     <script src="ghana-universities.js"></script>
-    <script src="auth.js?v=7"></script>
+    <script src="auth.js?v=9"></script>
   </body>
 </html>

@@ -128,6 +128,34 @@ app.get("/supabase-config.js", (_request, response, next) => {
 
 app.get("/api/health", require("./api/health"));
 
+app.post("/api/auth/sign-in", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+  const { signIn } = require("./api/_lib/email-2fa");
+  return signIn(request, response);
+});
+app.post("/api/auth/sign-up", rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+  const { signUp } = require("./api/_lib/email-2fa");
+  return signUp(request, response);
+});
+app.delete("/api/auth/sign-in", (request, response) => {
+  const { signIn } = require("./api/_lib/email-2fa");
+  return signIn(request, response);
+});
+app.post("/api/auth/verify", rateLimit({ windowMs: 15 * 60 * 1000, limit: 15, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+  const { verify } = require("./api/_lib/email-2fa");
+  return verify(request, response);
+});
+app.post("/api/auth/resend", rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+  const { resend } = require("./api/_lib/email-2fa");
+  return resend(request, response);
+});
+app.all("/api/auth/password-recovery", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+  const { requestPasswordRecovery, updateRecoveredPassword } = require("./api/_lib/email-2fa");
+  if (request.method === "POST") return requestPasswordRecovery(request, response);
+  if (request.method === "PUT") return updateRecoveredPassword(request, response);
+  response.setHeader("Allow", "POST, PUT");
+  return response.status(405).json({ error: "Method not allowed." });
+});
+
 app.post(
   "/api/session",
   rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }),

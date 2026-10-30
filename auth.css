@@ -58,26 +58,61 @@ body { min-height: 100vh; }
 .auth-text-button[hidden] { display: none; }
 #auth-form,
 #forgot-password-form,
+#new-password-form,
 #reset-form { display: grid; gap: 14px; }
 #auth-form label,
 #forgot-password-form label,
+#new-password-form label,
 #reset-form label { display: grid; gap: 7px; color: var(--dark); font-size: 12px; font-weight: 600; }
 #auth-form input,
 #forgot-password-form input,
+#new-password-form input,
 #reset-form input { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; outline: none; color: var(--dark); background: var(--surface); font-family: inherit; font-size: 13px; font-weight: 400; transition: border-color .15s, box-shadow .15s; }
 #auth-form input::placeholder,
 #forgot-password-form input::placeholder,
+#new-password-form input::placeholder,
 #reset-form input::placeholder { color: var(--dark); }
 #auth-form input:focus,
 #forgot-password-form input:focus,
+#new-password-form input:focus,
 #reset-form input:focus { border-color: var(--border); box-shadow: 0 0 0 3px color-mix(in srgb, var(--shadow-color) 16%, transparent); }
 .auth-password-input { display: flex; align-items: center; gap: 8px; }
 #auth-form .auth-password-input input,
+#new-password-form .auth-password-input input,
 #reset-form .auth-password-input input { width: 0; min-width: 0; flex: 1; }
 .auth-password-toggle { flex: 0 0 auto; min-height: 40px; padding: 0 8px; border: 0; border-radius: 4px; color: var(--main); background: transparent; font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .auth-password-toggle:hover { text-decoration: underline; }
 .auth-password-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .password-hint { color: var(--dark); font-size: 12px; font-weight: 400; }
+#forgot-password-form[hidden],
+#recovery-otp[hidden],
+#new-password-form[hidden] { display: none !important; }
+.recovery-otp { margin-top: 24px; padding: 24px clamp(16px, 4vw, 30px); border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--surface) 92%, var(--main-soft)); text-align: center; animation: auth-otp-appear 300ms ease-out both; }
+.recovery-otp .auth-otp-mark { display: grid; width: 64px; height: 64px; margin: 0 auto 16px; place-items: center; border: 1px solid var(--border); border-radius: 50%; color: var(--main); background: var(--main-soft); box-shadow: inset 0 0 0 5px var(--surface), 0 6px 18px color-mix(in srgb, var(--shadow-color) 8%, transparent); }
+.recovery-otp .auth-otp-mark svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.recovery-otp .auth-otp-check { display: none; }
+.recovery-otp.is-success .auth-otp-mark { border-color: #9bd5b0; color: #16834a; background: #e9f8ee; }
+.recovery-otp.is-success .auth-otp-lock { display: none; }
+.recovery-otp.is-success .auth-otp-check { display: block; animation: auth-otp-check 300ms cubic-bezier(.2,.8,.2,1) both; }
+.recovery-otp h2 { margin: 0; color: var(--dark); font-family: Poppins, sans-serif; font-size: 22px; font-weight: 600; }
+.recovery-otp .auth-otp-copy { margin: 8px 0 20px; color: var(--dark); font-size: 12px; line-height: 1.6; }
+.recovery-otp .auth-otp-copy strong { display: block; color: var(--dark); font-weight: 600; }
+.recovery-otp #recovery-code-form { display: grid; gap: 16px; }
+.recovery-otp-inputs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(5px, 1.5vw, 10px); }
+.recovery-otp-inputs input { width: 100%; min-width: 0; aspect-ratio: 1; padding: 0 !important; border: 1px solid var(--border); border-radius: 9px !important; color: var(--dark) !important; background: var(--surface) !important; font-size: clamp(18px, 5vw, 24px) !important; font-weight: 600 !important; text-align: center; transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease, color 180ms ease, background-color 180ms ease; }
+.recovery-otp-inputs input:focus { border-color: var(--main); box-shadow: 0 0 0 3px color-mix(in srgb, var(--main) 16%, transparent); transform: translateY(-2px); }
+.recovery-otp-inputs input.otp-digit-entered { animation: auth-otp-digit 220ms ease-out both; }
+.recovery-otp.is-error .recovery-otp-inputs { animation: auth-otp-shake 320ms ease-in-out; }
+.recovery-otp.is-error .recovery-otp-inputs input { border-color: var(--danger) !important; color: var(--danger) !important; box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 12%, transparent); }
+.recovery-otp.is-success .recovery-otp-inputs input { border-color: #78c995 !important; color: #16834a !important; background: #f0fbf3 !important; opacity: 1; }
+.recovery-otp #recovery-code-message:not(:empty) { margin: 0; }
+.recovery-otp .auth-otp-resend { display: flex; justify-content: center; flex-wrap: wrap; gap: 5px; margin-top: 18px; color: var(--dark); font-size: 12px; }
+.recovery-otp .auth-otp-resend button { padding: 0; color: var(--main); font-size: 12px; }
+.recovery-otp .auth-otp-resend button:disabled { color: var(--dark); cursor: default; opacity: .7; }
+@keyframes auth-otp-appear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes auth-otp-digit { from { opacity: .45; transform: scale(.88); } to { opacity: 1; transform: scale(1); } }
+@keyframes auth-otp-shake { 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
+@keyframes auth-otp-check { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
 .auth-consent { display: flex !important; grid-template-columns: auto 1fr; align-items: flex-start; gap: 9px !important; font-size: 12px !important; font-weight: 400 !important; line-height: 1.6; }
 .auth-consent[hidden] { display: none !important; }
 #auth-form .auth-consent input { width: 16px; min-height: 16px; flex: 0 0 16px; margin: 2px 0 0; accent-color: var(--main); }
@@ -195,6 +230,11 @@ body { min-height: 100vh; }
   .auth-panel { padding-right: 18px; padding-left: 18px; }
   .auth-card h2 { font-size: 24px; }
 }
+@media (max-width: 440px) {
+  .recovery-otp { padding: 20px 12px; }
+  .recovery-otp-inputs { gap: 5px; }
+  .recovery-otp-inputs input { border-radius: 7px !important; }
+}
 @media (max-width: 520px) {
   .onboarding-layout { width: min(100% - 24px, 720px); padding-top: 14px; }
   .onboarding-header { margin-bottom: 16px; }
@@ -205,6 +245,10 @@ body { min-height: 100vh; }
 }
 @media (prefers-reduced-motion: reduce) {
   .auth-submit-spinner { animation-duration: 1.5s; }
+  .recovery-otp,
+  .recovery-otp-inputs input.otp-digit-entered,
+  .recovery-otp.is-error .recovery-otp-inputs,
+  .recovery-otp.is-success .auth-otp-check { animation-duration: 0.01ms; }
 }
 
 .auth-layout { background: var(--bg); }
@@ -254,12 +298,14 @@ body { min-height: 100vh; }
 .password-hint { color: var(--dark); }
 #auth-form label,
 #forgot-password-form label,
+#new-password-form label,
 #reset-form label,
 #onboarding-form > label,
 .onboarding-photo-field legend,
 .onboarding-skills legend { color: var(--dark); }
 #auth-form input,
 #forgot-password-form input,
+#new-password-form input,
 #reset-form input,
 #onboarding-form > label > input,
 .skill-entry input { border-color: var(--border); color: var(--dark); background: var(--surface); }

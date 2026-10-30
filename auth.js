@@ -8,6 +8,7 @@ const confirmPasswordVisibility = document.querySelector("#confirm-password-visi
 let authMode = "signin";
 let authSubmitting = false;
 let authRedirectStarted = false;
+let otpCountdownTimer = null;
 
 function redirectForSession(session) {
   if (!session || authMode === "recovery" || authSubmitting || authRedirectStarted) return;
@@ -79,6 +80,242 @@ function getPostAuthUrl() {
   const next = new URLSearchParams(window.location.search).get("next");
   return next === "admin" ? "admin.html" : "index.html";
 }
+
+function maskEmail(email) {
+  const [name, domain] = email.split("@");
+  if (!name || !domain) return email;
+  return `${name.slice(0, 1)}${"•".repeat(Math.min(Math.max(name.length - 1, 4), 7))}@${domain}`;
+}
+
+function startOtpCountdown(seconds = 30) {
+  const button = document.querySelector("#otp-resend");
+  const label = document.querySelector("#otp-countdown");
+  const prefix = document.querySelector("#otp-resend-prefix");
+  window.clearInterval(otpCountdownTimer);
+  let remaining = seconds;
+  button.disabled = true;
+  prefix.hidden = false;
+  const update = () => {
+    label.textContent = `0:${String(remaining).padStart(2, "0")}`;
+    if (remaining <= 0) {
+      window.clearInterval(otpCountdownTimer);
+      button.disabled = false;
+      prefix.hidden = true;
+      label.textContent = "Resend code";
+      return;
+    }
+    remaining -= 1;
+  };
+  update();
+  otpCountdownTimer = window.setInterval(update, 1000);
+}
+
+function showOtpChallenge(email, signup = false) {
+  const inputs = [...document.querySelectorAll(".auth-otp-inputs input")];
+  document.body.dataset.authMode = "verification";
+  document.querySelector("#auth-title").hidden = true;
+  document.querySelector("#auth-intro").hidden = true;
+  document.querySelector("#auth-tabs").hidden = true;
+  authForm.hidden = true;
+  document.querySelector("#auth-social-section").hidden = true;
+  document.querySelector("#auth-note").hidden = true;
+  document.querySelector(".auth-footer").hidden = true;
+  document.querySelector("#otp-title").textContent = signup ? "Verify your email" : "Verify it’s you";
+  document.querySelector("#otp-email").textContent = maskEmail(email);
+  document.querySelector("#auth-otp").hidden = false;
+  document.querySelector("#otp-message").textContent = "";
+  document.querySelector("#auth-otp").classList.remove("is-error", "is-success");
+  document.querySelector("#otp-message").classList.remove("success");
+  inputs.forEach((input) => {
+    input.value = "";
+    input.disabled = false;
+    input.classList.remove("otp-digit-entered");
+  });
+  updateOtpSubmitState(inputs);
+  startOtpCountdown();
+  inputs[0]?.focus();
+}
+
+function hideOtpChallenge() {
+  window.clearInterval(otpCountdownTimer);
+  otpCountdownTimer = null;
+  document.body.dataset.authMode = authMode;
+  document.querySelector("#auth-title").hidden = false;
+  document.querySelector("#auth-intro").hidden = false;
+  document.querySelector("#auth-tabs").hidden = false;
+  authForm.hidden = false;
+  document.querySelector("#auth-social-section").hidden = false;
+  document.querySelector("#auth-note").hidden = false;
+  document.querySelector(".auth-footer").hidden = false;
+  document.querySelector("#auth-otp").hidden = true;
+}
+
+async function submitOtpCode(event) {
+  event.preventDefault();
+  if (authSubmitting) return;
+  const inputs = [...document.querySelectorAll(".auth-otp-inputs input")];
+  const code = inputs.map((input) => input.value).join("");
+  if (!/^\d{6}$/.test(code)) {
+    document.querySelector("#otp-message").textContent = "Enter all six digits to continue.";
+    inputs.find((input) => !input.value)?.focus();
+    return;
+  }
+
+  const challenge = document.querySelector("#auth-otp");
+  const submit = document.querySelector("#otp-submit");
+  const label = document.querySelector("#otp-submit-label");
+  const message = document.querySelector("#otp-message");
+  const spinner = submit.querySelector(".auth-submit-spinner");
+  let verificationSucceeded = false;
+  authSubmitting = true;
+  submit.disabled = true;
+  inputs.forEach((input) => { input.disabled = true; });
+  submit.setAttribute("aria-busy", "true");
+  spinner.hidden = false;
+  label.textContent = "Verifying…";
+  message.textContent = "";
+  message.classList.remove("success");
+  challenge.classList.remove("is-error");
+  try {
+    const response = await fetch("/api/auth/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ code }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Could not verify your code. Please try again.");
+    const { data, error } = await authClient.auth.setSession({
+      access_token: result.session.access_token,
+      refresh_token: result.session.refresh_token,
+    });
+    if (error) throw error;
+    await window.syncSkillmateServerSession(data.session);
+    verificationSucceeded = true;
+    challenge.classList.add("is-success");
+    message.classList.add("success");
+    message.textContent = "Code verified. Signing you in…";
+    spinner.hidden = true;
+    label.textContent = "Verified";
+    inputs.forEach((input) => { input.classList.remove("otp-digit-entered"); });
+    await new Promise((resolve) => window.setTimeout(resolve, 450));
+    window.location.assign(getPostAuthUrl());
+  } catch (error) {
+    console.error("Skillmate email verification failed.", error);
+    challenge.classList.remove("is-success");
+    challenge.classList.remove("is-error");
+    void challenge.offsetWidth;
+    challenge.classList.add("is-error");
+    message.textContent = error.message || "Could not verify your code. Please try again.";
+    inputs.forEach((input) => { input.disabled = false; });
+    if (error.message?.includes("expired") || error.message?.includes("Sign in again")) {
+      window.clearInterval(otpCountdownTimer);
+      document.querySelector("#otp-resend").disabled = true;
+    }
+  } finally {
+    authSubmitting = false;
+    submit.removeAttribute("aria-busy");
+    if (verificationSucceeded) {
+      submit.disabled = true;
+    } else {
+      spinner.hidden = true;
+      label.textContent = "Verify code";
+      updateOtpSubmitState(inputs);
+    }
+  }
+}
+
+function updateOtpSubmitState(inputs = [...document.querySelectorAll(".auth-otp-inputs input")]) {
+  const success = document.querySelector("#auth-otp").classList.contains("is-success");
+  document.querySelector("#otp-submit").disabled = authSubmitting
+    || success
+    || !/^\d{6}$/.test(inputs.map((input) => input.value).join(""));
+}
+
+function animateOtpDigit(input) {
+  input.classList.remove("otp-digit-entered");
+  void input.offsetWidth;
+  input.classList.add("otp-digit-entered");
+}
+
+function clearOtpError() {
+  const challenge = document.querySelector("#auth-otp");
+  challenge.classList.remove("is-error");
+  document.querySelector("#otp-message").classList.remove("success");
+  document.querySelector("#otp-message").textContent = "";
+}
+
+function fillOtpInputs(digits, startIndex, inputs) {
+  [...digits].forEach((digit, offset) => {
+    const input = inputs[startIndex + offset];
+    if (!input) return;
+    input.value = digit;
+    animateOtpDigit(input);
+  });
+  updateOtpSubmitState(inputs);
+}
+
+document.querySelector("#otp-form").addEventListener("submit", submitOtpCode);
+const otpInputs = [...document.querySelectorAll(".auth-otp-inputs input")];
+otpInputs.forEach((input, index, inputs) => {
+  input.addEventListener("input", () => {
+    const digits = input.value.replace(/\D/g, "");
+    if (digits.length > 1) {
+      const startIndex = index === 0 ? 0 : index;
+      fillOtpInputs(digits.slice(0, inputs.length - startIndex), startIndex, inputs);
+      inputs[Math.min(startIndex + digits.length, inputs.length) - 1]?.focus();
+      clearOtpError();
+      return;
+    }
+    input.value = digits.slice(-1);
+    if (input.value) animateOtpDigit(input);
+    if (input.value && index < inputs.length - 1) inputs[index + 1].focus();
+    clearOtpError();
+    updateOtpSubmitState(inputs);
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Backspace" && !input.value && index > 0) inputs[index - 1].focus();
+    if (event.key === "ArrowLeft" && index > 0) inputs[index - 1].focus();
+    if (event.key === "ArrowRight" && index < inputs.length - 1) inputs[index + 1].focus();
+  });
+  input.addEventListener("paste", (event) => {
+    const digits = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, inputs.length);
+    if (!digits) return;
+    event.preventDefault();
+    clearOtpError();
+    const startIndex = digits.length === inputs.length ? 0 : index;
+    if (startIndex + digits.length > inputs.length) return;
+    fillOtpInputs(digits, startIndex, inputs);
+    inputs[Math.min(startIndex + digits.length, inputs.length) - 1].focus();
+  });
+});
+
+document.querySelector("#otp-resend").addEventListener("click", async () => {
+  const button = document.querySelector("#otp-resend");
+  const message = document.querySelector("#otp-message");
+  if (button.disabled || authSubmitting) return;
+  button.disabled = true;
+  message.textContent = "";
+  try {
+    const response = await fetch("/api/auth/resend", { method: "POST", credentials: "same-origin" });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Could not resend your code.");
+    message.textContent = result.message;
+    message.classList.add("success");
+    startOtpCountdown();
+  } catch (error) {
+    message.classList.remove("success");
+    message.textContent = error.message || "Could not resend your code.";
+    button.disabled = false;
+  }
+});
+
+document.querySelector("#otp-back").addEventListener("click", () => {
+  fetch("/api/auth/sign-in", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
+  hideOtpChallenge();
+  document.querySelector("#auth-password").value = "";
+  document.querySelector("#auth-email").focus();
+});
 
 function setAuthMode(mode) {
   authMode = mode;
@@ -255,27 +492,20 @@ authForm.addEventListener("submit", async (event) => {
         authMessage.textContent = "Enter your name and university to create an account.";
         return;
       }
-      const { data, error } = await authClient.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            university,
-          },
-          emailRedirectTo: new URL("index.html", window.location.href).href,
-        },
+      const response = await fetch("/api/auth/sign-up", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ email, password, fullName, university }),
       });
-      if (error) throw error;
-      if (!data.session) {
-        setAuthMode("signin");
-        authMessage.textContent = "Account created. Check your email to confirm it, then sign in.";
-        authMessage.classList.add("success");
-        document.querySelector("#auth-email").value = email;
-      } else {
-        await window.syncSkillmateServerSession(data.session);
-        window.location.assign("index.html");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(result.error || "Could not start account verification.");
+        error.isSkillmateApiError = true;
+        throw error;
       }
+      passwordInput.value = "";
+      showOtpChallenge(email, true);
     } else if (authMode === "recovery") {
       const { data: sessionData, error: sessionError } = await authClient.auth.getSession();
       if (sessionError) throw sessionError;
@@ -287,17 +517,29 @@ authForm.addEventListener("submit", async (event) => {
       await window.syncSkillmateServerSession(refreshedSession.session);
       window.location.assign("index.html");
     } else {
-      const { data, error } = await authClient.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      await window.syncSkillmateServerSession(data.session);
-      window.location.assign(getPostAuthUrl());
+      const response = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ email, password }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(result.error || "Could not start email verification.");
+        error.isSkillmateApiError = true;
+        throw error;
+      }
+      passwordInput.value = "";
+      showOtpChallenge(email);
     }
   } catch (error) {
     console.error("Skillmate authentication failed.", error);
     if (isInvalidRefreshTokenError(error)) {
       await window.clearExpiredSkillmateSession();
     }
-    authMessage.textContent = friendlyAuthError(error, authMode);
+    authMessage.textContent = error.isSkillmateApiError
+      ? error.message
+      : friendlyAuthError(error, authMode);
   } finally {
     submit.disabled = false;
     authSubmitting = false;

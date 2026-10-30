@@ -81,6 +81,18 @@ https://your-skillmate-domain.vercel.app/reset.html
 
 Configure email/password sign-in and decide whether email confirmation is required. If confirmation is enabled, use the email link before signing in.
 
+### Email two-factor sign-in and signup
+
+Email/password sign-in and password recovery require a six-digit email code. Account creation also starts with a six-digit code; the server creates the confirmed Supabase account only after the code is accepted. Recovery codes must be accepted before the server allows a new password to be set. Apply `supabase/migrations/20261029150000_email_login_2fa.sql` once in the Supabase SQL Editor. The migration creates a private, short-lived challenge table and a one-time verification function; do not grant browser roles access to that table.
+
+Set these server-only environment variables locally and on Vercel:
+
+- `SUPABASE_SERVICE_ROLE_KEY` for private challenge storage. It must never be exposed to browser code.
+- `AUTH_OTP_SECRET` with at least 32 random characters. Generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`; keep the same value across deployments so pending codes remain verifiable.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` for your mail provider. Use the provider's submission host and a verified sender address. `SMTP_SECURE=true` is normally used with port 465; port 587 normally uses `false`.
+
+Codes expire after 10 minutes, can be resent after 30 seconds up to five times per challenge, and allow at most five guesses. Google sign-in continues to use Google's own authentication and verification flow.
+
 ## 5. Deploy to Vercel
 
 1. Import the GitHub repository into Vercel. `vercel.json` explicitly sets the framework preset to **Other**, so Vercel uses the static assets and root `api/` functions rather than treating the local Express development server as the deployed backend. The static HTML, CSS, and JavaScript are served directly; no frontend build command or output directory is required.
@@ -88,10 +100,18 @@ Configure email/password sign-in and decide whether email confirmation is requir
 
    ```text
    SUPABASE_URL=https://your-project-id.supabase.co
-   SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
+  SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
+  SUPABASE_SERVICE_ROLE_KEY=your-server-only-service-role-key
+  AUTH_OTP_SECRET=your-generated-random-secret
+  SMTP_HOST=your-smtp-host
+  SMTP_PORT=587
+  SMTP_SECURE=false
+  SMTP_USER=your-smtp-username
+  SMTP_PASS=your-smtp-password
+  SMTP_FROM=Skillmate <no-reply@your-domain.example>
    ```
 
-   Use the Supabase **Project URL** and public **anon/publishable** key. If you want account closure enabled on Vercel, also add `SUPABASE_SERVICE_ROLE_KEY` as a **server-only** environment variable; never use it in client-side variables or frontend code. The app does not need a `PORT` variable on Vercel.
+  Use the Supabase **Project URL** and public **anon/publishable** key. Keep the service role key, OTP secret, and SMTP credentials server-only; never use them in client-side variables or frontend code. The app does not need a `PORT` variable on Vercel.
 3. Deploy the project. `vercel.json` routes the runtime Supabase configuration and session endpoints to Vercel Functions, and routes `/admin.html` through a server-side administrator-role check. The admin function includes the HTML file in its deployment bundle.
 4. Copy the final production domain from Vercel and add it to Supabase **Authentication → URL Configuration** as the Site URL. Add the exact production callback URLs shown above using your domain.
 5. Visit the Vercel URL, create/sign in to an account, and test the main marketplace and administrator route. Promote the intended admin account using the SQL in the next section.

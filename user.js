@@ -106,7 +106,6 @@ let connectedProviders = [];
 let connectedServices = [];
 let selectedCategory = "All";
 let activeConversationId = null;
-let restoreConversationOnMessagesOpen = false;
 let activeBookingFilter = "all";
 let bookingDirection = "made";
 let groupProviderFilter = null;
@@ -259,40 +258,8 @@ async function loadConversationMessagePages(conversations) {
 function chatDraftStorageKey() {
   return `skillmate-chat-drafts:${appUser?.id || "demo"}`;
 }
-function activeConversationStorageKey() {
-  return `skillmate-active-conversation:${appUser?.id || "demo"}`;
-}
-function persistActiveConversation(conversationId) {
+function setActiveConversation(conversationId) {
   activeConversationId = conversationId;
-  try {
-    if (conversationId) localStorage.setItem(activeConversationStorageKey(), conversationId);
-    else localStorage.removeItem(activeConversationStorageKey());
-  } catch (error) {
-    console.error("Could not save the selected conversation.", error);
-    showToast("Your selected conversation could not be saved on this device.");
-  }
-}
-function savedActiveConversationId() {
-  try {
-    return localStorage.getItem(activeConversationStorageKey());
-  } catch (error) {
-    console.error("Could not restore the selected conversation.", error);
-    showToast("Your last conversation could not be restored from this browser.");
-    return null;
-  }
-}
-function restoreActiveConversation() {
-  const available = state.messages.filter((chat) => !state.blocked.includes(chat.providerId));
-  if (!available.length) return false;
-  if (available.some((chat) => chat.id === activeConversationId)) return true;
-  const savedId = savedActiveConversationId();
-  const savedChat = available.find((chat) => chat.id === savedId);
-  const mostRecentChat = [...available].sort((left, right) => (
-    (Date.parse(right.messages.at(-1)?.createdAt || "") || 0)
-    - (Date.parse(left.messages.at(-1)?.createdAt || "") || 0)
-  ))[0];
-  persistActiveConversation((savedChat || mostRecentChat).id);
-  return true;
 }
 function pendingMessageStorageKey() {
   return `skillmate-pending-messages:${appUser?.id || "demo"}`;
@@ -1115,7 +1082,7 @@ function renderConversations(options = {}) {
     .filter((chat) => !state.blocked.includes(chat.providerId))
     .sort((a, b) => new Date(b.messages.at(-1)?.createdAt || 0) - new Date(a.messages.at(-1)?.createdAt || 0));
   const selectedChatExists = conversations.some((chat) => chat.id === activeConversationId);
-  if (activeConversationId && !selectedChatExists) persistActiveConversation(null);
+  if (activeConversationId && !selectedChatExists) setActiveConversation(null);
   if (activeConversationId) layout.dataset.chatOpen = "true";
   else layout.removeAttribute("data-chat-open");
   const totalUnread = conversations.reduce((total, chat) => total + unreadMessageCount(chat), 0);
@@ -1756,9 +1723,6 @@ async function loadSupabaseState() {
   messages.forEach((chat) => conversationMessageRefreshTimes.set(chat.id, refreshedAt));
   state.messages = messages;
   cacheConversationMessages(messages);
-  if (restoreConversationOnMessagesOpen && state.activePage === "messages") {
-    restoreConversationOnMessagesOpen = !restoreActiveConversation();
-  }
   const verificationButton = document.querySelector("#verification-open");
   verificationButton.dataset.requested = verification.data?.status || "";
   const reportTarget = document.querySelector("#report-target");
@@ -1838,9 +1802,6 @@ async function refreshLiveMessages() {
   }
   state.messages = nextMessages;
   cacheConversationMessages(nextMessages);
-  if (restoreConversationOnMessagesOpen && state.activePage === "messages") {
-    restoreConversationOnMessagesOpen = !restoreActiveConversation();
-  }
   renderConversations({ preserveChatState: true });
 }
 async function refreshLiveActivity() {
@@ -2077,7 +2038,7 @@ async function bootstrapStudentApp() {
     retryQueuedMessages().catch((error) => console.error("Could not retry saved Skillmate messages.", error));
   }
 }
-function showPage(page) {
+function showPage(page, options = {}) {
   if (page === "profile") page = "profile-settings";
   const view = document.querySelector(`[data-view="${page}"]`);
   if (!view) return;
@@ -2087,8 +2048,10 @@ function showPage(page) {
     window.history.pushState(null, "", `${window.location.pathname}${window.location.search}${pageHash}`);
   }
   if (page === "messages") {
-    restoreConversationOnMessagesOpen = true;
-    restoreConversationOnMessagesOpen = !restoreActiveConversation();
+    if (!options.openConversation) {
+      setActiveConversation(null);
+      pendingReplyId = null;
+    }
   }
   state.activePage = page;
   saveState();
@@ -2215,7 +2178,7 @@ async function startConversation(providerId, text) {
       conversation_id: conversationId, sender_id: appUser.id, body: text,
     });
     if (messageError) throw messageError;
-    persistActiveConversation(conversationId);
+    setActiveConversation(conversationId);
     await refreshSupabaseState();
     return;
   }
@@ -2225,7 +2188,7 @@ async function startConversation(providerId, text) {
     state.messages.unshift(chat);
   }
   chat.messages.push({ sender: "You", text, time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) });
-  persistActiveConversation(chat.id);
+  setActiveConversation(chat.id);
   saveState();
 }
 function openReport(providerId) {
@@ -2694,15 +2657,14 @@ document.querySelector("#message-form").addEventListener("submit", (event) => {
     event.target.closest("dialog").close();
     document.querySelector("#messages-layout").dataset.chatOpen = "true";
     renderConversations();
-    showPage("messages");
+    showPage("messages", { openConversation: true });
     showToast("Conversation started.");
   }, "Could not send your message.");
 });
 document.querySelector("#conversation-list").addEventListener("click", (event) => {
   const button = event.target.closest("[data-chat]");
   if (!button) return;
-  restoreConversationOnMessagesOpen = false;
-  persistActiveConversation(button.dataset.chat);
+  setActiveConversation(button.dataset.chat);
   pendingReplyId = null;
   document.querySelector("#messages-layout").dataset.chatOpen = "true";
   renderConversations();
@@ -2731,8 +2693,7 @@ document.querySelector("#chat-panel").addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("[data-chat-back]")) {
-    activeConversationId = null;
-    restoreConversationOnMessagesOpen = false;
+    setActiveConversation(null);
     pendingReplyId = null;
     document.querySelector("#messages-layout").removeAttribute("data-chat-open");
     renderConversations();
