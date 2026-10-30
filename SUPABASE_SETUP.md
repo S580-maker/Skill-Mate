@@ -62,6 +62,7 @@ Add the corresponding callback URL, for example:
 
 ```text
 http://localhost:3000/index.html
+http://localhost:3000/login.html
 ```
 
 Add this password-recovery redirect URL as well:
@@ -91,7 +92,7 @@ Set these server-only environment variables locally and on Vercel:
 - `AUTH_OTP_SECRET` with at least 32 random characters. Generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`; keep the same value across deployments so pending codes remain verifiable.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` for your mail provider. Use the provider's submission host and a verified sender address. `SMTP_SECURE=true` is normally used with port 465; port 587 normally uses `false`.
 
-Codes expire after 10 minutes, can be resent after 30 seconds up to five times per challenge, and allow at most five guesses. Google sign-in continues to use Google's own authentication and verification flow.
+Codes expire after 10 minutes, can be resent after 30 seconds up to five times per challenge, and allow at most five guesses. Google sign-in also requires this email code after Google authenticates the account; the Skillmate app session is not established until the code is verified.
 
 ## 5. Deploy to Vercel
 

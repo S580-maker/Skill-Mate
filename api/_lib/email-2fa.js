@@ -183,6 +183,17 @@ async function createChallenge(email, pending) {
     ? pending
     : pending.type === "recovery"
       ? { type: "recovery", userId: pending.userId }
+    : pending.type === "google"
+      ? {
+        type: "google",
+        session: {
+          access_token: pending.access_token,
+          refresh_token: pending.refresh_token,
+          expires_in: pending.expires_in,
+          expires_at: pending.expires_at,
+          token_type: pending.token_type,
+        },
+      }
     : {
       type: "session",
       session: {
@@ -372,6 +383,55 @@ async function signIn(request, response) {
   }
 }
 
+async function googleSignIn(request, response) {
+  if (request.method !== "POST") {
+    response.setHeader("Allow", "POST");
+    return respondError(response, 405, "Method not allowed.");
+  }
+  const accessToken = String(request.headers?.authorization || "").match(/^Bearer\s+(.+)$/i)?.[1];
+  const refreshToken = String(request.body?.refresh_token || "");
+  if (!accessToken || !refreshToken || refreshToken.length > 4096) {
+    return respondError(response, 401, "Sign in with Google again to continue.");
+  }
+
+  try {
+    getServiceKey();
+    getOtpSecret();
+    const { response: userResponse, result: user } = await supabaseRequest("/auth/v1/user", {
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    const googleIdentity = user?.app_metadata?.provider === "google"
+      || user?.identities?.some((identity) => identity.provider === "google");
+    if (!userResponse.ok || !user?.email || !googleIdentity) {
+      return respondError(response, 401, "Sign in with Google again to continue.");
+    }
+
+    const email = user.email.trim().toLowerCase();
+    const recent = await findRecentChallenge(email);
+    if (recent[0] && Date.now() - new Date(recent[0].last_sent_at).getTime() < resendCooldownMs) {
+      return respondError(response, 429, "A sign-in code was sent recently. Wait 30 seconds before trying again.");
+    }
+    if (recent.length >= maximumChallengesPerWindow) {
+      return respondError(response, 429, "Too many sign-in codes were requested. Please wait 15 minutes and try again.");
+    }
+
+    const token = await createChallenge(email, {
+      type: "google",
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: request.body?.expires_in,
+      expires_at: request.body?.expires_at,
+      token_type: request.body?.token_type,
+    });
+    setChallengeCookie(response, token);
+    response.setHeader("Cache-Control", "no-store");
+    return response.status(200).json({ email, message: "A six-digit sign-in code was sent to your email." });
+  } catch (error) {
+    console.error("Could not start Google email verification.", error);
+    return respondError(response, 503, "Email verification is temporarily unavailable. Please try again shortly.");
+  }
+}
+
 async function signUp(request, response) {
   if (request.method !== "POST") {
     response.setHeader("Allow", "POST");
@@ -470,6 +530,9 @@ async function verify(request, response) {
         throw new Error("The verified sign-in session is incomplete.");
       }
       response.setHeader("Cache-Control", "no-store");
+      if (pending.type === "google") {
+        return response.status(200).json({ provider: "google", session: verifiedSession });
+      }
       return response.status(200).json({ session: verifiedSession });
     }
     if (result?.status === "expired") {
@@ -541,6 +604,7 @@ async function resend(request, response) {
 }
 
 module.exports = {
+  googleSignIn,
   requestPasswordRecovery,
   resend,
   signIn,

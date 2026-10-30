@@ -76,6 +76,7 @@ function otpFixture(fetchHandler = async () => ({ ok: false, json: async () => (
     window: {
       clearInterval() {},
       setTimeout(callback) { callback(); return 1; },
+      sessionStorage: { getItem() { return null; }, removeItem() {} },
       syncSkillmateServerSession: async () => {},
       location: { assign(url) { navigations.push(url); } },
     },

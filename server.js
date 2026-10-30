@@ -132,6 +132,10 @@ app.post("/api/auth/sign-in", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, s
   const { signIn } = require("./api/_lib/email-2fa");
   return signIn(request, response);
 });
+app.post("/api/auth/google-2fa", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+  const { googleSignIn } = require("./api/_lib/email-2fa");
+  return googleSignIn(request, response);
+});
 app.post("/api/auth/sign-up", rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
   const { signUp } = require("./api/_lib/email-2fa");
   return signUp(request, response);

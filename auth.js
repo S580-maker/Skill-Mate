@@ -8,12 +8,65 @@ const confirmPasswordVisibility = document.querySelector("#confirm-password-visi
 let authMode = "signin";
 let authSubmitting = false;
 let authRedirectStarted = false;
+let googleOtpStarted = false;
 let otpCountdownTimer = null;
 
 function redirectForSession(session) {
-  if (!session || authMode === "recovery" || authSubmitting || authRedirectStarted) return;
+  if (!session || authMode === "recovery") return;
+  if (window.sessionStorage.getItem("skillmate-google-otp-active") === "1") return;
+  if (window.sessionStorage.getItem("skillmate-google-otp-pending") === "1") {
+    if (!googleOtpStarted) {
+      googleOtpStarted = true;
+      window.setTimeout(() => startGoogleOtp(session), 0);
+    }
+    return;
+  }
+  if (authSubmitting || authRedirectStarted) return;
   authRedirectStarted = true;
   window.location.replace(getPostAuthUrl());
+}
+
+async function startGoogleOtp(session) {
+  const button = document.querySelector("#google-signin");
+  authSubmitting = true;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  authMessage.textContent = "Sending your verification code…";
+  try {
+    const response = await fetch("/api/auth/google-2fa", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${session.access_token}`,
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        refresh_token: session.refresh_token,
+        expires_in: session.expires_in,
+        expires_at: session.expires_at,
+        token_type: session.token_type,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Could not start Google verification.");
+    window.sessionStorage.removeItem("skillmate-google-otp-pending");
+    window.sessionStorage.setItem("skillmate-google-otp-active", "1");
+    authMessage.textContent = "";
+    showOtpChallenge(result.email);
+  } catch (error) {
+    console.error("Skillmate Google email verification failed.", error);
+    window.sessionStorage.removeItem("skillmate-google-otp-pending");
+    window.sessionStorage.removeItem("skillmate-google-otp-active");
+    await authClient.auth.signOut({ scope: "local" }).catch((signOutError) => {
+      console.error("Could not clear the unverified Google session.", signOutError);
+    });
+    authMessage.textContent = error.message || "Could not start Google verification. Please try again.";
+  } finally {
+    authSubmitting = false;
+    googleOtpStarted = false;
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+  }
 }
 
 function isInvalidRefreshTokenError(error) {
@@ -185,12 +238,31 @@ async function submitOtpCode(event) {
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Could not verify your code. Please try again.");
-    const { data, error } = await authClient.auth.setSession({
-      access_token: result.session.access_token,
-      refresh_token: result.session.refresh_token,
-    });
-    if (error) throw error;
-    await window.syncSkillmateServerSession(data.session);
+    if (result.provider === "google") {
+      const { data, error } = await authClient.auth.getSession();
+      let session = !error ? data.session : null;
+      if (!session) {
+        if (!result.session?.access_token || !result.session?.refresh_token) {
+          throw error || new Error("Your Google sign-in expired. Please sign in with Google again.");
+        }
+        const restored = await authClient.auth.setSession({
+          access_token: result.session.access_token,
+          refresh_token: result.session.refresh_token,
+        });
+        if (restored.error) throw restored.error;
+        session = restored.data.session;
+      }
+      if (!session) throw new Error("Your Google sign-in expired. Please sign in with Google again.");
+      await window.syncSkillmateServerSession(session);
+    } else {
+      const { data, error } = await authClient.auth.setSession({
+        access_token: result.session.access_token,
+        refresh_token: result.session.refresh_token,
+      });
+      if (error) throw error;
+      await window.syncSkillmateServerSession(data.session);
+    }
+    window.sessionStorage.removeItem("skillmate-google-otp-active");
     verificationSucceeded = true;
     challenge.classList.add("is-success");
     message.classList.add("success");
@@ -312,6 +384,12 @@ document.querySelector("#otp-resend").addEventListener("click", async () => {
 
 document.querySelector("#otp-back").addEventListener("click", () => {
   fetch("/api/auth/sign-in", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
+  if (window.sessionStorage.getItem("skillmate-google-otp-active") === "1") {
+    window.sessionStorage.removeItem("skillmate-google-otp-active");
+    authClient.auth.signOut({ scope: "local" }).catch((error) => {
+      console.error("Could not clear the unverified Google session.", error);
+    });
+  }
   hideOtpChallenge();
   document.querySelector("#auth-password").value = "";
   document.querySelector("#auth-email").focus();
@@ -420,16 +498,22 @@ async function signInWithGoogle(button) {
   button.setAttribute("aria-busy", "true");
   authMessage.textContent = "";
   try {
+    window.sessionStorage.setItem("skillmate-google-otp-pending", "1");
+    const callbackUrl = new URL("login.html", window.location.href);
+    if (new URLSearchParams(window.location.search).get("next") === "admin") {
+      callbackUrl.searchParams.set("next", "admin");
+    }
     const { error } = await authClient.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: new URL(getPostAuthUrl(), window.location.href).href,
+        redirectTo: callbackUrl.href,
         queryParams: { prompt: "select_account" },
       },
     });
     if (error) throw error;
   } catch (error) {
     console.error("Skillmate Google sign-in failed.", error);
+    window.sessionStorage.removeItem("skillmate-google-otp-pending");
     authMessage.textContent = friendlyAuthError(error, authMode);
     authSubmitting = false;
     button.disabled = false;

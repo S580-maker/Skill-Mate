@@ -14,15 +14,27 @@ window.__authCalls=[];
 window.__signupCalls=[];
 window.__verifyCalls=[];
 window.__recoveryVerifyCalls=[];
+window.__googleOtpCalls=[];
+window.__googleSignOutCalls=0;
+window.__serverSessionSyncCalls=0;
+window.__setSessionCalls=0;
 window.skillmateRestoreSession=async()=>null;
-window.syncSkillmateServerSession=async()=>{};
+window.syncSkillmateServerSession=async()=>{window.__serverSessionSyncCalls++;};
 const originalAuthFetch=window.fetch.bind(window);
 window.fetch=async(url,options)=>{
+  if(url==="/api/auth/google-2fa"){
+    window.__googleOtpCalls.push({body:JSON.parse(options.body),authorization:options.headers.authorization});
+    return new Response(JSON.stringify({email:"student@example.test"}),{status:200,headers:{"content-type":"application/json"}});
+  }
   if(url==="/api/auth/sign-up"){
     window.__signupCalls.push(JSON.parse(options.body));
     return new Response(JSON.stringify({message:"A six-digit verification code was sent to your email."}),{status:200,headers:{"content-type":"application/json"}});
   }
   if(url==="/api/auth/verify"){
+    if(window.sessionStorage.getItem("skillmate-google-otp-active")==="1"){
+      window.__verifyCalls.push(JSON.parse(options.body));
+      return new Response(JSON.stringify({provider:"google",session:{access_token:"verified-google-access",refresh_token:"verified-google-refresh"}}),{status:200,headers:{"content-type":"application/json"}});
+    }
     if(window.__recoveringPassword){
       window.__recoveryVerifyCalls.push(JSON.parse(options.body));
       return new Response(JSON.stringify({recovery:true}),{status:200,headers:{"content-type":"application/json"}});
@@ -33,7 +45,7 @@ window.fetch=async(url,options)=>{
   }
   return originalAuthFetch(url,options);
 };
-window.skillmateSupabase={auth:{onAuthStateChange(){},signUp:async(args)=>{window.__authCalls.push(args);return {data:{session:null}};},setSession:async()=>({data:{session:{user:{id:"fixture",email:"student@example.test"}}}}),signInWithOAuth:async(args)=>{window.__authCalls.push(args);return {};}}};
+window.skillmateSupabase={auth:{onAuthStateChange(){},signUp:async(args)=>{window.__authCalls.push(args);return {data:{session:null}};},getSession:async()=>window.__googleSessionMissing?({data:{session:null},error:{message:"Auth session missing!"}}):({data:{session:{access_token:"google-access",refresh_token:"google-refresh",user:{id:"fixture",email:"student@example.test"}}},error:null}),setSession:async()=>{window.__setSessionCalls++;return {data:{session:{access_token:"verified-google-access",refresh_token:"verified-google-refresh",user:{id:"fixture",email:"student@example.test"}}},error:null};},signOut:async()=>{window.__googleSignOutCalls++;return {error:null};},signInWithOAuth:async(args)=>{window.__authCalls.push(args);return {};}}};
 </script>`;
 const recoveryFixture = `<script>
 window.__recoveringPassword=true;
@@ -210,6 +222,29 @@ async function main() {
     assert.deepEqual(await evaluate('window.__passwordUpdateRequests'), [{ password: "new-password-123" }]);
     assert.equal(await evaluate('document.querySelector("#new-password-message").classList.contains("success")'), true);
   };
+  const verifyGoogleOtpFlow = async () => {
+    await navigate("login.html");
+    await checkWidth("390:google-signin");
+    await evaluate('document.querySelector("#auth-consent").checked=true;document.querySelector("#google-signin").click()');
+    assert.equal(await evaluate('window.__authCalls[0].provider'), "google");
+    assert.equal(await evaluate('new URL(window.__authCalls[0].options.redirectTo).pathname.endsWith("/login.html")'), true);
+    await evaluate('redirectForSession({access_token:"google-access",refresh_token:"google-refresh",expires_in:3600})');
+    await wait(100);
+    assert.equal(await evaluate('window.__googleOtpCalls.length'), 1);
+    assert.equal(await evaluate('window.__googleOtpCalls[0].authorization'), "Bearer google-access");
+    assert.equal(await evaluate('document.querySelector("#auth-otp").hidden'), false);
+    assert.equal(await evaluate('document.querySelectorAll(".auth-otp-inputs input").length'), 6);
+    await evaluate('window.__googleSessionMissing=true');
+    await evaluate('(()=>{const clipboard=new DataTransfer();clipboard.setData("text","246810");document.querySelector(".auth-otp-inputs input").dispatchEvent(new ClipboardEvent("paste",{clipboardData:clipboard,bubbles:true,cancelable:true}));document.querySelector("#otp-form").requestSubmit()})()');
+    await wait(100);
+    assert.deepEqual(await evaluate('window.__verifyCalls.map(call=>call.code)'), ["246810"]);
+    assert.equal(await evaluate('window.__serverSessionSyncCalls'), 1, "Successful OTP reuses and syncs the preserved Google session");
+    assert.equal(await evaluate('window.__setSessionCalls'), 1, "Missing local auth state is restored from the server-verified session");
+    assert.equal(await evaluate('window.__googleSignOutCalls'), 0, "Google session is not cleared before the OTP is verified");
+    assert.equal(await evaluate('sessionStorage.getItem("skillmate-google-otp-active")'), null);
+    await wait(600);
+    assert.equal(await evaluate('location.pathname.endsWith("/index.html")'), true, "Verified Google user enters the app");
+  };
   await call("Page.enable"); await call("Runtime.enable"); await call("Network.enable");
   await call("Page.bringToFront");
   await call("Network.setBlockedURLs", { urls: ["*supabase.co*", "*supabase.in*", "*fonts.googleapis.com*", "*fonts.gstatic.com*"] });
@@ -223,6 +258,12 @@ async function main() {
     await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await verifyPasswordRecoveryFlow();
     console.log("PASS password recovery: send code, verify six digits, reject mismatched passwords, and set a new password");
+    return;
+  }
+  if (process.argv.includes("--google-only")) {
+    await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await verifyGoogleOtpFlow();
+    console.log("PASS Google sign-in: OAuth, six-digit verification and preserved-session app entry");
     return;
   }
   for (const width of [320, 360, 390, 430, 768, 1024, 1440]) {
@@ -325,6 +366,12 @@ async function main() {
   assert.equal(await evaluate('window.__authCalls.length'), 0);
   await evaluate('document.querySelector("#auth-consent").checked=true;document.querySelector("#google-signin").click()');
   assert.equal(await evaluate('window.__authCalls[0].provider'), "google");
+  assert.equal(await evaluate('new URL(window.__authCalls[0].options.redirectTo).pathname.endsWith("/login.html")'), true, "Google returns to the verification page before entering the app");
+  await evaluate('redirectForSession({access_token:"google-access",refresh_token:"google-refresh",expires_in:3600})');
+  await wait(100);
+  assert.equal(await evaluate('window.__googleOtpCalls.length'), 1, "Google callback starts server-side email verification");
+  assert.equal(await evaluate('window.__googleOtpCalls[0].authorization'), "Bearer google-access");
+  assert.equal(await evaluate('document.querySelector("#auth-otp").hidden'), false, "Google users see the six-digit verification screen");
   await navigate("onboarding.html"); await checkWidth("390:onboarding");
   assert.equal(await evaluate('document.querySelector("#onboarding-name").value'), "Test Student");
   assert.equal(await evaluate('document.querySelector(".onboarding-extras").open'), false);
@@ -335,7 +382,7 @@ async function main() {
   assert.equal(await evaluate('JSON.parse(sessionStorage.getItem("onboarding-fixture")).university'), "University of Ghana");
   await verifyPasswordRecoveryFlow();
   assert.deepEqual(errors, [], "Uncaught browser errors");
-  console.log("PASS interactions: profile editing, student details, mobile seller label, search refocus, service selection, categories, booking, chat, theme, first listing, Google-only signup");
+  console.log("PASS interactions: profile editing, student details, mobile seller label, search refocus, service selection, categories, booking, chat, theme, first listing and Google OTP gate");
   console.log(`Screenshots: ${output}`);
   await call("Browser.close").catch(() => {});
 }

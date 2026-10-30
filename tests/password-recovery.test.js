@@ -17,6 +17,7 @@ process.env.SMTP_PASS = "test-password";
 process.env.SMTP_FROM = "Skillmate <mailer@example.test>";
 
 const {
+  googleSignIn,
   requestPasswordRecovery,
   updateRecoveredPassword,
   verify,
@@ -47,6 +48,82 @@ function envelope(value) {
     data: encrypted.toString("base64url"),
   };
 }
+
+test("Google sign-in requires email verification before returning a Supabase session", async () => {
+  let emailMessage;
+  let storedChallenge;
+  nodemailer.createTransport = () => ({
+    async sendMail(message) { emailMessage = message; },
+  });
+  global.fetch = async (url, options = {}) => {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.pathname.endsWith("/auth/v1/user")) {
+      assert.equal(options.headers.authorization, "Bearer google-access-token");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: "google-student",
+          email: "student@example.test",
+          app_metadata: { provider: "google" },
+        }),
+      };
+    }
+    if (parsedUrl.pathname.endsWith("/rest/v1/auth_login_challenges") && !options.method) {
+      return { ok: true, status: 200, json: async () => [] };
+    }
+    if (parsedUrl.pathname.endsWith("/rest/v1/auth_login_challenges") && options.method === "POST") {
+      storedChallenge = JSON.parse(options.body);
+      return { ok: true, status: 201, json: async () => ({}) };
+    }
+    if (parsedUrl.pathname.endsWith("/rest/v1/rpc/consume_email_login_challenge")) {
+      return { ok: true, status: 200, json: async () => ({ status: "verified", session: storedChallenge.session_data }) };
+    }
+    return { ok: true, status: 204, json: async () => ({}) };
+  };
+
+  try {
+    const startResponse = responseStub();
+    await googleSignIn({
+      method: "POST",
+      headers: { authorization: "Bearer google-access-token" },
+      body: {
+        refresh_token: "google-refresh-token",
+        expires_in: 3600,
+        expires_at: 1900000000,
+        token_type: "bearer",
+      },
+    }, startResponse);
+    assert.equal(startResponse.statusCode, 200);
+    assert.match(startResponse.body.message, /six-digit sign-in code/);
+    assert.match(emailMessage.text, /finish signing in/);
+    assert.equal(storedChallenge.email, "student@example.test");
+    const challengeToken = decodeURIComponent(startResponse.headers["set-cookie"]
+      .find(cookie => cookie.startsWith("skillmate_login_challenge="))
+      .split(";")[0].split("=")[1]);
+
+    const verifyResponse = responseStub();
+    await verify({
+      method: "POST",
+      cookies: { skillmate_login_challenge: challengeToken },
+      body: { code: emailMessage.text.match(/code is (\d{6})\./)?.[1] },
+    }, verifyResponse);
+    assert.equal(verifyResponse.statusCode, 200);
+    assert.deepEqual(verifyResponse.body, {
+      provider: "google",
+      session: {
+        access_token: "google-access-token",
+        refresh_token: "google-refresh-token",
+        expires_in: 3600,
+        expires_at: 1900000000,
+        token_type: "bearer",
+      },
+    });
+  } finally {
+    global.fetch = originalFetch;
+    nodemailer.createTransport = originalTransport;
+  }
+});
 
 test("password recovery sends a six-digit code, verifies it, and redeems a one-time reset grant", async () => {
   const requests = [];
