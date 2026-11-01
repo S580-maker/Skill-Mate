@@ -128,6 +128,18 @@ app.get("/supabase-config.js", (_request, response, next) => {
 });
 
 app.get("/api/health", require("./api/health"));
+app.get("/api/push-config", (request, response) => {
+  const { handlePushConfig } = require("./api/_lib/push");
+  return handlePushConfig(request, response);
+});
+app.all("/api/push-subscriptions", rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+  const { handlePushSubscriptions } = require("./api/_lib/push");
+  return handlePushSubscriptions(request, response);
+});
+app.post("/api/push-dispatch", (request, response) => {
+  const { handlePushDispatch } = require("./api/_lib/push");
+  return handlePushDispatch(request, response);
+});
 
 app.post("/api/auth/sign-in", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
   const { signIn } = require("./api/_lib/email-2fa");

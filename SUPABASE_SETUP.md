@@ -105,15 +105,19 @@ Codes expire after 10 minutes, can be resent after 30 seconds up to five times p
 
    ```text
    SUPABASE_URL=https://your-project-id.supabase.co
-  SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
-  SUPABASE_SERVICE_ROLE_KEY=your-server-only-service-role-key
-  AUTH_OTP_SECRET=your-generated-random-secret
-  SMTP_HOST=your-smtp-host
-  SMTP_PORT=587
-  SMTP_SECURE=false
-  SMTP_USER=your-smtp-username
-  SMTP_PASS=your-smtp-password
-  SMTP_FROM=Skillmate <no-reply@your-domain.example>
+   SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
+   SUPABASE_SERVICE_ROLE_KEY=your-server-only-service-role-key
+   AUTH_OTP_SECRET=your-generated-random-secret
+   SMTP_HOST=your-smtp-host
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=your-smtp-username
+   SMTP_PASS=your-smtp-password
+   SMTP_FROM=Skillmate <no-reply@your-domain.example>
+   VAPID_PUBLIC_KEY=your-vapid-public-key
+   VAPID_PRIVATE_KEY=your-vapid-private-key
+   VAPID_SUBJECT=mailto:admin@your-domain.example
+   PUSH_DISPATCH_SECRET=your-random-webhook-secret
    ```
 
   Use the Supabase **Project URL** and public **anon/publishable** key. Keep the service role key, OTP secret, and SMTP credentials server-only; never use them in client-side variables or frontend code. The app does not need a `PORT` variable on Vercel.
@@ -122,6 +126,42 @@ Codes expire after 10 minutes, can be resent after 30 seconds up to five times p
 5. Visit the Vercel URL, create/sign in to an account, and test the main marketplace and administrator route. Promote the intended admin account using the SQL in the next section.
 
 The repository includes Vercel configuration and does not include `.env` or local dependency files in Git. Changing Vercel environment variables requires a new deployment to take effect. Local development remains available with `npm start`.
+
+### Browser notifications when users are away
+
+Browser push alerts work on supported browsers over HTTPS (localhost is allowed for development). They are opt-in per device: users enable them from **Profile & Settings → Notifications**, and can disable each device there. Booking and message push alerts still respect each user's **Booking updates** and **Messages** preferences. Push message bodies are generic so message contents are not exposed on a locked screen.
+
+1. Apply `supabase/migrations/20261102100000_web_push_notifications.sql` in the Supabase SQL Editor. This creates a private subscription table; browser roles have no access to it.
+2. Generate a VAPID key pair with `npx web-push generate-vapid-keys`. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` on the Skillmate server. `VAPID_SUBJECT` must be a contact URI such as `mailto:admin@your-domain.edu` or an HTTPS URL. Only the public key is sent to browsers.
+3. Generate a new random secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. Do not reuse the value previously shared in chat; treat it as exposed. Set the new value as `PUSH_DISPATCH_SECRET` in `.env` locally, in Vercel, and in Supabase Edge Function Secrets. Redeploy Vercel after updating it. Keep this secret server-only.
+4. Install the Supabase CLI if needed. On Windows with Scoop, open PowerShell and run:
+
+   ```powershell
+   scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+   scoop install supabase
+   ```
+
+   Then, from the Skillmate repository root, link the project and deploy the Edge Function:
+
+   ```powershell
+   supabase login
+   supabase link --project-ref your-project-ref
+   supabase functions deploy push-notification-webhook
+   ```
+
+   The project's `supabase/config.toml` disables the gateway's JWT check because database webhooks use a Supabase API secret key instead of a user JWT. The Edge Function's `withSupabase({ auth: "secret" })` check still validates the key.
+5. In Supabase Dashboard, go to **Edge Functions → Secrets** and add these secrets:
+
+   | Name | Value |
+   |---|---|
+   | `PUSH_DISPATCH_SECRET` | Exactly the same new value set on the Skillmate server/Vercel |
+   | `PUSH_DISPATCH_URL` | `https://your-domain/api/push-dispatch` |
+
+   Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` as Vercel/server environment variables too. Do not put VAPID private keys or the dispatch secret in browser code.
+6. In Supabase, open **Database → Webhooks → Create a new webhook** and choose **Supabase Edge Functions**. Select `push-notification-webhook`, choose table `public.notifications`, and select **INSERT only**. Under **HTTP Headers**, choose **Add secret key** and select the project's **default** secret key. This authenticates Supabase's request to the Edge Function; the function then uses the separate `PUSH_DISPATCH_SECRET` to authenticate with the Skillmate server. Save the webhook. The function accepts only valid booking/message notification inserts.
+7. Sign in on a supported browser, open **Profile & Settings → Notifications**, and choose **Enable on this device**. Allow notifications in the browser prompt. Test by creating a booking request or sending a message from another account. Repeat on each device/browser that should receive alerts.
+
+The app stores only the push endpoint and encryption keys needed to deliver notifications. Account closure explicitly removes the user's subscriptions; stale browser subscriptions are also removed when a push provider reports them expired. The Edge Function checks its webhook secret and forwards only valid booking/message notification inserts; the server checks a separate relay secret before delivery.
 
 ### Configure Google sign-in
 

@@ -918,19 +918,19 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   }
   target.removeAttribute("aria-busy");
   const query = targetId === "saved-grid" ? "" : document.querySelector("#global-search").value.trim();
+  const campus = state.profile?.university || "";
   const matching = marketplaceEntries(providers).filter((provider) => {
     if (state.blocked.includes(provider.id)) return false;
+    if (targetId !== "saved-grid" && window.skillmateMarketplace.campusRank(provider, campus) === null) return false;
     if (targetId !== "saved-grid" && !window.skillmateMarketplace.matchesCategory(provider.category, selectedCategory)) return false;
     return window.skillmateSmartSearch.matches(provider, query);
   });
-  const visible = query
-    ? matching.sort((left, right) => {
-      return marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query);
-    })
-    : matching;
+  const visible = window.skillmateMarketplace.sortByCampus(matching, campus, (left, right) => (
+    query ? marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query) : 0
+  ));
   if (targetId === "marketplace-grid") {
     document.querySelector("#marketplace-result-count").textContent = `${visible.length} ${visible.length === 1 ? "service" : "services"}`;
-    document.querySelector("#marketplace-heading").textContent = query ? "Search results" : selectedCategory === "All" ? "Services on your campus" : selectedCategory;
+    document.querySelector("#marketplace-heading").textContent = query ? "Search results" : selectedCategory === "All" ? "Services for your campus" : selectedCategory;
     const status = document.querySelector("#search-status");
     status.hidden = !query;
     status.textContent = query
@@ -939,11 +939,11 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   }
   target.innerHTML = visible.length ? visible.map((provider) => `
     <article class="provider-card">
-      <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><button class="listing-cover-button" type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="View ${escapeHTML(provider.service)}"><span class="cover-fallback"><span aria-hidden="true">${getCategoryIcon(provider.category)}</span><strong>${escapeHTML(provider.category)}</strong><small>Skills from your campus</small></span>${listingImage(provider) ? `<img class="service-marketplace-cover" src="${escapeHTML(listingImage(provider))}" alt="${escapeHTML(provider.service)}" loading="lazy" decoding="async" />` : ""}</button>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-pressed="${state.saved.includes(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
+      <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><button class="listing-cover-button" type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="View ${escapeHTML(provider.service)}"><span class="cover-fallback"><span aria-hidden="true">${getCategoryIcon(provider.category)}</span><strong>${escapeHTML(provider.category)}</strong><small>Student service</small></span>${listingImage(provider) ? `<img class="service-marketplace-cover" src="${escapeHTML(listingImage(provider))}" alt="${escapeHTML(provider.service)}" loading="lazy" decoding="async" />` : ""}</button>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-pressed="${state.saved.includes(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
       <div class="provider-card-body">
         <div class="listing-category-row"><p class="service-category">${escapeHTML(provider.category)}</p><span class="rating">${providerReviewSummary(provider).count ? `★ ${providerReviewSummary(provider).rating}<small> (${providerReviewSummary(provider).count})</small>` : "New provider"}</span></div>
         <h3><button type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">${escapeHTML(provider.service)}</button></h3><p class="provider-description">${escapeHTML(provider.description)}</p>
-        <div class="provider-card-person">${providerAvatarMarkup(provider)}<span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? '<i class="verified-dot">✓</i> Campus verified' : escapeHTML(provider.campus)}</small></span></div>
+        <div class="provider-card-person">${providerAvatarMarkup(provider)}<span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? '<i class="verified-dot">✓</i> Campus verified · ' : ""}${escapeHTML(provider.campus)}</small></span></div>
         ${serviceDetailLabel(provider) ? `<p class="service-delivery-label">${escapeHTML(serviceDetailLabel(provider))}</p>` : ""}
         <div class="provider-card-footer"><span class="price"><small>${provider.priceType === "starting" ? "Starting at" : "Listed price"}</small>${currency(provider.price)}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">Request booking</button></span>`}</div>
       </div>
@@ -971,11 +971,13 @@ function renderSearchSuggestions() {
   }
 
   const providers = appSupabase ? connectedProviders : seedProviders;
-  const matches = marketplaceEntries(providers)
+  const campus = state.profile?.university || "";
+  const matches = window.skillmateMarketplace.sortByCampus(marketplaceEntries(providers)
     .filter((provider) => !state.blocked.includes(provider.id)
+      && window.skillmateMarketplace.campusRank(provider, campus) !== null
       && window.skillmateMarketplace.matchesCategory(provider.category, selectedCategory)
-      && window.skillmateSmartSearch.matches(provider, query))
-    .sort((left, right) => marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query))
+      && window.skillmateSmartSearch.matches(provider, query)), campus,
+  (left, right) => marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query))
     .slice(0, 6);
 
   target.innerHTML = matches.length
@@ -3015,6 +3017,39 @@ function openStudentProfileEditor() {
   openModal("profile-modal");
 }
 document.querySelector("#profile-menu").addEventListener("click", () => showPage("profile-settings"));
+async function updatePushSettingsStatus() {
+  const button = document.querySelector("#settings-push-toggle");
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+    button.disabled = true;
+    button.textContent = "Browser notifications unavailable";
+    return;
+  }
+  if (!window.isSecureContext) {
+    button.disabled = true;
+    button.textContent = "Use a secure connection";
+    return;
+  }
+  if (Notification.permission === "denied") {
+    button.disabled = true;
+    button.textContent = "Notifications blocked in browser";
+    return;
+  }
+  try {
+    const registration = await navigator.serviceWorker.getRegistration("/");
+    const subscription = await registration?.pushManager.getSubscription();
+    button.disabled = false;
+    button.textContent = subscription ? "Disable on this device" : "Enable on this device";
+  } catch (error) {
+    console.error("Could not check the browser push-notification status.", error);
+    button.disabled = true;
+    button.textContent = "Could not check notification status";
+  }
+}
+function pushSettingsError(message) {
+  const error = new Error(message);
+  error.userMessage = message;
+  return error;
+}
 function loadAccountSettings() {
   document.querySelector("#settings-full-name").value = state.profile.name || "";
   document.querySelector("#settings-email").value = appUser?.email || "";
@@ -3023,6 +3058,7 @@ function loadAccountSettings() {
   document.querySelector("#settings-phone").value = state.profile.phoneNumber || "";
   document.querySelector("#settings-notify-bookings").checked = state.profile.notifyBookingUpdates !== false;
   document.querySelector("#settings-notify-messages").checked = state.profile.notifyMessages !== false;
+  updatePushSettingsStatus();
   const avatar = document.querySelector("#settings-avatar-preview");
   if (state.profile.avatarUrl) avatar.src = state.profile.avatarUrl;
   else avatar.removeAttribute("src");
@@ -3204,6 +3240,79 @@ document.querySelector("#settings-notifications-save").addEventListener("click",
     state.profile.notifyMessages = notifyMessages;
     setSettingsFeedback(feedback, "Notification settings have been saved.");
   }, "Could not save notification settings.", "Saving notification settings…", {
+    inlineFeedback: feedback,
+    submitButton: button,
+  });
+});
+document.querySelector("#settings-push-toggle").addEventListener("click", (event) => {
+  const button = event.currentTarget;
+  const feedback = document.querySelector("#settings-push-feedback");
+  runAction(async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+      throw pushSettingsError("This browser does not support push notifications.");
+    }
+    if (!window.isSecureContext) throw pushSettingsError("Browser notifications require a secure HTTPS connection.");
+    if (Notification.permission === "denied") {
+      throw pushSettingsError("Notifications are blocked in your browser settings. Allow them for Skillmate, then try again.");
+    }
+    if (!await (Notification.permission === "granted" ? Promise.resolve("granted") : Notification.requestPermission())
+      .then((permission) => permission === "granted")) {
+      throw pushSettingsError("Allow notifications in your browser to enable alerts.");
+    }
+
+    const registration = await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
+    const currentSubscription = await registration.pushManager.getSubscription();
+    const { data: sessionData, error: sessionError } = await appSupabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw pushSettingsError("Sign in again before changing browser notifications.");
+
+    if (currentSubscription) {
+      const deleteResponse = await fetch("/api/push-subscriptions", {
+        method: "DELETE",
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(currentSubscription.toJSON()),
+      });
+      if (!deleteResponse.ok) {
+        const result = await deleteResponse.json().catch(() => ({}));
+        throw pushSettingsError(result.error || "Could not disable browser notifications.");
+      }
+      if (!await currentSubscription.unsubscribe()) {
+        throw pushSettingsError("Skillmate removed this device, but the browser could not disable its push subscription.");
+      }
+      setSettingsFeedback(feedback, "Browser notifications are disabled on this device.");
+    } else {
+      const configResponse = await fetch("/api/push-config", { cache: "no-store" });
+      const config = await configResponse.json();
+      if (!configResponse.ok) throw pushSettingsError(config.error || "Browser notifications are not configured.");
+      const applicationServerKey = Uint8Array.from(
+        atob(config.publicKey.replace(/-/g, "+").replace(/_/g, "/")),
+        (character) => character.charCodeAt(0),
+      );
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+      const saveResponse = await fetch("/api/push-subscriptions", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+      if (!saveResponse.ok) {
+        const result = await saveResponse.json().catch(() => ({}));
+        await subscription.unsubscribe();
+        throw pushSettingsError(result.error || "Could not enable browser notifications.");
+      }
+      setSettingsFeedback(feedback, "Browser notifications are enabled on this device.");
+    }
+    await updatePushSettingsStatus();
+  }, "Could not update browser notifications.", "Updating browser notifications…", {
     inlineFeedback: feedback,
     submitButton: button,
   });

@@ -144,11 +144,16 @@
               </section>
             </form>
             <section class="panel settings-section">
-              <div class="panel-heading"><div><h2>Notifications</h2><p>Choose which in-app updates you receive.</p></div></div>
+              <div class="panel-heading"><div><h2>Notifications</h2><p>Choose which updates you receive in Skillmate and on this device.</p></div></div>
               <label class="settings-toggle"><span><strong>Booking updates</strong><small>Requests, confirmations and cancellations.</small></span><input id="settings-notify-bookings" type="checkbox" /></label>
               <label class="settings-toggle"><span><strong>Messages</strong><small>New messages from other students.</small></span><input id="settings-notify-messages" type="checkbox" /></label>
               <p class="settings-feedback" id="notification-settings-feedback" role="status" aria-live="polite" hidden></p>
               <button class="button button-primary settings-save-button" id="settings-notifications-save" type="button">Save notification settings</button>
+              <div class="settings-push-control">
+                <p><strong>Browser notifications</strong><br /><small>Get booking and message alerts when Skillmate is closed. Message previews are kept private.</small></p>
+                <button class="button button-outline" id="settings-push-toggle" type="button">Enable on this device</button>
+                <p class="settings-feedback" id="settings-push-feedback" role="status" aria-live="polite" hidden></p>
+              </div>
             </section>
             <section class="panel settings-section danger-zone">
               <div class="panel-heading"><div><h2>Delete account</h2><p>Your profile will be anonymized, listings deactivated, and sign-in disabled. Booking and safety history is retained without your profile details.</p></div></div>

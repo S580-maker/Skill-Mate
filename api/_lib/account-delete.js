@@ -82,6 +82,16 @@ async function anonymizeAndDisableAccount(userId) {
     method: "POST",
     body: JSON.stringify({ p_user_id: userId }),
   });
+  try {
+    await requestSupabase(
+      url,
+      serviceRoleKey,
+      `/rest/v1/push_subscriptions?user_id=eq.${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+    );
+  } catch (error) {
+    if (error.status !== 404 || !error.message.includes("push_subscriptions")) throw error;
+  }
   await Promise.all([
     removeStorageFolder(url, serviceRoleKey, "profile-avatars", userId),
     removeStorageFolder(url, serviceRoleKey, "portfolio-images", userId),

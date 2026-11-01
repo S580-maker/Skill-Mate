@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { matchesCategory, expandListings, filterBookings, safeImageUrl } = require("../marketplace-utils");
+const { matchesCategory, campusRank, sortByCampus, expandListings, filterBookings, safeImageUrl } = require("../marketplace-utils");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
@@ -30,6 +30,28 @@ test("every active service is discoverable while retaining the provider identity
   assert.equal(listings[1].coverImagePath, "", "a second service must not inherit the first service's cover");
   assert.equal(listings[1].price, 40);
   assert.equal(providers[0].service, "First listing", "provider records remain unchanged");
+});
+
+test("campus discovery keeps physical services local and includes services deliverable online", () => {
+  const studentCampus = "University of Ghana";
+  assert.equal(campusRank({ campus: "university of ghana", deliveryMethod: "in_person" }, studentCampus), 0);
+  assert.equal(campusRank({ campus: "Ashesi University", deliveryMethod: "in_person" }, studentCampus), null);
+  assert.equal(campusRank({ campus: "Ashesi University", deliveryMethod: "online" }, studentCampus), 1);
+  assert.equal(campusRank({ campus: "Ashesi University", deliveryMethod: "both" }, studentCampus), 1);
+  assert.equal(campusRank({ campus: "Ashesi University" }, studentCampus), null);
+  assert.equal(campusRank({ campus: "Ashesi University", deliveryMethod: "in_person" }, ""), 0);
+});
+
+test("campus matches stay ahead of remote online listings, with relevance sorted within each group", () => {
+  const sameCampus = { id: "local", campus: "University of Ghana", deliveryMethod: "in_person", score: 1 };
+  const onlineElsewhere = { id: "remote", campus: "Ashesi University", deliveryMethod: "online", score: 100 };
+  const onlineLocal = { id: "local-online", campus: "University of Ghana", deliveryMethod: "online", score: 2 };
+  const sorted = sortByCampus(
+    [onlineElsewhere, sameCampus, onlineLocal],
+    "University of Ghana",
+    (left, right) => right.score - left.score,
+  );
+  assert.deepEqual(sorted.map(item => item.id), ["local-online", "local", "remote"]);
 });
 
 const bookings = [

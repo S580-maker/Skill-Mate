@@ -13,6 +13,18 @@
   function matchesCategory(category, selected) {
     return selected === "All" || (categoryFamilies[selected] || [selected]).includes(category);
   }
+  function campusRank(provider, campus) {
+    const normalizeCampus = value => String(value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+    const studentCampus = normalizeCampus(campus);
+    if (!studentCampus) return 0;
+    if (normalizeCampus(provider.campus) === studentCampus) return 0;
+    return ["online", "both"].includes(String(provider.deliveryMethod || "").toLowerCase()) ? 1 : null;
+  }
+  function sortByCampus(providers, campus, compare = () => 0) {
+    return [...providers].sort((left, right) => (
+      campusRank(left, campus) - campusRank(right, campus) || compare(left, right)
+    ));
+  }
   function expandListings(providers, services) {
     return providers.flatMap(provider => {
       const active = services.filter(service => service.providerId === provider.id && service.active !== false);
@@ -57,5 +69,5 @@
       return url.protocol === "https:" || (url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname)) ? url.href : "";
     } catch { return ""; }
   }
-  return { categoryFamilies, popularCategories, matchesCategory, expandListings, filterBookings, safeImageUrl };
+  return { categoryFamilies, popularCategories, matchesCategory, campusRank, sortByCampus, expandListings, filterBookings, safeImageUrl };
 });

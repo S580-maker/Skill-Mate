@@ -56,6 +56,7 @@ test("account closure disables sign-in before anonymization and file cleanup", a
   assert.equal(calls[0].pathname, "/auth/v1/admin/users/test-user");
   assert.equal(calls[0].body.ban_duration, "876000h");
   assert.equal(calls[1].pathname, "/rest/v1/rpc/anonymize_closed_account");
+  assert.equal(calls[2].pathname, "/rest/v1/push_subscriptions");
   assert.equal(calls.filter((call) => call.pathname.includes("/object/list/")).length, 4);
 });
 

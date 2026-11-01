@@ -1,0 +1,2 @@
+[functions.push-notification-webhook]
+verify_jwt = false
