@@ -63,3 +63,22 @@ test("agreed booking UI requires customer confirmation and exposes time approval
   assert.match(notifications, /skillmate:open-booking/);
   assert.match(userScript, /skillmate:open-booking/);
 });
+
+test("existing chats expose service-specific negotiation actions and agreed booking links", () => {
+  assert.match(userScript, /chatServices = connectedServices\.filter/);
+  assert.match(userScript, /action\.dataset\.chatPriceAction = "discuss"/);
+  assert.match(userScript, /action\.dataset\.chatPriceAction = "offer"/);
+  assert.match(userScript, /textContent = "Propose a price"/);
+  assert.match(userScript, /action === "counter" \|\| action === "proposal" \|\| action === "initial"/);
+  assert.match(userScript, /data-negotiation-chat="\$\{escapeHTML\(booking\.priceNegotiationId\)\}"/);
+  assert.match(userScript, /function handleNegotiationChatAction/);
+  assert.match(index, /id="price-offer-conversation-id"/);
+  assert.match(userScript, /conversationId: chat\.id/);
+  assert.match(userScript, /let conversationId = activeConversationId/);
+  assert.match(userScript, /error\.userMessage = error\.message\.trim\(\)\.slice\(0, 240\)/);
+});
+
+test("formal price proposals hide the optional message field", () => {
+  assert.match(userScript, /messageLabel\.hidden = action === "proposal"/);
+  assert.match(userScript, /action === "proposal" \? "" : document\.querySelector\("#price-offer-message"\)\.value\.trim\(\)/);
+});

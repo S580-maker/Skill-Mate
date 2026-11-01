@@ -1069,6 +1069,8 @@ function renderBookingList(targetId, list, options = {}) {
     const actions = providerView
       ? `${booking.status === "Pending" ? `${appointmentProposalPending ? "" : `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button>`}<button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : booking.status === "Confirmed" ? `<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : ""}${["Pending", "Confirmed"].includes(status) && !appointmentProposalPending ? `<button class="subtle-button" data-propose-appointment="${escapeHTML(booking.id)}">Suggest another time</button>` : ""}<button class="subtle-button" data-message="customer:${escapeHTML(booking.id)}">Message student</button>`
       : `${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-primary review-required-button" data-review="${escapeHTML(booking.id)}">Review required</button>` : ""}${appointmentProposalPending ? `<button class="button button-small button-primary" data-appointment-response="accept" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Accept suggested time</button><button class="button button-small button-outline" data-appointment-response="reject" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Keep original time</button>` : ""}${!booking.groupId && ["Pending", "Confirmed"].includes(status) ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
+    const priceChatAction = booking.priceNegotiationId
+      ? `<button class="subtle-button" data-negotiation-chat="${escapeHTML(booking.priceNegotiationId)}">Open price chat</button>` : "";
     const location = status === "Confirmed" && booking.otherLocation
       ? `<div class="booking-location"><strong>${providerView ? "Customer" : "Provider"}’s hostel or campus: ${escapeHTML(booking.otherLocation)}</strong><small>Shared for this confirmed booking. Approximate distance isn’t available without map pins.</small></div>`
       : "";
@@ -1081,7 +1083,7 @@ function renderBookingList(targetId, list, options = {}) {
       ? `<small class="booking-note">Arrangement: ${escapeHTML(booking.requestedLocation)}</small>` : "";
     const agreedScope = booking.scopeSnapshot
       ? `<div class="booking-location"><strong>${booking.priceAgreementId ? "Agreed service scope" : "Service details"}</strong><small>${escapeHTML(booking.scopeSnapshot)}</small></div>` : "";
-    return `<article class="booking-card${!providerView && status === "Completed" && !booking.reviewed ? " booking-awaiting-review" : ""}" data-booking-card-id="${escapeHTML(booking.id)}"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span><span class="status status-${escapeHTML(status.toLowerCase())}">${escapeHTML(status === "Pending" ? providerView ? appointmentProposalPending ? "Time change awaiting customer" : "Needs your reply" : "Awaiting confirmation" : status)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${appointmentSuggestion}${listedPriceNote}${requestedArrangement}${booking.note ? `<small class="booking-note">Instructions: “${escapeHTML(booking.note)}”</small>` : ""}${agreedScope}${!providerView && status === "Completed" && !booking.reviewed ? '<small class="review-required-note">Your review is required before you can request another booking.</small>' : ""}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
+    return `<article class="booking-card${!providerView && status === "Completed" && !booking.reviewed ? " booking-awaiting-review" : ""}" data-booking-card-id="${escapeHTML(booking.id)}"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span>${booking.priceAgreementId ? '<span class="booking-type-pill">Agreed price</span>' : ""}<span class="status status-${escapeHTML(status.toLowerCase())}">${escapeHTML(status === "Pending" ? providerView ? appointmentProposalPending ? "Time change awaiting customer" : "Needs your reply" : "Awaiting confirmation" : status)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${appointmentSuggestion}${listedPriceNote}${requestedArrangement}${booking.note ? `<small class="booking-note">Instructions: “${escapeHTML(booking.note)}”</small>` : ""}${agreedScope}${!providerView && status === "Completed" && !booking.reviewed ? '<small class="review-required-note">Your review is required before you can request another booking.</small>' : ""}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${priceChatAction}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
   }).join("") : '<div class="empty-card"><span>◷</span><strong>Nothing here just yet</strong><small>Your bookings and requests will appear here.</small></div>';
 }
 function resizeChatInput(input) {
@@ -1263,10 +1265,58 @@ function createChatMessageRow(message, grouped) {
 }
 function createPriceNegotiationPanel(chat) {
   const negotiations = priceNegotiations.filter(item => item.conversationId === chat.id);
-  if (!negotiations.length) return null;
+  const chatServices = connectedServices.filter(service => service.active
+    && (service.providerId === appUser?.id || service.providerId === chat.providerId));
+  if (!negotiations.length && !chatServices.length) return null;
   const section = document.createElement("section");
   section.className = "chat-negotiations";
-  section.setAttribute("aria-label", "Price proposals");
+  section.setAttribute("aria-label", "Price and booking tools");
+  const heading = document.createElement("div");
+  heading.className = "chat-negotiations-heading";
+  const headingTitle = document.createElement("strong");
+  headingTitle.textContent = "Price & booking";
+  const headingHint = document.createElement("small");
+  headingHint.textContent = "Formal offers need the other person’s acceptance. Messages alone never confirm a price.";
+  heading.append(headingTitle, headingHint);
+  section.append(heading);
+  if (!negotiations.length && chatServices.length) {
+    const starter = document.createElement("div");
+    starter.className = "chat-negotiation-starter";
+    for (const service of chatServices) {
+      const row = document.createElement("div");
+      row.className = "chat-negotiation-start-row";
+      const copy = document.createElement("span");
+      const title = document.createElement("strong");
+      title.textContent = service.title;
+      const mode = document.createElement("small");
+      mode.textContent = `${service.negotiationMode === "controlled" ? "Controlled" : service.negotiationMode === "hybrid" ? "Hybrid" : "Chat-based"} · ${currency(service.price)} listed`;
+      copy.append(title, mode);
+      row.append(copy);
+      const isProvider = service.providerId === appUser?.id;
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = "button button-small button-primary";
+      action.dataset.chatPriceStart = service.id;
+      action.dataset.providerId = service.providerId;
+      if (service.negotiationMode === "controlled") {
+        if (isProvider) continue;
+        action.dataset.chatPriceAction = "offer";
+        action.textContent = "Make an offer";
+      } else if (isProvider) {
+        action.dataset.chatPriceAction = "proposal";
+        action.textContent = "Propose a price";
+      } else if (service.negotiationMode === "hybrid") {
+        action.dataset.chatPriceAction = "offer";
+        action.textContent = "Make an offer";
+      } else {
+        action.dataset.chatPriceAction = "discuss";
+        action.textContent = "Discuss price";
+      }
+      row.append(action);
+      starter.append(row);
+    }
+    if (starter.children.length) section.append(starter);
+  }
   for (const negotiation of negotiations) {
     const service = connectedServices.find(item => item.id === negotiation.serviceId);
     const card = document.createElement("article");
@@ -1276,8 +1326,8 @@ function createPriceNegotiationPanel(chat) {
     const state = document.createElement("span");
     state.className = "chat-negotiation-state";
     state.textContent = negotiation.state === "agreed"
-      ? `Price and service agreed · ${currency(negotiation.agreedPrice)}`
-      : "Price not yet agreed";
+      ? `Agreed price · ${currency(negotiation.agreedPrice)}`
+      : "No final price yet";
     card.append(title, state);
     for (const offer of negotiation.offers) {
       const item = document.createElement("div");
@@ -1354,6 +1404,21 @@ function createPriceNegotiationPanel(chat) {
         proposal.dataset.providerId = negotiation.providerId;
         proposal.textContent = "Send formal price proposal";
         card.append(proposal);
+      } else if (!hasPending && appUser?.id === negotiation.customerId && ["controlled", "hybrid"].includes(mode)) {
+        const offer = document.createElement("button");
+        offer.type = "button";
+        offer.className = "button button-small button-primary";
+        offer.dataset.priceAction = "initial";
+        offer.dataset.negotiationId = negotiation.id;
+        offer.dataset.serviceId = negotiation.serviceId;
+        offer.dataset.providerId = negotiation.providerId;
+        offer.textContent = "Make an offer";
+        card.append(offer);
+      } else if (!hasPending && appUser?.id === negotiation.customerId && mode === "chat") {
+        const prompt = document.createElement("small");
+        prompt.className = "chat-booking-next-step";
+        prompt.textContent = "Discuss the price in the message box; the provider can send a formal proposal here.";
+        card.append(prompt);
       }
     }
     section.append(card);
@@ -2107,6 +2172,19 @@ function handleAppointmentActions(event) {
   }, "Could not respond to the suggested appointment.");
   return true;
 }
+function handleNegotiationChatAction(event) {
+  const button = event.target.closest("[data-negotiation-chat]");
+  if (!button) return false;
+  const negotiation = priceNegotiations.find(item => item.id === button.dataset.negotiationChat);
+  if (!negotiation?.conversationId) {
+    showToast("The price conversation for this booking is unavailable.", "error");
+    return true;
+  }
+  document.dispatchEvent(new CustomEvent("skillmate:open-conversation", {
+    detail: { conversationId: negotiation.conversationId },
+  }));
+  return true;
+}
 document.querySelector("#appointment-proposal-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const date = document.querySelector("#appointment-proposal-date").value;
@@ -2467,7 +2545,7 @@ function updateBookingSummary() {
   }
 }
 document.querySelector("#booking-service").addEventListener("change", updateBookingSummary);
-function openPriceOfferForm({ providerId, serviceId, action = "initial", negotiationId = "", offerId = "", amount = "", description = "" }) {
+function openPriceOfferForm({ providerId, serviceId, action = "initial", negotiationId = "", offerId = "", conversationId = "", amount = "", description = "" }) {
   if (!appSupabase) {
     showToast("Price negotiation requires a connected Skillmate account.", "error");
     return;
@@ -2481,13 +2559,22 @@ function openPriceOfferForm({ providerId, serviceId, action = "initial", negotia
   document.querySelector("#price-offer-negotiation-id").value = negotiationId;
   document.querySelector("#price-offer-response-id").value = offerId;
   document.querySelector("#price-offer-action").value = action;
+  document.querySelector("#price-offer-conversation-id").value = conversationId;
   document.querySelector("#price-offer-amount").value = amount;
+  const messageLabel = document.querySelector("#price-offer-message").closest("label");
+  messageLabel.hidden = action === "proposal";
   document.querySelector("#price-offer-message").value = "";
   document.querySelector("#price-offer-title").textContent = action === "counter" ? "Send a counteroffer" : action === "proposal" ? "Send a formal price proposal" : "Make a price offer";
   document.querySelector("#price-offer-description").textContent = description
     || (action === "counter" ? "The other person must explicitly accept or reject your counteroffer." : "A price is only final after the other person explicitly accepts it.");
   document.querySelector("#price-offer-feedback").hidden = true;
   openModal("price-offer-modal");
+}
+function exposePriceActionError(error) {
+  if (typeof error?.message === "string" && error.message.trim()) {
+    error.userMessage = error.message.trim().slice(0, 240);
+  }
+  return error;
 }
 async function openServiceDiscussion(providerId, serviceId) {
   if (!appSupabase) {
@@ -2533,10 +2620,12 @@ document.querySelector("#price-offer-form").addEventListener("submit", event => 
   const serviceId = document.querySelector("#price-offer-service-id").value;
   const negotiationId = document.querySelector("#price-offer-negotiation-id").value;
   const offerId = document.querySelector("#price-offer-response-id").value;
-  const message = document.querySelector("#price-offer-message").value.trim();
+  const activeConversationId = document.querySelector("#price-offer-conversation-id").value;
+  const message = action === "proposal" ? "" : document.querySelector("#price-offer-message").value.trim();
   const feedback = document.querySelector("#price-offer-feedback");
   runAction(async () => {
-    let conversationId = priceNegotiations.find(item => item.id === negotiationId)?.conversationId;
+    let conversationId = activeConversationId
+      || priceNegotiations.find(item => item.id === negotiationId)?.conversationId;
     if (action === "counter") {
       const { error } = await appSupabase.rpc("decide_price_offer", {
         p_offer_id: offerId, p_action: "counter", p_counter_amount: amount, p_message: message,
@@ -2547,14 +2636,14 @@ document.querySelector("#price-offer-form").addEventListener("submit", event => 
         const { data, error } = await appSupabase.rpc("start_conversation", {
           p_other_user_id: providerId, p_booking_id: null,
         });
-        if (error) throw error;
+        if (error) throw exposePriceActionError(error);
         conversationId = data;
       }
       const { error } = await appSupabase.rpc("create_price_negotiation", {
         p_service_id: serviceId, p_conversation_id: conversationId,
         p_initial_amount: amount, p_message: message,
       });
-      if (error) throw error;
+      if (error) throw exposePriceActionError(error);
     }
     await refreshSupabaseState();
     if (conversationId) setActiveConversation(conversationId);
@@ -3245,6 +3334,41 @@ document.querySelector("#conversation-search").addEventListener("input", () => {
   conversationSearchTimer = window.setTimeout(() => renderConversations({ preserveChatState: true }), 300);
 });
 document.querySelector("#chat-panel").addEventListener("click", (event) => {
+  const startPriceAction = event.target.closest("[data-chat-price-start]");
+  if (startPriceAction) {
+    const service = connectedServices.find(item => item.id === startPriceAction.dataset.chatPriceStart);
+    const chat = state.messages.find(item => item.id === activeConversationId);
+    if (!service || !chat) return;
+    const action = startPriceAction.dataset.chatPriceAction;
+    if (action === "offer" || action === "proposal") {
+      openPriceOfferForm({
+        providerId: service.providerId,
+        serviceId: service.id,
+        action: action === "offer" ? "initial" : "proposal",
+        conversationId: chat.id,
+        description: action === "offer"
+          ? `Offer a price for ${service.title}. The provider must explicitly accept, reject or counter.`
+          : `Propose a formal price for ${service.title}. The customer must explicitly accept or reject it.`,
+      });
+      return;
+    }
+    runAction(async () => {
+      const { error } = await appSupabase.rpc("create_price_negotiation", {
+        p_service_id: service.id,
+        p_conversation_id: chat.id,
+        p_initial_amount: null,
+        p_message: "",
+      });
+      if (error) throw error;
+      await refreshSupabaseState();
+      setActiveConversation(chat.id);
+      renderConversations({ preserveChatState: true });
+      showToast("Price discussion started. Agree through an explicit proposal here; chat messages alone don’t set the price.");
+    }, "Could not start this price discussion.", "Starting price discussion…", {
+      friendlyFailureMessage: "Could not start this price discussion. Check that the selected service is still available.",
+    });
+    return;
+  }
   const priceAction = event.target.closest("[data-price-action]");
   if (priceAction) {
     const action = priceAction.dataset.priceAction;
@@ -3252,8 +3376,7 @@ document.querySelector("#chat-panel").addEventListener("click", (event) => {
       openBooking(priceAction.dataset.providerId, priceAction.dataset.serviceId, priceAction.dataset.negotiationId);
       return;
     }
-    if (action === "counter" || action === "proposal") {
-      const negotiation = priceNegotiations.find(item => item.id === priceAction.dataset.negotiationId);
+    if (action === "counter" || action === "proposal" || action === "initial") {
       openPriceOfferForm({
         providerId: priceAction.dataset.providerId,
         serviceId: priceAction.dataset.serviceId,
@@ -3262,7 +3385,9 @@ document.querySelector("#chat-panel").addEventListener("click", (event) => {
         action,
         description: action === "counter"
           ? "Enter the price you propose. The other person must explicitly accept or reject it."
-          : "Send a formal price proposal. The customer must explicitly accept or reject it.",
+          : action === "initial"
+            ? "Make a formal offer. The provider can accept, reject or send a counteroffer."
+            : "Send a formal price proposal. The customer must explicitly accept or reject it.",
       });
       return;
     }
@@ -4339,6 +4464,7 @@ document.querySelector("#user-booking-list").addEventListener("click", (event) =
     openMessage(messageButton.dataset.message, booking && isOwnBooking(booking) ? "customer" : "provider");
     return;
   }
+  if (handleNegotiationChatAction(event)) return;
   if (handleAppointmentActions(event)) return;
   const decision = event.target.closest("[data-decision]");
   if (decision) {
@@ -4410,6 +4536,7 @@ document.querySelector("#provider-booking-list").addEventListener("click", (even
     openMessage(messageButton.dataset.message);
     return;
   }
+  if (handleNegotiationChatAction(event)) return;
   if (handleAppointmentActions(event)) return;
   const button = event.target.closest("[data-decision]");
   if (!button) return;
@@ -4433,6 +4560,7 @@ document.querySelector("#earnings-list").addEventListener("click", (event) => {
     openMessage(messageButton.dataset.message);
     return;
   }
+  if (handleNegotiationChatAction(event)) return;
   if (handleAppointmentActions(event)) return;
   const button = event.target.closest("[data-decision]");
   if (!button) return;

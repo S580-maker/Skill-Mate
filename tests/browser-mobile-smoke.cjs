@@ -270,6 +270,10 @@ async function main() {
     await call("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width <= 768 });
     await navigate("index.html");
     assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length'), 6);
+    if (width === 320) {
+      const chatTools = await evaluate(`(()=>{const original={services:connectedServices,user:appUser,negotiations:priceNegotiations};const results=[];for(const [mode,userId,expected] of [["chat","test-customer","Discuss price"],["controlled","test-customer","Make an offer"],["hybrid","test-customer","Make an offer"],["chat","test-provider","Propose a price"]]){connectedServices=[{id:"test-service",providerId:"test-provider",title:"Test service",active:true,negotiationMode:mode,price:50}];appUser={id:userId};priceNegotiations=[];const panel=createPriceNegotiationPanel({id:"test-conversation",providerId:"test-provider",name:"Provider"});results.push(panel.querySelector("[data-chat-price-start]").textContent)}connectedServices=original.services;appUser=original.user;priceNegotiations=original.negotiations;return results})()`);
+      assert.deepEqual(chatTools, ["Discuss price", "Make an offer", "Make an offer", "Propose a price"], "Chats show the correct negotiation action for each mode and participant");
+    }
     assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card [data-profile]").length'), 6, "Only provider avatar controls carry profile navigation");
     assert.equal(await evaluate('document.querySelector("#marketplace-grid .provider-card .listing-cover-button").tagName'), "DIV", "The service image is not a profile navigation control");
     assert.equal(await evaluate('document.querySelector("#marketplace-grid .provider-card h3 button") === null'), true, "The service title is not a profile navigation control");
