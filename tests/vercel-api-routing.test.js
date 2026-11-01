@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const apiRouter = require("../api/[...path]");
+const apiRouter = require("../api");
 
 function createResponse() {
   return {
@@ -21,16 +21,16 @@ function createResponse() {
   };
 }
 
-test("Vercel catch-all dispatches known routes from dynamic path parameters", async () => {
+test("Vercel API router dispatches known nested routes from the rewrite parameter", async () => {
   const response = createResponse();
-  await apiRouter({ method: "GET", query: { path: ["session"] } }, response);
+  await apiRouter({ method: "GET", query: { path: "auth/sign-in" } }, response);
   assert.equal(response.statusCode, 405);
   assert.deepEqual(response.body, { error: "Method not allowed." });
 });
 
-test("Vercel catch-all returns 404 for unknown routes", async () => {
+test("Vercel API router returns 404 for unknown routes", async () => {
   const response = createResponse();
-  await apiRouter({ method: "GET", query: { path: ["unknown"] } }, response);
+  await apiRouter({ method: "GET", query: { path: "unknown" } }, response);
   assert.equal(response.statusCode, 404);
   assert.deepEqual(response.body, { error: "Not found." });
 });

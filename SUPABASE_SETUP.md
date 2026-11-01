@@ -100,7 +100,7 @@ Codes expire after 10 minutes, can be resent after 30 seconds up to five times p
 
 ## 5. Deploy to Vercel
 
-1. Import the GitHub repository into Vercel. `vercel.json` explicitly sets the framework preset to **Other**, so Vercel uses the static assets and root `api/` functions rather than treating the local Express development server as the deployed backend. The API routes share `api/[...path].js` (with the protected admin page as a separate function), keeping the project under Vercel Hobby's serverless-function limit. The static HTML, CSS, and JavaScript are served directly; no frontend build command or output directory is required.
+1. Import the GitHub repository into Vercel. `vercel.json` explicitly sets the framework preset to **Other**, so Vercel uses the static assets and root `api/` functions rather than treating the local Express development server as the deployed backend. The API routes share `api/index.js`, with explicit rewrites for `/api/*` and the protected admin page as a separate function, keeping the project under Vercel Hobby's serverless-function limit. The static HTML, CSS, and JavaScript are served directly; no frontend build command or output directory is required.
 2. In **Project Settings → Environment Variables**, add the following variables for Production (and Preview if you want preview deployments to connect to Supabase):
 
    ```text

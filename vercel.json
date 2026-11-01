@@ -16,15 +16,15 @@
   "rewrites": [
     {
       "source": "/supabase-config.js",
-      "destination": "/api/supabase-config"
+      "destination": "/api/index?path=supabase-config"
     },
     {
       "source": "/admin.html",
       "destination": "/api/admin"
     },
     {
-      "source": "/api/account/delete",
-      "destination": "/api/account-delete"
+      "source": "/api/:path*",
+      "destination": "/api/index?path=:path*"
     }
   ],
   "headers": [
