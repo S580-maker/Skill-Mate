@@ -36,6 +36,13 @@
     if (extended && !deliveryLabels[draft.deliveryMethod]) errors.delivery = "Choose how you will deliver your service.";
     if (extended && !["fixed", "starting"].includes(draft.priceType)) errors["price-type"] = "Choose fixed price or starting price.";
     if (extended && draft.estimatedDelivery.length > 80) errors.estimate = "Keep your delivery estimate to 80 characters or fewer.";
+    if (!["controlled", "chat", "hybrid"].includes(draft.negotiationMode)) errors["negotiation-mode"] = "Choose how customers can negotiate your price.";
+    if (["controlled", "hybrid"].includes(draft.negotiationMode)
+      && (!/^\d+(?:\.\d{1,2})?$/.test(String(draft.minimumPrice))
+        || Number(draft.minimumPrice) <= 0
+        || Number(draft.minimumPrice) > Number(draft.price))) {
+      errors["minimum-price"] = "Enter a minimum price above GH₵ 0 and no higher than your listed price.";
+    }
     return errors;
   }
   function validateImageHeader(file, bytes) {
@@ -49,7 +56,8 @@
   }
   function metadata(row) {
     return { coverImagePath: row.cover_image_path || null, deliveryMethod: row.delivery_method || "",
-      estimatedDelivery: row.estimated_delivery || "", priceType: row.price_type || "fixed" };
+      estimatedDelivery: row.estimated_delivery || "", priceType: row.price_type || "fixed",
+      negotiationMode: row.negotiation_mode || "chat" };
   }
   function payload(draft, userId, coverPath, extended) {
     const result = { provider_id: userId, title: draft.title, category: draft.category,

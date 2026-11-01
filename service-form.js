@@ -18,6 +18,7 @@
   let reviewing = false;
   let extended = !appSupabase;
   let schemaChecking = false;
+  let negotiationReady = !appSupabase;
   let opener = null;
   const unusedCoverCandidates = new Set();
 
@@ -50,15 +51,26 @@
     if (!error) return;
     error.textContent = message;
     error.hidden = !message;
-    input.setAttribute("aria-invalid", String(Boolean(message)));
+    if (input) input.setAttribute("aria-invalid", String(Boolean(message)));
+    else if (id === "negotiation-mode") {
+      form.querySelectorAll('[name="service-negotiation-mode"]').forEach(option => {
+        option.setAttribute("aria-invalid", String(Boolean(message)));
+      });
+    }
   }
   function clearErrors() {
-    for (const id of ["title", "category", "description", "delivery", "price", "price-type", "estimate", "cover"]) setError(id);
+    for (const id of ["title", "category", "description", "delivery", "price", "price-type", "estimate", "cover", "negotiation-mode", "minimum-price"]) setError(id);
     showFeedback("");
   }
   function applyAvailability() {
     form.querySelectorAll("[data-service-extended]").forEach(input => { input.disabled = !extended || busy || imageBusy; });
-    submit.disabled = busy || imageBusy || schemaChecking;
+    submit.disabled = busy || imageBusy || schemaChecking || !negotiationReady;
+  }
+  function updateNegotiationFields() {
+    const mode = form.querySelector('[name="service-negotiation-mode"]:checked')?.value || "";
+    const needsMinimum = mode === "controlled" || mode === "hybrid";
+    byId("minimum-price-field").hidden = !needsMinimum;
+    byId("minimum-price").required = needsMinimum;
   }
   async function checkSchema(token) {
     if (!appSupabase) return;
@@ -66,20 +78,30 @@
     extended = false;
     const status = byId("schema-status");
     status.hidden = false;
-    status.textContent = "Checking available listing options…";
+    status.textContent = "Checking listing and negotiation setup…";
     applyAvailability();
     try {
       const { error } = await appSupabase.from("services")
-        .select("cover_image_path, delivery_method, estimated_delivery, price_type").limit(0);
+        .select("cover_image_path, delivery_method, estimated_delivery, price_type, negotiation_mode").limit(0);
       if (token !== generation) return;
       extended = !error;
-      status.hidden = extended;
-      status.textContent = error
-        ? "Extra listing options are unavailable. You can still save the original service details. Reopen this form after setup or your connection is restored."
-        : "";
+      let settingsError = error;
+      if (!settingsError) {
+        const settings = await appSupabase.from("service_negotiation_settings")
+          .select("service_id").limit(0);
+        settingsError = settings.error;
+      }
+      if (token !== generation) return;
+      negotiationReady = !settingsError;
+      status.hidden = negotiationReady;
+      status.textContent = negotiationReady
+        ? ""
+        : "Price negotiation setup is required before you can publish or edit a service. Apply the latest Supabase migration, then reopen this form.";
     } catch {
       if (token !== generation) return;
-      status.textContent = "Could not check extra listing options. You can still save the original service details.";
+      negotiationReady = false;
+      status.hidden = false;
+      status.textContent = "Could not verify price negotiation setup. Check your connection and reopen this form.";
     } finally {
       if (token === generation) { schemaChecking = false; applyAvailability(); }
     }
@@ -123,6 +145,7 @@
       byId("review-price").textContent = `${draft.priceType === "starting" ? "From " : ""}${currency(draft.price)}`;
       byId("review-symbol").textContent = getCategoryIcon(draft.category);
       const tags = [utils.deliveryLabels[draft.deliveryMethod], draft.estimatedDelivery, draft.groups && "Groups welcome"].filter(Boolean);
+      tags.push({ controlled: "Controlled negotiation", chat: "Chat-based negotiation", hybrid: "Hybrid negotiation" }[draft.negotiationMode]);
       byId("review-tags").replaceChildren(...tags.map(text => {
         const tag = document.createElement("span"); tag.textContent = text; return tag;
       }));
@@ -141,6 +164,8 @@
       deliveryMethod: extended ? byId("delivery").value : existing?.deliveryMethod || "",
       priceType: extended ? byId("price-type").value : existing?.priceType || "fixed",
       estimatedDelivery: extended ? byId("estimate").value.trim() : existing?.estimatedDelivery || "",
+      negotiationMode: form.querySelector('[name="service-negotiation-mode"]:checked')?.value || "",
+      minimumPrice: byId("minimum-price").value,
     };
   }
   function validate() {
@@ -150,8 +175,10 @@
     const first = Object.keys(errors)[0];
     if (first) {
       setReview(false, false);
-      if (byId(first).closest("details")) byId("options").open = true;
-      byId(first).focus();
+      if (byId(first)?.closest("details")) byId("options").open = true;
+      (first === "negotiation-mode"
+        ? form.querySelector('[name="service-negotiation-mode"]')
+        : byId(first)).focus();
       showFeedback("Check the highlighted fields before continuing.");
     }
     return !first;
@@ -173,6 +200,10 @@
     byId("category").value = service?.category || serviceCategories[0];
     byId("description").value = service?.description || "";
     byId("price").value = service?.price ?? "";
+    const mode = service?.negotiationMode || service?.negotiation_mode || "chat";
+    const selectedMode = form.querySelector(`[name="service-negotiation-mode"][value="${mode}"]`);
+    if (selectedMode) selectedMode.checked = true;
+    byId("minimum-price").value = "";
     byId("delivery").value = service?.deliveryMethod || "";
     byId("price-type").value = service?.priceType || "fixed";
     byId("estimate").value = service?.estimatedDelivery || "";
@@ -181,14 +212,35 @@
     byId("modal-title").textContent = service ? "Edit your service" : "Add a service";
     setReview(false, false);
     updateHints();
+    updateNegotiationFields();
     paintCover();
     checkSchema(generation);
+    if (appSupabase && service?.id) {
+      const token = generation;
+      appSupabase.from("service_negotiation_settings")
+        .select("minimum_price").eq("service_id", service.id).maybeSingle()
+        .then(({ data, error }) => {
+          if (token !== generation) return;
+          if (error) {
+            showFeedback("Your private minimum price could not be loaded. Reopen the form and try again.");
+            return;
+          }
+          byId("minimum-price").value = data?.minimum_price ?? "";
+        });
+    }
   }
   window.skillmateServiceEditor = { prepare };
 
   form.addEventListener("input", event => {
     if (event.target.id.startsWith("service-")) setError(event.target.id.slice(8));
     updateHints();
+  });
+  form.querySelectorAll('[name="service-negotiation-mode"]').forEach(input => {
+    input.addEventListener("change", () => {
+      setError("negotiation-mode");
+      setError("minimum-price");
+      updateNegotiationFields();
+    });
   });
   byId("category").addEventListener("change", updateHints);
   byId("back").addEventListener("click", () => { clearErrors(); setReview(false); });
@@ -261,7 +313,7 @@
 
   form.addEventListener("submit", async event => {
     event.preventDefault();
-    if (busy || imageBusy || schemaChecking || !validate()) return;
+    if (busy || imageBusy || schemaChecking || !negotiationReady || !validate()) return;
     if (!reviewing) { setReview(true); return; }
     const draft = readDraft();
     const operationGeneration = generation;
@@ -280,13 +332,24 @@
           coverPath = path; coverFile = null;
         }
         const payload = utils.payload(draft, appUser.id, coverPath, extended);
-        const query = existing
-          ? appSupabase.from("services").update(payload).eq("id", existing.id).eq("provider_id", appUser.id)
-          : appSupabase.from("services").upsert({ id: draftId, ...payload }, { onConflict: "id" });
-        const { data, error } = await query.select("*").single();
-        if (error) throw new Error("We couldn't save your service. Check your connection and try again. Your details are still here.");
+        const { data: result, error } = await appSupabase.rpc("save_service_listing", {
+          p_service_id: draftId,
+          p_title: payload.title,
+          p_category: payload.category,
+          p_description: payload.description,
+          p_price: payload.price,
+          p_accepts_groups: payload.accepts_groups,
+          p_cover_image_path: payload.cover_image_path || null,
+          p_delivery_method: payload.delivery_method || null,
+          p_estimated_delivery: payload.estimated_delivery || null,
+          p_price_type: payload.price_type || "fixed",
+          p_mode: draft.negotiationMode,
+          p_minimum_price: ["controlled", "hybrid"].includes(draft.negotiationMode) ? Number(draft.minimumPrice) : null,
+        });
+        const data = Array.isArray(result) ? result[0] : result;
+        if (error || !data) throw new Error("We couldn't save your service and negotiation settings. Check your connection and try again. Your details are still here.");
         saved = { id: data.id, title: data.title, category: data.category, price: Number(data.price), description: data.description,
-          groups: data.accepts_groups, active: data.is_active, ...utils.metadata(data) };
+          groups: data.accepts_groups, active: data.is_active, ...utils.metadata(data), negotiationMode: draft.negotiationMode };
         unusedCoverCandidates.delete(saved.coverImagePath);
         if (existing?.coverImagePath && existing.coverImagePath !== saved.coverImagePath) unusedCoverCandidates.add(existing.coverImagePath);
       } else {

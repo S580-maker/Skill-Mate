@@ -174,3 +174,38 @@ test("push dispatch sends a valid notification insert to the recipient's subscri
   assert.deepEqual(response.body, { sent: 0 });
   assert.match(requestUrl, new RegExp(`user_id=eq\\.${userId}`));
 });
+
+test("push dispatch accepts negotiation notification kinds and routes them to messages", async () => {
+  configureSupabase();
+  const vapid = webpush.generateVAPIDKeys();
+  process.env.VAPID_PUBLIC_KEY = vapid.publicKey;
+  process.env.VAPID_PRIVATE_KEY = vapid.privateKey;
+  process.env.VAPID_SUBJECT = "mailto:admin@skillmate.example";
+  process.env.PUSH_DISPATCH_SECRET = "expected-secret";
+  let requestUrl = "";
+  global.fetch = async (url) => {
+    requestUrl = url;
+    return { ok: true, status: 200, json: async () => [] };
+  };
+  const response = responseFixture();
+  await handlePushDispatch({
+    method: "POST",
+    headers: { "x-skillmate-push-secret": "expected-secret" },
+    body: {
+      type: "INSERT",
+      table: "notifications",
+      schema: "public",
+      record: {
+        user_id: userId,
+        kind: "negotiation_agreed",
+        title: "Final price agreed",
+        body: "A price was agreed.",
+        target_path: "messages",
+        conversation_id: "323e4567-e89b-42d3-a456-426614174000",
+      },
+    },
+  }, response);
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body, { sent: 0 });
+  assert.match(requestUrl, new RegExp(`user_id=eq\\.${userId}`));
+});

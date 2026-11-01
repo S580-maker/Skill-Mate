@@ -12,10 +12,16 @@
     more.disabled = true;
     status.textContent = "Loading notifications…";
     try {
-      const { data, error } = appSupabase
-        ? await appSupabase.from("notifications").select("id, title, body, read_at, created_at")
+      let result = appSupabase
+        ? await appSupabase.from("notifications").select("id, title, body, read_at, created_at, conversation_id, booking_id")
           .order("created_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + 9)
         : { data: [], error: null };
+      if (result.error && ["42703", "PGRST204"].includes(result.error.code)) {
+        console.warn("Booking-linked notifications are unavailable until the booking workflow migration is applied.", result.error);
+        result = await appSupabase.from("notifications").select("id, title, body, read_at, created_at")
+          .order("created_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + 9);
+      }
+      const { data, error } = result;
       if (error) throw error;
       for (const item of data || []) {
         const row = document.createElement("li");
@@ -28,6 +34,32 @@
         time.dateTime = item.created_at;
         time.textContent = new Date(item.created_at).toLocaleString();
         row.append(title, body, time);
+        if (item.booking_id) {
+          const open = document.createElement("button");
+          open.type = "button";
+          open.className = "button button-outline button-small";
+          open.textContent = "Open booking";
+          open.addEventListener("click", () => {
+            dialog.close();
+            document.dispatchEvent(new CustomEvent("skillmate:open-booking", {
+              detail: { bookingId: item.booking_id },
+            }));
+          });
+          row.append(open);
+        }
+        if (item.conversation_id) {
+          const open = document.createElement("button");
+          open.type = "button";
+          open.className = "button button-outline button-small";
+          open.textContent = "Open conversation";
+          open.addEventListener("click", () => {
+            dialog.close();
+            document.dispatchEvent(new CustomEvent("skillmate:open-conversation", {
+              detail: { conversationId: item.conversation_id },
+            }));
+          });
+          row.append(open);
+        }
         if (!item.read_at) {
           const button = document.createElement("button");
           button.type = "button";

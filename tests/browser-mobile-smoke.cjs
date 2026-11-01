@@ -270,6 +270,17 @@ async function main() {
     await call("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width <= 768 });
     await navigate("index.html");
     assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length'), 6);
+    assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card [data-profile]").length'), 6, "Only provider avatar controls carry profile navigation");
+    assert.equal(await evaluate('document.querySelector("#marketplace-grid .provider-card .listing-cover-button").tagName'), "DIV", "The service image is not a profile navigation control");
+    assert.equal(await evaluate('document.querySelector("#marketplace-grid .provider-card h3 button") === null'), true, "The service title is not a profile navigation control");
+    if (width === 320) {
+      await evaluate('document.querySelector("#marketplace-grid .provider-card .listing-cover-button").click()');
+      assert.equal(await evaluate('document.querySelector("#provider-detail-modal").open'), false, "Clicking the service image does not open provider details");
+      await evaluate('document.querySelector("#marketplace-grid .provider-card .provider-profile-trigger").click()');
+      await wait(250);
+      assert.equal(await evaluate('document.querySelector("#provider-detail-modal").open'), true, "Clicking the provider avatar opens their profile");
+      await evaluate('document.querySelector("#provider-detail-modal").close()');
+    }
     await checkWidth(`${width}:discover`);
     if (width === 390 || width === 1440) await screenshot(`discover-${width}`);
     for (const page of ["bookings", "messages", "profile-settings", "provider", "earnings", "saved", "help-support"]) {
@@ -330,6 +341,11 @@ async function main() {
   await wait(350);
   assert.ok(await evaluate('!!document.querySelector("#marketplace-grid [data-book=akosua]")'));
   await evaluate('document.querySelector("#marketplace-grid [data-book=akosua]").click()');
+  assert.equal(await evaluate('document.querySelector("#review-modal").open'), true, "An unrated completed booking requires a customer review before another booking");
+  assert.equal(await evaluate('document.querySelector("#booking-modal").open'), false, "The next booking stays blocked until the review is posted");
+  await evaluate('document.querySelector("#review-text").value="The service was helpful and completed as agreed.";document.querySelector("#review-form").requestSubmit()');
+  assert.equal(await evaluate('state.bookings.find(b=>b.status==="Completed"&&!isOwnBooking(b)).reviewed'), true);
+  await evaluate('document.querySelector("#marketplace-grid [data-book=akosua]").click()');
   assert.equal(await evaluate('document.querySelector("#booking-price").textContent'), "GH₵ 120");
   assert.equal(await evaluate('document.querySelector("#booking-time").type'), "time");
   await checkWidth("390:booking-dialog"); await screenshot("booking-request-390");
@@ -355,6 +371,15 @@ async function main() {
   assert.equal(await evaluate('document.querySelector("#booking-service").value'), "audit-math", "Book the selected service rather than the provider's first service");
   assert.ok(await evaluate('document.querySelector("#booking-price").textContent.includes("40")'));
   await evaluate('providerServices=window.__originalProviderServices;document.querySelector("#booking-modal").close()');
+  await evaluate('window.__previousAppUser=appUser;window.__previousNegotiations=priceNegotiations;appUser={id:"test-customer"};priceNegotiations=[{id:"test-agreement",serviceId:"akosua-service",providerId:"akosua",customerId:"test-customer",state:"agreed",agreedPrice:95,listedPrice:120,agreedScope:"Two-hour tutoring session with practice questions."}];openBooking("akosua","akosua-service","test-agreement")');
+  assert.equal(await evaluate('document.querySelector("#booking-agreement-review").hidden'), false, "Negotiated bookings display the agreed terms");
+  assert.equal(await evaluate('document.querySelector("#booking-service").disabled'), true, "The agreed service cannot be switched to another listing");
+  assert.ok(await evaluate('document.querySelector("#booking-agreed-price").textContent.includes("95")'));
+  assert.ok(await evaluate('document.querySelector("#booking-original-price").textContent.includes("120")'));
+  assert.equal(await evaluate('document.querySelector("#booking-confirm-details").required'), true, "The customer must explicitly confirm agreed booking details");
+  await evaluate('document.querySelector("#booking-form").dispatchEvent(new Event("submit",{bubbles:true,cancelable:true}))');
+  assert.ok(await evaluate('document.querySelector("#toast").textContent.includes("Review the booking details")'), "The request is blocked until the customer checks the review box");
+  await evaluate('document.querySelector("#booking-modal").close();appUser=window.__previousAppUser;priceNegotiations=window.__previousNegotiations');
   await navigate("index.html?new=1");
   assert.equal(await evaluate('document.querySelector(".side-nav [data-page=provider]").hidden'), true);
   await evaluate('showPage("profile-settings");document.querySelector("#mode-switch").click()');

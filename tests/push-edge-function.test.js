@@ -95,6 +95,30 @@ test("Edge Function forwards valid notification inserts using the server-only di
   assert.deepEqual(JSON.parse(forwarded.options.body), insertEvent());
 });
 
+test("Edge Function forwards negotiation notifications linked to their conversation", async () => {
+  let forwarded;
+  const handler = await createEdgeFunction({
+    environment: {
+      PUSH_DISPATCH_SECRET: "server-secret",
+      PUSH_DISPATCH_URL: "https://skillmate.example/api/push-dispatch",
+    },
+    fetchHandler: async (url, options) => {
+      forwarded = { url: String(url), options };
+      return new Response("{}", { status: 200 });
+    },
+  });
+  const event = insertEvent();
+  event.record.kind = "negotiation_counter";
+  event.record.conversation_id = "323e4567-e89b-42d3-a456-426614174000";
+  const response = await handler(new Request("https://edge.example/functions/v1/push-notification-webhook", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(event),
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(JSON.parse(forwarded.options.body), event);
+});
+
 test("Edge Function refuses to forward to a non-HTTPS dispatch URL", async () => {
   const handler = await createEdgeFunction({
     environment: {

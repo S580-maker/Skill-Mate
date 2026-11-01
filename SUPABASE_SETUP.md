@@ -37,6 +37,22 @@ On existing projects, apply `supabase/migrations/20261025_whatsapp_style_messagi
 
 For existing projects, apply `supabase/migrations/20261027090000_batch_conversation_messages.sql` after the messaging migration to enable batched message loading. Then apply `supabase/migrations/20261027120000_service_listing_details.sql` after the public provider directory migration to enable service delivery options, extended pricing, and cover images. These migrations are already included in the initial `supabase/schema.sql` for new projects. Without them, the app falls back to individual message requests and basic service details.
 
+### Price negotiation
+
+After the OTP session-verification migration, service-listing-details migration, and messaging schema are installed, apply `supabase/migrations/20261103100000_price_negotiation.sql` once in the Supabase SQL Editor. Apply it to new projects after `supabase/schema.sql` as well. This migration adds the three listing modes, provider-only minimum-price settings, structured offer records and server-validated offer/booking functions. The minimum-price table grants read access only to the listing's provider; it is not included in the public service directory.
+
+Deploy the updated application after the migration. If browser push notifications are enabled, deploy the updated webhook so it accepts negotiation notification kinds:
+
+```powershell
+supabase functions deploy push-notification-webhook
+```
+
+The existing `PUSH_DISPATCH_SECRET` and `PUSH_DISPATCH_URL` secrets are reused; do not put the provider's private minimum or a service-role key in the browser. Do not use `supabase db push` for this project until its incomplete remote migration history has been reconciled.
+
+For provider showcase profiles and review-required booking flow, apply `supabase/migrations/20261104120000_provider_showcase_reviews.sql` after the price negotiation migration. It adds signed-in-only PDF CV storage, exposes provider skills and completed-work counts in the directory, and prevents a customer with unreviewed completed work from creating another booking. Customers can post one review for each completed booking; existing review eligibility and uniqueness policies remain in force.
+
+For customer-confirmed price agreements and appointment scheduling, apply `supabase/migrations/20261104130000_customer_confirmed_price_agreement_bookings.sql` after the provider showcase migration. It records accepted prices and service scope as immutable agreements, keeps offer acceptance separate from booking creation, and only creates a pending booking after the customer reviews the agreed terms and submits appointment details. The provider must still accept or decline the request; any suggested replacement time requires the customer's explicit approval. It adds no payment processing. Deploy the matching application only after applying the migration. Do not use `supabase db push` until the remote migration history has been reconciled.
+
 If an existing project reports `infinite recursion detected in policy for relation "messages"` after applying the messaging migration, apply `supabase/migrations/20261026_fix_message_rls_recursion.sql` once. It moves conversation membership, block, and reply checks into narrowly scoped security-definer functions so message policies do not recursively query the protected messages table.
 
 ## 3. Install and run Skillmate

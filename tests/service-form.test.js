@@ -6,7 +6,8 @@ const vm = require("node:vm");
 const utils = require("../service-form-utils");
 const read = file => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 const valid = () => ({ title: "Campus posters", category: "Design", description: "A poster with two revisions included.",
-  price: "35.50", deliveryMethod: "online", priceType: "fixed", estimatedDelivery: "2 days", groups: false });
+  price: "35.50", deliveryMethod: "online", priceType: "fixed", estimatedDelivery: "2 days", groups: false,
+  negotiationMode: "chat", minimumPrice: "" });
 
 test("service validation accepts decimal prices and rejects invalid prices, categories and incomplete details", () => {
   assert.deepEqual(utils.validate(valid(), ["Design"], true), {});
@@ -15,6 +16,14 @@ test("service validation accepts decimal prices and rejects invalid prices, cate
   }
   const errors = utils.validate({ ...valid(), title: "ab", category: "Unknown", description: "short", deliveryMethod: "", estimatedDelivery: "x".repeat(81) }, ["Design"], true);
   for (const name of ["title", "category", "description", "delivery", "estimate"]) assert.ok(errors[name]);
+});
+
+test("service negotiation mode is required and private minimums must be valid", () => {
+  assert.ok(utils.validate({ ...valid(), negotiationMode: "" }, ["Design"], true)["negotiation-mode"]);
+  for (const minimumPrice of ["", "0", "35.51", "1.001", "-1"]) {
+    assert.ok(utils.validate({ ...valid(), negotiationMode: "controlled", minimumPrice }, ["Design"], true)["minimum-price"]);
+  }
+  assert.deepEqual(utils.validate({ ...valid(), negotiationMode: "hybrid", minimumPrice: "12.50" }, ["Design"], true), {});
 });
 
 test("legacy service payloads contain only existing columns; migrated payloads preserve every new field", () => {
@@ -62,19 +71,36 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
     return nodes.get(id);
   };
   const writes = [];
+  const rpcCalls = [];
   const messages = [];
   const close = element("close");
   const opener = element("opener");
   let saveFails = failSave;
   const form = get("form");
-  form.reset = () => { for (const node of nodes.values()) { node.value = ""; node.checked = false; } };
-  form.querySelectorAll = () => ["cover", "cover-remove", "delivery", "price-type", "estimate"].map(get);
-  form.querySelector = () => get("scroll-body");
+  const negotiationModes = ["controlled", "chat", "hybrid"].map(value => {
+    const radio = element(`service-negotiation-mode-${value}`);
+    radio.value = value;
+    nodes.set(radio.id, radio);
+    return radio;
+  });
+  form.reset = () => {
+    for (const node of nodes.values()) { node.value = ""; node.checked = false; }
+    negotiationModes.forEach((radio, index) => { radio.value = ["controlled", "chat", "hybrid"][index]; });
+  };
+  form.querySelectorAll = selector => selector === '[name="service-negotiation-mode"]'
+    ? negotiationModes
+    : ["cover", "cover-remove", "delivery", "price-type", "estimate"].map(get);
+  form.querySelector = selector => {
+    if (selector === '[name="service-negotiation-mode"]:checked') return negotiationModes.find(input => input.checked) || null;
+    const value = /\[value="([^"]+)"\]/.exec(selector)?.[1];
+    if (value) return negotiationModes.find(input => input.value === value) || null;
+    if (selector === '[name="service-negotiation-mode"]') return negotiationModes[0];
+    return get("scroll-body");
+  };
   get("modal").querySelector = () => close;
   get("modal").close = () => { get("modal").open = false; get("modal").fire("close"); };
   const supabase = {
     from(table) {
-      assert.equal(table, "services");
       const query = {
         select() { return this; }, eq(column, value) { (this.filters ||= []).push([column, value]); return this; },
         async limit() { return { error: schema ? null : { code: "42703" }, data: [] }; },
@@ -85,7 +111,29 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
           return saveFails ? { error: { message: "offline" } } : { data: { id: this.payload.id || "existing-id", ...this.payload, is_active: true } };
         },
       };
+      if (table !== "services") {
+        return {
+          select() { return this; }, eq() { return this; },
+          async limit() { return { error: null, data: [] }; },
+          async maybeSingle() { return { data: { minimum_price: 21 }, error: null }; },
+        };
+      }
       return query;
+    },
+    async rpc(name, args) {
+      rpcCalls.push({ name, args });
+      if (name !== "save_service_listing") return { error: null };
+      const payload = {
+        id: args.p_service_id, provider_id: "owner", title: args.p_title, category: args.p_category,
+        description: args.p_description, price: args.p_price, accepts_groups: args.p_accepts_groups,
+        cover_image_path: args.p_cover_image_path, delivery_method: args.p_delivery_method,
+        estimated_delivery: args.p_estimated_delivery, price_type: args.p_price_type,
+        negotiation_mode: args.p_mode, is_active: true,
+      };
+      const isExisting = args.p_service_id === "existing-id";
+      writes.push({ action: isExisting ? "update" : "upsert", payload,
+        filters: isExisting ? [["id", args.p_service_id], ["provider_id", "owner"]] : undefined });
+      return saveFails ? { error: { message: "offline" } } : { data: payload, error: null };
     },
   };
   const context = {
@@ -100,13 +148,15 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
     showToast: text => messages.push(text),
   };
   vm.runInNewContext(read("service-form.js"), context);
-  return { get, context, writes, messages, opener,
+  return { get, context, writes, rpcCalls, messages, opener,
     fail(value) { saveFails = value; },
     async prepare(service) {
       context.window.skillmateServiceEditor.prepare(service);
       await new Promise(resolve => setImmediate(resolve));
     },
     fill() {
+      negotiationModes.forEach((radio, index) => { radio.value = ["controlled", "chat", "hybrid"][index]; });
+      negotiationModes[1].checked = true;
       for (const [name, value] of Object.entries({ title: "Campus posters", category: "Design", description: "A poster with two revisions included.", price: "35.50", delivery: "online", "price-type": "starting", estimate: "2 days" })) get(name).value = value;
     },
   };
@@ -122,6 +172,9 @@ test("publishing requires preview first and writes all new details only on confi
   assert.equal(f.writes.length, 1);
   assert.equal(f.writes[0].payload.price_type, "starting");
   assert.equal(f.writes[0].payload.delivery_method, "online");
+  assert.equal(f.rpcCalls[0].name, "save_service_listing");
+  assert.equal(f.rpcCalls[0].args.p_mode, "chat");
+  assert.equal(f.rpcCalls[0].args.p_minimum_price, null);
   assert.equal(f.get("modal").open, false);
   assert.equal(f.opener.focused, true);
 });
@@ -139,12 +192,21 @@ test("cancelled edits reset when Add a service opens, including ID and optional 
   assert.equal(f.get("price-type").value, "fixed");
 });
 
+test("editing a listing restores its negotiation mode and private minimum", async () => {
+  const f = fixture();
+  await f.prepare({ id: "existing-id", title: "Existing service", category: "Design", price: 50,
+    description: "Existing description", negotiationMode: "hybrid" });
+  assert.equal(f.get("negotiation-mode-hybrid").checked, true);
+  assert.equal(f.get("minimum-price").value, 21);
+  assert.equal(f.get("minimum-price-field").hidden, false);
+});
+
 test("editing scopes the update by owner and ID, retaining paused status from the saved record", async () => {
   const f = fixture(); await f.prepare({ id: "existing-id", category: "Design" }); f.fill();
   await f.get("form").fire("submit"); await f.get("form").fire("submit");
   assert.equal(f.writes[0].action, "update");
   assert.deepEqual(f.writes[0].filters, [["id", "existing-id"], ["provider_id", "owner"]]);
-  assert.equal("is_active" in f.writes[0].payload, false);
+  assert.equal("p_is_active" in f.rpcCalls[0].args, false);
 });
 
 test("failed saves retain details and reuse the same draft ID on retry", async () => {
@@ -171,13 +233,12 @@ test("post-save refresh failure is reported as saved rather than as a failed pub
   assert.match(f.messages.at(-1), /service was saved/);
 });
 
-test("missing migration disables extra controls and preserves the legacy save path", async () => {
+test("missing negotiation migration prevents saving an incomplete listing", async () => {
   const f = fixture({ schema: false }); await f.prepare(); f.fill();
   assert.equal(f.get("delivery").disabled, true);
   await f.get("form").fire("submit"); await f.get("form").fire("submit");
-  assert.equal(f.writes.length, 1);
-  assert.equal("delivery_method" in f.writes[0].payload, false);
-  assert.equal("cover_image_path" in f.writes[0].payload, false);
+  assert.equal(f.writes.length, 0);
+  assert.equal(f.get("submit").disabled, true);
 });
 
 test("category examples change without overwriting authored text; counter tracks description", async () => {

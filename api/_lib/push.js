@@ -157,7 +157,9 @@ function getPushEvent(request) {
     || typeof record.title !== "string" || record.title.length > 120
     || typeof record.body !== "string" || record.body.length > 500
     || !["bookings", "messages"].includes(record.target_path)
-    || !["booking_request", "booking_update", "message"].includes(record.kind)) return null;
+    || !["booking_request", "booking_update", "message", "negotiation_offer",
+      "negotiation_accepted", "negotiation_rejected", "negotiation_counter",
+      "negotiation_agreed"].includes(record.kind)) return null;
   return record;
 }
 

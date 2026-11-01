@@ -86,6 +86,20 @@ async function anonymizeAndDisableAccount(userId) {
     await requestSupabase(
       url,
       serviceRoleKey,
+      `/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ cv_path: null, cv_name: null }),
+      },
+    );
+  } catch (error) {
+    if (error.status !== 400 || !/cv_path|cv_name/i.test(error.message)) throw error;
+  }
+  try {
+    await requestSupabase(
+      url,
+      serviceRoleKey,
       `/rest/v1/push_subscriptions?user_id=eq.${encodeURIComponent(userId)}`,
       { method: "DELETE" },
     );
@@ -95,6 +109,7 @@ async function anonymizeAndDisableAccount(userId) {
   await Promise.all([
     removeStorageFolder(url, serviceRoleKey, "profile-avatars", userId),
     removeStorageFolder(url, serviceRoleKey, "portfolio-images", userId),
+    removeStorageFolder(url, serviceRoleKey, "provider-cvs", userId, true),
     removeStorageFolder(url, serviceRoleKey, "support-screenshots", userId),
     removeStorageFolder(url, serviceRoleKey, "service-covers", userId, true),
   ]);

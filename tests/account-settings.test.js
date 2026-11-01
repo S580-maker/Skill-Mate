@@ -56,8 +56,10 @@ test("account closure disables sign-in before anonymization and file cleanup", a
   assert.equal(calls[0].pathname, "/auth/v1/admin/users/test-user");
   assert.equal(calls[0].body.ban_duration, "876000h");
   assert.equal(calls[1].pathname, "/rest/v1/rpc/anonymize_closed_account");
-  assert.equal(calls[2].pathname, "/rest/v1/push_subscriptions");
-  assert.equal(calls.filter((call) => call.pathname.includes("/object/list/")).length, 4);
+  assert.equal(calls[2].pathname, "/rest/v1/profiles");
+  assert.deepEqual(calls[2].body, { cv_path: null, cv_name: null });
+  assert.equal(calls[3].pathname, "/rest/v1/push_subscriptions");
+  assert.equal(calls.filter((call) => call.pathname.includes("/object/list/")).length, 5);
 });
 
 test("failed sign-in disable leaves profile and files untouched", async () => {
@@ -145,6 +147,19 @@ test("legacy profile schema loads defaults and skips missing columns on later re
   assert(!selections[2].includes("phone_number"));
 });
 
+test("profile CV columns remain optional until the showcase migration is installed", async () => {
+  const { read, selections } = profileFixture([
+    { error: { code: "42703", message: "column profiles.cv_path does not exist" } },
+    { data: { id: "test-user" }, error: null },
+    { data: { id: "test-user" }, error: null },
+  ]);
+  const result = await read();
+  assert.equal(result.data.cv_path, null);
+  assert.equal(result.data.cv_name, null);
+  assert(selections[0].includes("cv_path"));
+  assert(!selections[1].includes("cv_path"));
+});
+
 test("saved notification opt-outs survive loading", async () => {
   const { read } = profileFixture([{ data: { id: "test-user", notify_messages: false, phone_number: "123" }, error: null }]);
   const result = await read();
@@ -165,6 +180,10 @@ function profileSaveFixture({ campus = "Original campus", settingsReady = false,
     "#settings-bio": { value: "Updated bio" },
     "#settings-phone": { value: "" },
     "#settings-avatar-file": { files: [] },
+    "#settings-cv-current": { textContent: "" },
+    "#settings-cv-file": { files: [], value: "" },
+    "#settings-cv-remove": { checked: false },
+    "#settings-cv-remove-row": { hidden: true },
     "#account-profile-feedback": {},
     "#profile-name": {}, "#profile-bio": {},
   };

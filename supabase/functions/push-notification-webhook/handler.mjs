@@ -8,7 +8,9 @@ function isNotificationInsert(event) {
   return typeof record.user_id === "string"
     && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(record.user_id)
     && typeof record.kind === "string"
-    && ["booking_request", "booking_update", "message"].includes(record.kind)
+    && ["booking_request", "booking_update", "message", "negotiation_offer",
+      "negotiation_accepted", "negotiation_rejected", "negotiation_counter",
+      "negotiation_agreed"].includes(record.kind)
     && typeof record.title === "string"
     && record.title.length >= 2
     && record.title.length <= 120

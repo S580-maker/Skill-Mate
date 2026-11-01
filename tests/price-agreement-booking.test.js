@@ -1,0 +1,65 @@
+const { test } = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const root = path.join(__dirname, "..");
+const migration = fs.readFileSync(
+  path.join(root, "supabase", "migrations", "20261104130000_customer_confirmed_price_agreement_bookings.sql"),
+  "utf8",
+);
+const userScript = fs.readFileSync(path.join(root, "user.js"), "utf8");
+const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const notifications = fs.readFileSync(path.join(root, "notifications.js"), "utf8");
+
+test("accepting an offer records an agreement without creating a booking", () => {
+  const decisionFunction = migration.slice(
+    migration.indexOf("create or replace function public.decide_price_offer"),
+    migration.indexOf("create or replace function public.create_booking_from_price_agreement"),
+  );
+  assert.match(decisionFunction, /insert into public\.price_agreements/);
+  assert.match(decisionFunction, /agreed_scope_snapshot = v_scope/);
+  assert.doesNotMatch(decisionFunction, /insert into public\.bookings/);
+});
+
+test("agreement booking RPC uses stored terms and creates a single pending request", () => {
+  const bookingFunction = migration.slice(
+    migration.indexOf("create or replace function public.create_booking_from_price_agreement"),
+    migration.indexOf("create function public.propose_booking_appointment"),
+  );
+  assert.match(bookingFunction, /where id = p_negotiation_id and customer_id = v_user_id/);
+  assert.match(bookingFunction, /v_agreement\.agreed_price, v_agreement\.listed_price/);
+  assert.match(bookingFunction, /v_agreement\.id, v_agreement\.scope_snapshot, v_agreement\.currency/);
+  assert.match(bookingFunction, /if found then return v_booking/);
+  assert.match(bookingFunction, /p_scheduled_at is null or p_scheduled_at <= now\(\)/);
+});
+
+test("appointment changes require a customer-approved proposal", () => {
+  assert.match(migration, /create function public\.propose_booking_appointment/);
+  assert.match(migration, /create function public\.respond_booking_appointment/);
+  assert.match(migration, /p_accept boolean/);
+  assert.match(migration, /p\.status = 'accepted' and p\.responded_by = auth\.uid\(\)/);
+  assert.match(migration, /status = case when p_accept then 'accepted' else 'rejected' end/);
+  assert.doesNotMatch(migration, /proposed_at timestamptz not null check \(proposed_at > now\(\)\)/);
+});
+
+test("booking directory keeps existing view columns in place and appends new columns", () => {
+  const viewDefinition = migration.slice(
+    migration.indexOf("create or replace view public.booking_directory"),
+    migration.indexOf("drop policy if exists \"Students request bookings for another provider\""),
+  );
+  assert.match(viewDefinition, /b\.note, b\.agreed_price, b\.currency, b\.status,\s+customer\.full_name as customer_name, provider\.full_name as provider_name,\s+s\.title as service_title, s\.category, b\.listed_price, b\.price_negotiation_id,\s+b\.location,/);
+});
+
+test("agreed booking UI requires customer confirmation and exposes time approval", () => {
+  assert.match(index, /id="booking-confirm-details" type="checkbox"/);
+  assert.match(userScript, /document\.querySelector\("#booking-confirm-details"\)\.required = Boolean\(negotiation\)/);
+  assert.match(userScript, /p_location: pendingBooking\.requestedLocation/);
+  assert.match(userScript, /data-appointment-response="accept"/);
+  assert.match(userScript, /data-appointment-response="reject"/);
+  assert.match(userScript, /p_proposed_at: proposedAt\.toISOString\(\)/);
+  assert.match(userScript, /p_accept: accept/);
+  assert.match(notifications, /conversation_id, booking_id/);
+  assert.match(notifications, /skillmate:open-booking/);
+  assert.match(userScript, /skillmate:open-booking/);
+});
