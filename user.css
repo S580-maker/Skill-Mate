@@ -1098,6 +1098,7 @@ body.app-auth-pending .app-shell { visibility: hidden; }
 .settings-push-control { display: grid; justify-items: start; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
 .settings-push-control > p { margin: 0; color: var(--dark); font-size: 13px; line-height: 1.6; }
 .settings-push-control small { color: var(--muted); font-size: 12px; }
+.settings-push-help { max-width: 620px; line-height: 1.6; }
 .settings-toggle { display: flex; min-height: 55px; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--dark); background: var(--bg); cursor: pointer; }
 .settings-toggle > span { display: grid; gap: 4px; }
 .settings-toggle strong { font-size: 12px; }
