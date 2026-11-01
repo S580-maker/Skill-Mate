@@ -4,7 +4,7 @@ const {
   getSupabaseUser,
   isOtpVerifiedSession,
   setSessionCookie,
-} = require("./_lib/supabase");
+} = require("../supabase");
 
 module.exports = async function session(request, response) {
   if (request.method === "DELETE") {

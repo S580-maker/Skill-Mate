@@ -1,4 +1,4 @@
-const { getSupabaseConfig } = require("./_lib/supabase");
+const { getSupabaseConfig } = require("../supabase");
 
 module.exports = function supabaseConfig(_request, response) {
   try {

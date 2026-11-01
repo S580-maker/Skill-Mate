@@ -127,7 +127,7 @@ app.get("/supabase-config.js", (_request, response, next) => {
   }
 });
 
-app.get("/api/health", require("./api/health"));
+app.get("/api/health", require("./api/_lib/routes/health"));
 app.get("/api/push-config", (request, response) => {
   const { handlePushConfig } = require("./api/_lib/push");
   return handlePushConfig(request, response);

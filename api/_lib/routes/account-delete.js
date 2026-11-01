@@ -1,7 +1,7 @@
 const {
   getSessionCookie,
-} = require("./_lib/supabase");
-const { handleAccountDelete } = require("./_lib/account-delete");
+} = require("../supabase");
+const { handleAccountDelete } = require("../account-delete");
 
 module.exports = async function accountDelete(request, response) {
   return handleAccountDelete(request, response, getSessionCookie(request));

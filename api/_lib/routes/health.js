@@ -1,4 +1,4 @@
-const { getSupabaseConfig } = require("./_lib/supabase");
+const { getSupabaseConfig } = require("../supabase");
 
 // Shared by the Vercel function and the Express route.
 module.exports = async function health(request, response) {

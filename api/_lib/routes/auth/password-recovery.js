@@ -1,7 +1,7 @@
 const {
   requestPasswordRecovery,
   updateRecoveredPassword,
-} = require("../_lib/email-2fa");
+} = require("../../email-2fa");
 
 module.exports = async function passwordRecovery(request, response) {
   if (request.method === "POST") return requestPasswordRecovery(request, response);

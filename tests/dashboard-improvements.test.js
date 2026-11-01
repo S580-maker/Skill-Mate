@@ -204,7 +204,7 @@ for (const scenario of ["healthy", "database failure", "timeout", "missing confi
         return { ok: !(scenario === "database failure" && url.includes("/rest/")) };
       },
     };
-    vm.runInNewContext(read("api/health.js"), context);
+    vm.runInNewContext(read("api/_lib/routes/health.js"), context);
     const response = {
       headers: {}, setHeader(key, value) { this.headers[key] = value; },
       status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; },

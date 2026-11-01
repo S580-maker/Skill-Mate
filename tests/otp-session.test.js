@@ -5,7 +5,7 @@ const {
   isOtpVerifiedSession,
   recordOtpVerifiedSession,
 } = require("../api/_lib/supabase");
-const sessionHandler = require("../api/session");
+const sessionHandler = require("../api/_lib/routes/session");
 
 const originalFetch = global.fetch;
 const originalEnvironment = {
