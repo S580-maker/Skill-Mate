@@ -52,18 +52,22 @@ function envelope(value) {
 test("Google sign-in requires email verification before returning a Supabase session", async () => {
   let emailMessage;
   let storedChallenge;
+  let recordedVerifiedSession;
+  const userId = "223e4567-e89b-42d3-a456-426614174000";
+  const sessionId = "123e4567-e89b-42d3-a456-426614174000";
+  const accessToken = `header.${Buffer.from(JSON.stringify({ session_id: sessionId })).toString("base64url")}.signature`;
   nodemailer.createTransport = () => ({
     async sendMail(message) { emailMessage = message; },
   });
   global.fetch = async (url, options = {}) => {
     const parsedUrl = new URL(url);
     if (parsedUrl.pathname.endsWith("/auth/v1/user")) {
-      assert.equal(options.headers.authorization, "Bearer google-access-token");
+      assert.equal(options.headers.authorization, `Bearer ${accessToken}`);
       return {
         ok: true,
         status: 200,
         json: async () => ({
-          id: "google-student",
+          id: userId,
           email: "student@example.test",
           app_metadata: { provider: "google" },
         }),
@@ -76,6 +80,10 @@ test("Google sign-in requires email verification before returning a Supabase ses
       storedChallenge = JSON.parse(options.body);
       return { ok: true, status: 201, json: async () => ({}) };
     }
+    if (parsedUrl.pathname.endsWith("/rest/v1/verified_auth_sessions")) {
+      recordedVerifiedSession = JSON.parse(options.body);
+      return { ok: true, status: 201, json: async () => ({}) };
+    }
     if (parsedUrl.pathname.endsWith("/rest/v1/rpc/consume_email_login_challenge")) {
       return { ok: true, status: 200, json: async () => ({ status: "verified", session: storedChallenge.session_data }) };
     }
@@ -86,7 +94,7 @@ test("Google sign-in requires email verification before returning a Supabase ses
     const startResponse = responseStub();
     await googleSignIn({
       method: "POST",
-      headers: { authorization: "Bearer google-access-token" },
+      headers: { authorization: `Bearer ${accessToken}` },
       body: {
         refresh_token: "google-refresh-token",
         expires_in: 3600,
@@ -112,13 +120,14 @@ test("Google sign-in requires email verification before returning a Supabase ses
     assert.deepEqual(verifyResponse.body, {
       provider: "google",
       session: {
-        access_token: "google-access-token",
+        access_token: accessToken,
         refresh_token: "google-refresh-token",
         expires_in: 3600,
         expires_at: 1900000000,
         token_type: "bearer",
       },
     });
+    assert.deepEqual(recordedVerifiedSession, { session_id: sessionId, user_id: userId });
   } finally {
     global.fetch = originalFetch;
     nodemailer.createTransport = originalTransport;

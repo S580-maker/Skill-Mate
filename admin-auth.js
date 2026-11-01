@@ -182,7 +182,7 @@ async function fetchAdminDashboard() {
       .select("id, created_at, scheduled_at, status, agreed_price, currency, customer:profiles!bookings_customer_id_fkey(full_name), provider:profiles!bookings_provider_id_fkey(full_name), service:services(title), group_booking_id")
       .order("created_at", { ascending: false }).limit(25),
     adminClient.from("verification_requests")
-      .select("id, university_email, created_at, profile:profiles!verification_requests_student_id_fkey(id, full_name, university)")
+      .select("id, university_email, id_photo_path, created_at, profile:profiles!verification_requests_student_id_fkey(id, full_name, university)")
       .eq("status", "open").order("created_at", { ascending: true }),
     adminClient.from("reports").select("id", { count: "exact", head: true }).eq("status", "open"),
     adminClient.from("bookings").select("id", { count: "exact", head: true }).eq("status", "pending"),
@@ -242,7 +242,7 @@ async function fetchAdminDashboard() {
     const profile = request.profile || {};
     const row = document.createElement("div");
     row.className = "verification-row";
-    row.innerHTML = `<span class="person-avatar avatar-sky">${escapeAdminText(initials(profile.full_name))}</span><span class="verification-copy"><strong>${escapeAdminText(profile.full_name || "Student")}</strong><small>${escapeAdminText(profile.university || "University not provided")}</small></span><span class="verified-doc">${escapeAdminText(request.university_email)}</span><button class="review-button" type="button" data-verification-id="${escapeAdminText(request.id)}">Review</button>`;
+    row.innerHTML = `<span class="person-avatar avatar-sky">${escapeAdminText(initials(profile.full_name))}</span><span class="verification-copy"><strong>${escapeAdminText(profile.full_name || "Student")}</strong><small>${escapeAdminText(profile.university || "University not provided")}</small></span><span class="verified-doc">${escapeAdminText(request.university_email)}</span><button class="review-button" type="button" data-verification-id="${escapeAdminText(request.id)}" data-verification-photo="${escapeAdminText(request.id_photo_path || "")}" data-verification-student="${escapeAdminText(profile.full_name || "Student")}">Review ID</button>`;
     verificationPanel.insertBefore(row, queueLink);
   });
   const attention = document.querySelectorAll(".attention-item .attention-copy small");
@@ -409,26 +409,92 @@ async function protectAdminDashboard() {
       }
       showAdminToast(unread[0] ? `${unread[0].title}${unread[0].body ? `: ${unread[0].body}` : ""}` : "You’re all caught up.");
     });
+    const verificationDialog = document.querySelector("#verification-review-dialog");
+    const verificationImage = document.querySelector("#verification-review-image");
+    const verificationStatus = document.querySelector("#verification-review-status");
+    const approveButton = document.querySelector("#verification-approve");
+    const rejectButton = document.querySelector("#verification-reject");
+    verificationDialog.addEventListener("close", () => {
+      verificationDialog.dataset.requestId = "";
+      verificationDialog.dataset.photoPath = "";
+      verificationImage.hidden = true;
+      verificationImage.removeAttribute("src");
+    });
     document.querySelector(".verification-panel").addEventListener("click", async (event) => {
       const button = event.target.closest("[data-verification-id]");
       if (!button) return;
-      const action = window.prompt("Type APPROVE to verify this student, or DISMISS to reject the request.");
-      if (!action || !["approve", "dismiss"].includes(action.trim().toLowerCase())) return;
-      const approve = action.trim().toLowerCase() === "approve";
-      button.disabled = true;
-      const { error } = await adminClient.rpc("review_verification_request", {
-        p_request_id: button.dataset.verificationId,
-        p_approve: approve,
-      });
-      if (error) {
-        console.error("Could not review the verification request.", error);
-        showAdminToast(error.message || "Could not update the verification request.");
-        button.disabled = false;
+      verificationDialog.dataset.requestId = button.dataset.verificationId;
+      verificationDialog.dataset.photoPath = button.dataset.verificationPhoto || "";
+      document.querySelector("#verification-review-student").textContent = button.dataset.verificationStudent;
+      verificationImage.hidden = true;
+      verificationImage.removeAttribute("src");
+      approveButton.disabled = true;
+      rejectButton.disabled = false;
+      verificationDialog.showModal();
+      if (!verificationDialog.dataset.photoPath) {
+        verificationStatus.textContent = "This request has no ID photo. It cannot be approved.";
         return;
       }
-      showAdminToast(approve ? "Student verified." : "Verification request dismissed.");
+      verificationStatus.textContent = "Loading the private ID photo…";
+      try {
+        const { data, error } = await adminClient.storage.from("student-verification-ids")
+          .createSignedUrl(verificationDialog.dataset.photoPath, 300);
+        if (error) throw error;
+        if (verificationDialog.dataset.requestId !== button.dataset.verificationId) return;
+        verificationImage.src = data.signedUrl;
+        await verificationImage.decode();
+        if (verificationDialog.dataset.requestId !== button.dataset.verificationId) return;
+        verificationImage.hidden = false;
+        verificationStatus.textContent = "Review the student ID, then approve or reject the request.";
+        approveButton.disabled = false;
+      } catch (error) {
+        console.error("Could not load the private student ID photo.", error);
+        verificationStatus.textContent = "The ID photo could not be loaded. Close this review and try again.";
+        showAdminToast(error.message || "Could not load the ID photo.");
+      }
+    });
+    document.querySelector(".verification-review-actions").addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-verification-decision]");
+      if (!button) return;
+      const requestId = verificationDialog.dataset.requestId;
+      const photoPath = verificationDialog.dataset.photoPath;
+      const approve = button.dataset.verificationDecision === "approve";
+      button.disabled = true;
+      rejectButton.disabled = true;
+      let reviewError;
+      try {
+        const result = await adminClient.rpc("review_verification_request", {
+          p_request_id: requestId,
+          p_approve: approve,
+        });
+        reviewError = result.error;
+      } catch (error) {
+        reviewError = error;
+      }
+      if (reviewError) {
+        console.error("Could not review the verification request.", reviewError);
+        showAdminToast(reviewError.message || "Could not update the verification request.");
+        button.disabled = false;
+        rejectButton.disabled = false;
+        return;
+      }
+      let cleanupFailed = false;
+      if (photoPath) {
+        try {
+          const { error: cleanupError } = await adminClient.storage.from("student-verification-ids").remove([photoPath]);
+          if (cleanupError) throw cleanupError;
+        } catch (cleanupError) {
+          console.error("The verification request was reviewed, but its ID photo could not be deleted.", cleanupError);
+          cleanupFailed = true;
+        }
+      }
+      verificationDialog.close();
+      verificationImage.removeAttribute("src");
       try {
         await fetchAdminDashboard();
+        showAdminToast(cleanupFailed
+          ? "Request reviewed, but the ID photo could not be deleted. Remove it from the private verification bucket."
+          : approve ? "Student verified. The ID photo was deleted." : "Request rejected. The ID photo was deleted.");
       } catch (refreshError) {
         console.error("Could not refresh the administrator dashboard.", refreshError);
         showAdminToast(refreshError.message || "The request was saved, but the dashboard could not refresh.");

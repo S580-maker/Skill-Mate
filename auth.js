@@ -9,9 +9,11 @@ let authMode = "signin";
 let authSubmitting = false;
 let authRedirectStarted = false;
 let googleOtpStarted = false;
+let sessionOtpStarted = false;
+let sessionCheckStarted = false;
 let otpCountdownTimer = null;
 
-function redirectForSession(session) {
+async function redirectForSession(session) {
   if (!session || authMode === "recovery") return;
   if (window.sessionStorage.getItem("skillmate-google-otp-active") === "1") return;
   if (window.sessionStorage.getItem("skillmate-google-otp-pending") === "1") {
@@ -21,9 +23,66 @@ function redirectForSession(session) {
     }
     return;
   }
-  if (authSubmitting || authRedirectStarted) return;
-  authRedirectStarted = true;
-  window.location.replace(getPostAuthUrl());
+  if (authSubmitting || authRedirectStarted || sessionOtpStarted || sessionCheckStarted) return;
+  sessionCheckStarted = true;
+  try {
+    await window.syncSkillmateServerSession(session);
+    authRedirectStarted = true;
+    window.location.replace(getPostAuthUrl());
+  } catch (error) {
+    if (error.code === "OTP_VERIFICATION_REQUIRED") {
+      await startSessionOtp(session);
+    } else {
+      console.error("Could not verify the restored Skillmate session.", error);
+      authMessage.textContent = error.message || "Could not check your sign-in session. Reload the page and try again.";
+    }
+  } finally {
+    sessionCheckStarted = false;
+  }
+}
+
+async function startSessionOtp(session) {
+  const submitButton = document.querySelector("#auth-submit");
+  const googleButton = document.querySelector("#google-signin");
+  sessionOtpStarted = true;
+  authSubmitting = true;
+  submitButton.disabled = true;
+  googleButton.disabled = true;
+  authMessage.textContent = "Sending your verification code…";
+  try {
+    const response = await fetch("/api/auth/session-otp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${session.access_token}`,
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        refresh_token: session.refresh_token,
+        expires_in: session.expires_in,
+        expires_at: session.expires_at,
+        token_type: session.token_type,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Could not start email verification.");
+    if (result.verified) {
+      await window.syncSkillmateServerSession(session);
+      authRedirectStarted = true;
+      window.location.replace(getPostAuthUrl());
+      return;
+    }
+    authMessage.textContent = "";
+    showOtpChallenge(result.email);
+  } catch (error) {
+    console.error("Skillmate restored-session email verification failed.", error);
+    authMessage.textContent = error.message || "Could not start email verification. Please try again.";
+    sessionOtpStarted = false;
+  } finally {
+    authSubmitting = false;
+    submitButton.disabled = false;
+    googleButton.disabled = false;
+  }
 }
 
 async function startGoogleOtp(session) {
@@ -57,6 +116,7 @@ async function startGoogleOtp(session) {
     console.error("Skillmate Google email verification failed.", error);
     window.sessionStorage.removeItem("skillmate-google-otp-pending");
     window.sessionStorage.removeItem("skillmate-google-otp-active");
+    sessionOtpStarted = false;
     await authClient.auth.signOut({ scope: "local" }).catch((signOutError) => {
       console.error("Could not clear the unverified Google session.", signOutError);
     });
@@ -263,6 +323,7 @@ async function submitOtpCode(event) {
       await window.syncSkillmateServerSession(data.session);
     }
     window.sessionStorage.removeItem("skillmate-google-otp-active");
+    sessionOtpStarted = false;
     verificationSucceeded = true;
     challenge.classList.add("is-success");
     message.classList.add("success");
@@ -384,10 +445,12 @@ document.querySelector("#otp-resend").addEventListener("click", async () => {
 
 document.querySelector("#otp-back").addEventListener("click", () => {
   fetch("/api/auth/sign-in", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
-  if (window.sessionStorage.getItem("skillmate-google-otp-active") === "1") {
+  sessionOtpStarted = false;
+  if (window.sessionStorage.getItem("skillmate-google-otp-active") === "1" || sessionOtpStarted) {
+    sessionOtpStarted = false;
     window.sessionStorage.removeItem("skillmate-google-otp-active");
     authClient.auth.signOut({ scope: "local" }).catch((error) => {
-      console.error("Could not clear the unverified Google session.", error);
+      console.error("Could not clear the unverified sign-in session.", error);
     });
   }
   hideOtpChallenge();

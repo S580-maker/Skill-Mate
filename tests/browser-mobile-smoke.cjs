@@ -299,6 +299,13 @@ async function main() {
   await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await navigate("index.html");
   await evaluate('showPage("profile-settings")');
+  await evaluate('showPage("home");renderAll()');
+  assert.equal(await evaluate('document.querySelector("#verification-cta").hidden'), false, "Unverified students see the campus verification prompt");
+  await evaluate('document.querySelector("#verification-cta").click()');
+  assert.equal(await evaluate('document.querySelector("#verification-modal").open'), true, "The campus prompt opens the student ID verification form");
+  await evaluate('document.querySelector("#verification-modal").close();state.profile.verified=true;renderAll()');
+  assert.equal(await evaluate('document.querySelector("#verification-cta").hidden'), true, "Verified students no longer see the verification prompt");
+  await evaluate('state.profile.verified=false;renderAll();showPage("profile-settings")');
   assert.notEqual(await evaluate('getComputedStyle(document.querySelector("#mode-switch-label")).display'), "none", "Seller action label must be visible on phones");
   await screenshot("profile-390");
   await evaluate('document.querySelector(".profile-completeness-action").click()');
@@ -329,7 +336,7 @@ async function main() {
   await evaluate('document.querySelector("#booking-time").value="13:15";document.querySelector("#booking-form").requestSubmit()');
   assert.equal(await evaluate('state.bookings[0].status'), "Pending");
   assert.equal(await evaluate('state.activePage'), "bookings");
-  await evaluate('showPage("profile-settings");document.querySelector("[data-theme-toggle]").click();showPage("home")');
+  await evaluate('showPage("profile-settings");document.documentElement.dataset.theme="light";document.querySelector("[data-theme-toggle]").click();showPage("home")');
   assert.equal(await evaluate('document.documentElement.dataset.theme'), "dark");
   assert.equal(await evaluate('getComputedStyle(document.querySelector(".mobile-nav")).display'), "grid");
   assert.ok(await evaluate('document.querySelector(".mobile-nav").getBoundingClientRect().bottom <= innerHeight + 1'), "Navigation stays on screen after switching theme");

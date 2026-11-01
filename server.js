@@ -6,6 +6,7 @@ const express = require("express");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const { rateLimit } = require("express-rate-limit");
+const { isOtpVerifiedSession } = require("./api/_lib/supabase");
 
 const app = express();
 const projectRoot = __dirname;
@@ -136,6 +137,10 @@ app.post("/api/auth/google-2fa", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10
   const { googleSignIn } = require("./api/_lib/email-2fa");
   return googleSignIn(request, response);
 });
+app.post("/api/auth/session-otp", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+  const { sessionSignIn } = require("./api/_lib/email-2fa");
+  return sessionSignIn(request, response);
+});
 app.post("/api/auth/sign-up", rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
   const { signUp } = require("./api/_lib/email-2fa");
   return signUp(request, response);
@@ -173,6 +178,13 @@ app.post(
         response.clearCookie(sessionCookieName, sessionCookieOptions);
         return response.status(401).json({ error: "Your sign-in session has expired. Please sign in again." });
       }
+      if (!await isOtpVerifiedSession(accessToken, user.id)) {
+        response.clearCookie(sessionCookieName, sessionCookieOptions);
+        return response.status(403).json({
+          code: "OTP_VERIFICATION_REQUIRED",
+          error: "Verify your email to continue.",
+        });
+      }
       response.cookie(sessionCookieName, accessToken, {
         ...sessionCookieOptions,
         maxAge: getAccessTokenExpiry(accessToken),
@@ -204,6 +216,10 @@ app.get("/admin.html", async (request, response) => {
     if (!user?.id) {
       response.clearCookie(sessionCookieName, sessionCookieOptions);
       return response.redirect(302, "/login.html?next=admin");
+    }
+    if (!await isOtpVerifiedSession(accessToken, user.id)) {
+      response.clearCookie(sessionCookieName, sessionCookieOptions);
+      return response.redirect(302, "/login.html?verify=required&next=admin");
     }
     const role = await getUserRole(user.id, accessToken);
     if (role !== "admin") return response.redirect(302, "/index.html");

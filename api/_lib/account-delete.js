@@ -107,9 +107,12 @@ async function handleAccountDelete(request, response, accessToken) {
 
   let closingUserId;
   try {
-    const { getSupabaseUser, getUserRole } = require("./supabase");
+    const { getSupabaseUser, getUserRole, isOtpVerifiedSession } = require("./supabase");
     const user = await getSupabaseUser(accessToken);
     if (!user?.id) return response.status(401).json({ error: "Your sign-in session has expired." });
+    if (!await isOtpVerifiedSession(accessToken, user.id)) {
+      return response.status(403).json({ error: "Verify your email before closing your account." });
+    }
     closingUserId = user.id;
     if (await getUserRole(user.id, accessToken) === "admin") {
       return response.status(403).json({ error: "Administrator accounts cannot be deleted from this page." });

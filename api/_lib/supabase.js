@@ -50,6 +50,63 @@ async function getSupabaseUser(accessToken) {
   return response.json();
 }
 
+function getSupabaseSessionId(accessToken) {
+  try {
+    const claims = JSON.parse(Buffer.from(accessToken.split(".")[1], "base64url").toString("utf8"));
+    const sessionId = claims.session_id;
+    return typeof sessionId === "string"
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)
+      ? sessionId
+      : "";
+  } catch {
+    return "";
+  }
+}
+
+async function isOtpVerifiedSession(accessToken, userId) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!serviceRoleKey) throw new Error("OTP session verification is not configured on this server.");
+  const sessionId = getSupabaseSessionId(accessToken);
+  if (!sessionId) return false;
+  const config = getSupabaseConfig();
+  const query = new URLSearchParams({
+    select: "session_id",
+    session_id: `eq.${sessionId}`,
+    user_id: `eq.${userId}`,
+    limit: "1",
+  });
+  const response = await fetch(`${config.url}/rest/v1/verified_auth_sessions?${query}`, {
+    headers: { apikey: serviceRoleKey, authorization: `Bearer ${serviceRoleKey}` },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`OTP session lookup returned HTTP ${response.status}.`);
+  const rows = await response.json();
+  return rows.length > 0;
+}
+
+async function recordOtpVerifiedSession(accessToken) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!serviceRoleKey) throw new Error("OTP session verification is not configured on this server.");
+  const sessionId = getSupabaseSessionId(accessToken);
+  if (!sessionId) throw new Error("The verified sign-in session has no valid session identifier.");
+  const user = await getSupabaseUser(accessToken);
+  if (!user?.id) throw new Error("The verified sign-in session is no longer valid.");
+  const config = getSupabaseConfig();
+  const response = await fetch(`${config.url}/rest/v1/verified_auth_sessions?on_conflict=session_id`, {
+    method: "POST",
+    headers: {
+      apikey: serviceRoleKey,
+      authorization: `Bearer ${serviceRoleKey}`,
+      "content-type": "application/json",
+      Prefer: "resolution=ignore-duplicates,return=minimal",
+    },
+    body: JSON.stringify({ session_id: sessionId, user_id: user.id }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Could not record the verified OTP session (HTTP ${response.status}).`);
+  return user;
+}
+
 async function getUserRole(userId, accessToken) {
   const config = getSupabaseConfig();
   const query = new URLSearchParams({ select: "role", id: `eq.${userId}`, limit: "1" });
@@ -109,8 +166,11 @@ module.exports = {
   clearSessionCookie,
   getBearerToken,
   getSessionCookie,
+  getSupabaseSessionId,
   getSupabaseConfig,
   getSupabaseUser,
   getUserRole,
+  isOtpVerifiedSession,
+  recordOtpVerifiedSession,
   setSessionCookie,
 };

@@ -145,6 +145,38 @@ test("OTP verification rejects incorrect codes with retry feedback and accepts s
   assert.equal(context.authSubmitting, false);
 });
 
+test("restored sessions without OTP proof start email verification instead of redirecting", async () => {
+  const { context } = fixture();
+  let challengeSession = null;
+  const verifiedSession = { access_token: "unverified-access" };
+  Object.assign(context, {
+    sessionOtpStarted: false,
+    sessionCheckStarted: false,
+    authRedirectStarted: false,
+    authSubmitting: false,
+    getPostAuthUrl: () => "index.html",
+    startSessionOtp: async session => { challengeSession = session; },
+  });
+  context.window = {
+    sessionStorage: { getItem: () => null },
+    syncSkillmateServerSession: async () => {
+      const error = new Error("Verify your email.");
+      error.code = "OTP_VERIFICATION_REQUIRED";
+      throw error;
+    },
+    location: { replace() { assert.fail("Unverified sessions must not redirect."); } },
+  };
+  vm.runInContext(source.slice(
+    source.indexOf("async function redirectForSession"),
+    source.indexOf("async function startSessionOtp"),
+  ), context);
+
+  await context.redirectForSession(verifiedSession);
+
+  assert.equal(challengeSession, verifiedSession);
+  assert.equal(context.authRedirectStarted, false);
+});
+
 test("account modes switch visible fields, validation and the active accessible tab", () => {
   const { context, get } = fixture();
   context.setAuthMode("signup");

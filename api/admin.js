@@ -3,6 +3,7 @@ const path = require("node:path");
 const {
   clearSessionCookie,
   getSessionCookie,
+  isOtpVerifiedSession,
   getSupabaseUser,
   getUserRole,
 } = require("./_lib/supabase");
@@ -21,6 +22,10 @@ module.exports = async function admin(request, response) {
     if (!user?.id) {
       clearSessionCookie(response);
       return response.redirect(302, "/login.html?next=admin");
+    }
+    if (!await isOtpVerifiedSession(accessToken, user.id)) {
+      clearSessionCookie(response);
+      return response.redirect(302, "/login.html?verify=required&next=admin");
     }
     const role = await getUserRole(user.id, accessToken);
     if (role !== "admin") return response.redirect(302, "/index.html");

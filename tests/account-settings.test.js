@@ -7,7 +7,13 @@ const path = require("node:path");
 const project = path.join(__dirname, "..");
 const deletionSource = fs.readFileSync(path.join(project, "api/_lib/account-delete.js"), "utf8");
 
-function deletionFixture({ key = "test-server-key", role = "student", failAt, missingServiceBucket = false } = {}) {
+function deletionFixture({
+  key = "test-server-key",
+  role = "student",
+  verifiedSession = true,
+  failAt,
+  missingServiceBucket = false,
+} = {}) {
   const calls = [];
   const context = vm.createContext({
     module: { exports: {} },
@@ -17,7 +23,11 @@ function deletionFixture({ key = "test-server-key", role = "student", failAt, mi
     require(name) {
       if (name === "node:crypto") return require(name);
       assert.equal(name, "./supabase");
-      return { getSupabaseUser: async () => ({ id: "test-user" }), getUserRole: async () => role };
+      return {
+        getSupabaseUser: async () => ({ id: "test-user" }),
+        getUserRole: async () => role,
+        isOtpVerifiedSession: async () => verifiedSession,
+      };
     },
     async fetch(url, options) {
       const pathname = new URL(url).pathname;
@@ -80,6 +90,13 @@ test("missing server configuration cannot change the account", async () => {
 
 test("administrators cannot close their accounts", async () => {
   const { handle, response, calls } = deletionFixture({ role: "admin" });
+  await handle({ method: "POST", body: { confirmation: "DELETE" } }, response, "token");
+  assert.equal(response.statusCode, 403);
+  assert.equal(calls.length, 0);
+});
+
+test("unverified sessions cannot close accounts", async () => {
+  const { handle, response, calls } = deletionFixture({ verifiedSession: false });
   await handle({ method: "POST", body: { confirmation: "DELETE" } }, response, "token");
   assert.equal(response.statusCode, 403);
   assert.equal(calls.length, 0);

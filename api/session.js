@@ -2,6 +2,7 @@ const {
   clearSessionCookie,
   getBearerToken,
   getSupabaseUser,
+  isOtpVerifiedSession,
   setSessionCookie,
 } = require("./_lib/supabase");
 
@@ -24,6 +25,13 @@ module.exports = async function session(request, response) {
     const user = await getSupabaseUser(accessToken);
     if (!user?.id) {
       return response.status(401).json({ error: "Your sign-in session has expired. Please sign in again." });
+    }
+    if (!await isOtpVerifiedSession(accessToken, user.id)) {
+      clearSessionCookie(response);
+      return response.status(403).json({
+        code: "OTP_VERIFICATION_REQUIRED",
+        error: "Verify your email to continue.",
+      });
     }
     setSessionCookie(response, accessToken);
     return response.status(204).end();

@@ -1,6 +1,11 @@
 const crypto = require("node:crypto");
 const nodemailer = require("nodemailer");
-const { getSupabaseConfig } = require("./supabase");
+const {
+  getSupabaseConfig,
+  getSupabaseSessionId,
+  isOtpVerifiedSession,
+  recordOtpVerifiedSession,
+} = require("./supabase");
 
 const challengeCookie = "skillmate_login_challenge";
 const passwordRecoveryCookie = "skillmate_password_recovery";
@@ -402,7 +407,7 @@ async function googleSignIn(request, response) {
     });
     const googleIdentity = user?.app_metadata?.provider === "google"
       || user?.identities?.some((identity) => identity.provider === "google");
-    if (!userResponse.ok || !user?.email || !googleIdentity) {
+    if (!userResponse.ok || !user?.email || !googleIdentity || !getSupabaseSessionId(accessToken)) {
       return respondError(response, 401, "Sign in with Google again to continue.");
     }
 
@@ -428,6 +433,56 @@ async function googleSignIn(request, response) {
     return response.status(200).json({ email, message: "A six-digit sign-in code was sent to your email." });
   } catch (error) {
     console.error("Could not start Google email verification.", error);
+    return respondError(response, 503, "Email verification is temporarily unavailable. Please try again shortly.");
+  }
+}
+
+async function sessionSignIn(request, response) {
+  if (request.method !== "POST") {
+    response.setHeader("Allow", "POST");
+    return respondError(response, 405, "Method not allowed.");
+  }
+  const accessToken = String(request.headers?.authorization || "").match(/^Bearer\s+(.+)$/i)?.[1];
+  const refreshToken = String(request.body?.refresh_token || "");
+  if (!accessToken || !refreshToken || refreshToken.length > 4096) {
+    return respondError(response, 401, "Sign in again to verify your session.");
+  }
+
+  try {
+    getServiceKey();
+    getOtpSecret();
+    const { response: userResponse, result: user } = await supabaseRequest("/auth/v1/user", {
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    if (!userResponse.ok || !user?.id || !user.email || !getSupabaseSessionId(accessToken)) {
+      return respondError(response, 401, "Your sign-in session has expired. Please sign in again.");
+    }
+    if (await isOtpVerifiedSession(accessToken, user.id)) {
+      return response.status(200).json({ verified: true });
+    }
+
+    const email = user.email.trim().toLowerCase();
+    const recent = await findRecentChallenge(email);
+    if (recent[0] && Date.now() - new Date(recent[0].last_sent_at).getTime() < resendCooldownMs) {
+      return respondError(response, 429, "A sign-in code was sent recently. Wait 30 seconds before trying again.");
+    }
+    if (recent.length >= maximumChallengesPerWindow) {
+      return respondError(response, 429, "Too many sign-in codes were requested. Please wait 15 minutes and try again.");
+    }
+
+    const token = await createChallenge(email, {
+      type: "session",
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: request.body?.expires_in,
+      expires_at: request.body?.expires_at,
+      token_type: request.body?.token_type,
+    });
+    setChallengeCookie(response, token);
+    response.setHeader("Cache-Control", "no-store");
+    return response.status(200).json({ email, message: "A six-digit sign-in code was sent to your email." });
+  } catch (error) {
+    console.error("Could not start restored-session email verification.", error);
     return respondError(response, 503, "Email verification is temporarily unavailable. Please try again shortly.");
   }
 }
@@ -529,6 +584,8 @@ async function verify(request, response) {
       if (!verifiedSession?.access_token || !verifiedSession?.refresh_token) {
         throw new Error("The verified sign-in session is incomplete.");
       }
+      await recordOtpVerifiedSession(verifiedSession.access_token);
+      clearChallengeCookie(response);
       response.setHeader("Cache-Control", "no-store");
       if (pending.type === "google") {
         return response.status(200).json({ provider: "google", session: verifiedSession });
@@ -607,6 +664,7 @@ module.exports = {
   googleSignIn,
   requestPasswordRecovery,
   resend,
+  sessionSignIn,
   signIn,
   signUp,
   updateRecoveredPassword,

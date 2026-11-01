@@ -1482,10 +1482,16 @@ function renderAll() {
   document.querySelector("#provider-request-count").textContent = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Pending").length;
   document.querySelector("#active-listings-count").textContent = state.services.filter((service) => service.active).length;
   const verified = state.profile.verified;
-  document.querySelector(".verified-mark").textContent = verified ? "✓" : "!";
+  const verificationMark = document.querySelector(".verified-mark");
+  verificationMark.textContent = verified ? "✓" : "!";
+  verificationMark.title = verified ? "Campus verified" : "Verify to earn a campus badge";
+  verificationMark.setAttribute("aria-label", verificationMark.title);
+  document.querySelector(".campus-card").classList.toggle("campus-verified", verified);
   document.querySelector(".campus-card").classList.toggle("campus-unverified", !verified);
-  document.querySelector(".trust-mini small").textContent = verified
-    ? "Campus status verified"
+  const verificationCta = document.querySelector("#verification-cta");
+  verificationCta.hidden = verified;
+  verificationCta.querySelector("small").textContent = document.querySelector("#verification-open").dataset.requested === "open"
+    ? "Verification is waiting for review"
     : "Verify to earn a campus badge";
   document.querySelector(".profile-copy strong").textContent = state.profile.name;
   renderUserAvatar(document.querySelector(".profile-avatar"), state.profile);
@@ -1499,7 +1505,9 @@ function renderAll() {
     document.querySelector(".campus-card small").textContent = state.profile.course || "STUDENT ACCOUNT";
     const providerHeading = document.querySelector(".provider-profile-main");
     renderUserAvatar(providerHeading.querySelector(".profile-avatar"), state.profile);
-    providerHeading.querySelector(".verified-pill").textContent = verified ? "✓ Campus verified" : "Campus verification pending";
+    const profileVerificationPill = providerHeading.querySelector(".verified-pill");
+    profileVerificationPill.textContent = verified ? "✓ Campus verified" : "Campus verification pending";
+    profileVerificationPill.classList.toggle("is-verified", verified);
     providerHeading.querySelector("h2").textContent = state.profile.name;
     providerHeading.querySelector("p").textContent = `${state.profile.bio || "Student service provider"} · ${state.profile.university || "Campus not set"}`;
     providerHeading.querySelector(".profile-tags").innerHTML = [...new Set(state.services.map((service) => service.category))]
@@ -1933,6 +1941,9 @@ async function bootstrapStudentApp() {
     if (event === "TOKEN_REFRESHED" && session) {
       window.syncSkillmateServerSession(session).catch((syncError) => {
         console.error("Could not refresh the secure Skillmate session.", syncError);
+        if (syncError.code === "OTP_VERIFICATION_REQUIRED") {
+          window.location.replace("login.html?verify=required");
+        }
       });
     }
   });
@@ -1947,6 +1958,15 @@ async function bootstrapStudentApp() {
   if (!data.session) {
     window.location.replace("login.html");
     return;
+  }
+  try {
+    await window.syncSkillmateServerSession(data.session);
+  } catch (sessionError) {
+    if (sessionError.code === "OTP_VERIFICATION_REQUIRED") {
+      window.location.replace("login.html?verify=required");
+      return;
+    }
+    throw sessionError;
   }
   const { data: profile, error: profileError } = await loadAccountProfile(data.session.user.id);
   if (profileError) throw profileError;
@@ -1993,10 +2013,6 @@ async function bootstrapStudentApp() {
   document.querySelector(".campus-card strong").textContent = state.profile.university || "Your campus";
   document.querySelector(".campus-card small").textContent = state.profile.course || "Student account";
   showConnectedApp();
-  window.syncSkillmateServerSession(data.session).catch((sessionError) => {
-    console.error("Could not synchronize the secure Skillmate session.", sessionError);
-    showToast("Some account features may be unavailable until your session reconnects.", "error");
-  });
   try {
     await refreshSupabaseState();
     dashboardDataLoaded = true;
@@ -2128,7 +2144,7 @@ function openProviderProfile(providerId, serviceId) {
   profile.innerHTML = `
     <div class="detail-profile-heading">
       ${providerAvatarMarkup(provider)}
-      <div><span class="verified-pill">${provider.verified ? "✓ Campus verified" : "Campus verification pending"}</span><h2>${escapeHTML(provider.name)}</h2><p>${escapeHTML(provider.course)} · ${escapeHTML(provider.campus)}</p></div>
+      <div><span class="verified-pill${provider.verified ? " is-verified" : ""}">${provider.verified ? "✓ Campus verified" : "Campus verification pending"}</span><h2>${escapeHTML(provider.name)}</h2><p>${escapeHTML(provider.course)} · ${escapeHTML(provider.campus)}</p></div>
     </div>
     <div class="detail-rating"><strong>★ ${escapeHTML(rating.rating)}</strong><span>${rating.count} student reviews</span></div>
     <section class="detail-section"><h3>Services</h3>${services.map((service) => `<div class="detail-service"><span><strong>${escapeHTML(service.title)}</strong><small>${escapeHTML(service.category)} · ${servicePriceLabel(service)}</small><small>${escapeHTML(serviceDetailLabel(service))}</small></span>${service.groups ? '<span class="detail-group-tag">Group bookings welcome</span>' : ""}</div>`).join("")}</section>
@@ -2922,8 +2938,29 @@ document.querySelector("#profile-form").addEventListener("submit", (event) => {
   }
   if (appSupabase) {
     runAction(async () => {
+      let canceledVerificationPhoto = "";
+      if (university !== state.profile.university) {
+        const { data: verificationRequest, error: verificationError } = await appSupabase.from("verification_requests")
+          .select("id_photo_path").eq("student_id", appUser.id).eq("status", "open").maybeSingle();
+        if (verificationError && !["42703", "PGRST204"].includes(verificationError.code)) throw verificationError;
+        if (verificationError) {
+          console.warn("Could not check for a pending ID photo because the verification migration is not available.", verificationError);
+        }
+        canceledVerificationPhoto = verificationRequest?.id_photo_path || "";
+      }
       const { error } = await persistStudentProfileDetails({ name, university, bio, location, studentIdNumber });
       if (error) throw error;
+      let verificationPhotoCleanupFailed = false;
+      if (canceledVerificationPhoto) {
+        try {
+          const { error: cleanupError } = await appSupabase.storage.from("student-verification-ids")
+            .remove([canceledVerificationPhoto]);
+          if (cleanupError) throw cleanupError;
+        } catch (cleanupError) {
+          console.error("Campus profile was saved, but the canceled verification photo could not be deleted.", cleanupError);
+          verificationPhotoCleanupFailed = true;
+        }
+      }
       if (university !== state.profile.university) state.profile.verified = false;
       Object.assign(state.profile, { name, university, bio, location });
       if (studentIdNumber) state.profile.studentIdNumber = studentIdNumber;
@@ -2940,10 +2977,15 @@ document.querySelector("#profile-form").addEventListener("submit", (event) => {
       renderAll();
       loadAccountSettings();
       event.target.closest("dialog").close();
-      showToast(emailError ? "Your profile was saved, but the email change could not be requested. Try changing the email again."
-        : refreshFailed ? "Your profile was saved. Reload to refresh the latest account details."
-          : emailChanged ? "Profile updated. Confirm the email change using the link sent to your new address."
-            : "Your student profile has been updated.", emailError || refreshFailed ? "error" : "success");
+      showToast(verificationPhotoCleanupFailed
+        ? emailError
+          ? "Profile saved. The email change and ID photo cleanup need attention; contact support."
+          : "Profile saved, but the ID photo from your canceled verification could not be deleted. Contact support."
+        : emailError ? "Your profile was saved, but the email change could not be requested. Try changing the email again."
+          : refreshFailed ? "Your profile was saved. Reload to refresh the latest account details."
+            : emailChanged ? "Profile updated. Confirm the email change using the link sent to your new address."
+              : "Your student profile has been updated.",
+      verificationPhotoCleanupFailed || emailError || refreshFailed ? "error" : "success");
     }, "Could not update your profile.");
     return;
   }
@@ -3280,16 +3322,19 @@ document.querySelector("#verification-open").addEventListener("click", () => {
     showToast("Your campus verification request is waiting for review.");
     return;
   }
-  if (!appSupabase && state.profile.verificationRequested) {
-    showToast("Your demo verification request is saved locally. It has not been reviewed.");
-    return;
-  }
   if (state.profile.verified) {
-    showToast("Campus badge enabled in this demo; no real identity check was performed.");
+    showToast("Your campus status is verified.");
     return;
   }
   document.querySelector("#verification-email").value = state.profile.email;
+  document.querySelector("#verification-photo").value = "";
+  const feedback = document.querySelector("#verification-feedback");
+  feedback.hidden = true;
+  feedback.textContent = "";
   openModal("verification-modal");
+});
+document.querySelector("#verification-cta").addEventListener("click", () => {
+  document.querySelector("#verification-open").click();
 });
 function readImage(file) {
   return new Promise((resolve, reject) => {
@@ -3381,25 +3426,68 @@ document.querySelector("#portfolio-grid").addEventListener("click", (event) => {
 document.querySelector("#verification-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const email = document.querySelector("#verification-email").value.trim();
+  const photo = document.querySelector("#verification-photo").files[0];
+  const allowedTypes = new Map([
+    ["image/jpeg", "jpg"],
+    ["image/png", "png"],
+    ["image/webp", "webp"],
+  ]);
   if (!email.includes("@")) { showToast("Enter a valid university email address."); return; }
-  if (appSupabase) {
-    runAction(async () => {
-      const { error } = await appSupabase.from("verification_requests").insert({
-        student_id: appUser.id, university_email: email,
-      });
-      if (error) throw error;
-      await refreshSupabaseState();
-      event.target.closest("dialog").close();
-      showToast("Verification request submitted. Your badge will appear after an administrator reviews it.");
-    }, "Could not submit your verification request.");
+  if (!photo || !allowedTypes.has(photo.type)) {
+    showToast("Choose a JPG, PNG, or WebP photo of your student ID.", "error");
     return;
   }
-  state.profile.email = email;
-  state.profile.verificationRequested = true;
-  saveState();
-  renderAll();
-  event.target.closest("dialog").close();
-  showToast("Demo request saved locally. No identity check or campus badge was issued.");
+  if (photo.size > 5 * 1024 * 1024) {
+    showToast("Choose a student ID photo smaller than 5 MB.", "error");
+    return;
+  }
+  if (!appSupabase) {
+    showToast("Connect your Skillmate account to submit an ID photo securely. Nothing was saved.", "error");
+    return;
+  }
+  const submitButton = document.querySelector("#verification-submit");
+  const feedback = document.querySelector("#verification-feedback");
+  runAction(async () => {
+    const bucket = "student-verification-ids";
+    const imagePath = `${appUser.id}/${crypto.randomUUID()}.${allowedTypes.get(photo.type)}`;
+    const { error: uploadError } = await appSupabase.storage.from(bucket).upload(imagePath, photo, {
+      contentType: photo.type,
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+
+    const { error: requestError } = await appSupabase.from("verification_requests").insert({
+      student_id: appUser.id,
+      university_email: email,
+      id_photo_path: imagePath,
+    });
+    if (requestError) {
+      const { error: cleanupError } = await appSupabase.storage.from(bucket).remove([imagePath]);
+      if (cleanupError) {
+        console.error("The verification request failed and its uploaded ID photo could not be removed.", cleanupError);
+        const error = new Error("The request could not be submitted, and the private ID photo may still be stored. Contact support.");
+        error.userMessage = error.message;
+        throw error;
+      }
+      throw requestError;
+    }
+
+    document.querySelector("#verification-open").dataset.requested = "open";
+    document.querySelector("#verification-cta small").textContent = "Verification is waiting for review";
+    event.target.reset();
+    event.target.closest("dialog").close();
+    showToast("Verification request submitted. Your badge will appear after an administrator reviews it.");
+    try {
+      await refreshSupabaseState();
+    } catch (error) {
+      console.error("Verification request was submitted, but the profile refresh failed.", error);
+      showToast("Your request was submitted, but its status could not be refreshed. Reload to check it.", "error");
+    }
+  }, "Could not submit your verification request.", "Uploading your ID for review…", {
+    inlineFeedback: feedback,
+    submitButton,
+    friendlyFailureMessage: "Your ID photo could not be submitted. Check your connection and try again.",
+  });
 });
 document.querySelector("#report-form").addEventListener("submit", (event) => {
   event.preventDefault();

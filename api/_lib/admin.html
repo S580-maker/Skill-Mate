@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=5" />
+    <link rel="stylesheet" href="styles.css?v=6" />
     <script src="theme.js?v=2"></script>
   </head>
   <body class="admin-locked">
@@ -278,7 +278,7 @@
             <article class="panel verification-panel" id="verification-queue">
               <div class="panel-heading">
                 <div><h2>Verification queue</h2><p>Help keep the community trusted</p></div>
-                <span class="queue-count">12 pending</span>
+                <span class="queue-count">0 pending</span>
               </div>
               <p class="empty-state">No pending verification requests.</p>
               <a class="text-link" href="#verification">Verification queue <span aria-hidden="true">→</span></a>
@@ -325,11 +325,25 @@
         </div>
       </main>
     </div>
+    <dialog class="admin-dialog verification-dialog" id="verification-review-dialog" aria-labelledby="verification-review-title">
+      <form method="dialog">
+        <button class="modal-close" type="submit" aria-label="Close">×</button>
+        <p class="eyebrow">PRIVATE STUDENT ID</p>
+        <h2 id="verification-review-title">Review campus verification</h2>
+        <p class="verification-review-student" id="verification-review-student"></p>
+        <p class="verification-review-status" id="verification-review-status" role="status" aria-live="polite"></p>
+        <img class="verification-review-image" id="verification-review-image" alt="Student ID submitted for campus verification" hidden />
+        <div class="verification-review-actions">
+          <button class="review-button" id="verification-reject" type="button" data-verification-decision="dismiss">Reject</button>
+          <button class="review-button" id="verification-approve" type="button" data-verification-decision="approve" disabled>Approve</button>
+        </div>
+      </form>
+    </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="script.js?v=2"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
     <script src="supabase-client.js?v=4"></script>
-    <script src="admin-auth.js?v=20261027-1"></script>
+    <script src="admin-auth.js?v=20261101-1"></script>
   </body>
 </html>
