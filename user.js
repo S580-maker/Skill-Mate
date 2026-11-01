@@ -3019,6 +3019,19 @@ function openStudentProfileEditor() {
 document.querySelector("#profile-menu").addEventListener("click", () => showPage("profile-settings"));
 async function updatePushSettingsStatus() {
   const button = document.querySelector("#settings-push-toggle");
+  const help = document.querySelector("#settings-push-help");
+  const needsHomeScreenInstall = window.SkillmatePushPlatform.requiresHomeScreenInstall({
+    platform: navigator.platform || "",
+    userAgent: navigator.userAgent || "",
+    maxTouchPoints: navigator.maxTouchPoints || 0,
+    standalone: navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches,
+  });
+  help.hidden = !needsHomeScreenInstall;
+  if (needsHomeScreenInstall) {
+    button.disabled = true;
+    button.textContent = "Add to Home Screen first";
+    return;
+  }
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
     button.disabled = true;
     button.textContent = "Browser notifications unavailable";
