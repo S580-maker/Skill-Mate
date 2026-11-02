@@ -67,6 +67,7 @@ const categoryIcons = {
   "Moving help": "➜",
 };
 const MESSAGE_PAGE_SIZE = 30;
+const DATA_PAGE_SIZE = 100;
 const defaultState = {
   mode: "find",
   activePage: "home",
@@ -111,18 +112,22 @@ let bookingDirection = "made";
 let groupProviderFilter = null;
 let priceNegotiations = [];
 let currentBookingNegotiationId = "";
+const bookingDrafts = new Map();
+let bookingSubmissionPending = false;
 let negotiationBackendAvailable = true;
 let pendingReplyId = null;
 let messageMetadataAvailable = null;
 let messageMetadataWarningShown = false;
 let realtimeFallbackNoticeShown = false;
 const chatDrafts = new Map();
+const chatNegotiationServiceSelection = new Map();
 const pendingOutgoingMessages = new Map();
 const sendingMessageIds = new Set();
 let typingTimeoutId = null;
 let longPressTimeoutId = null;
 let pendingLongPressId = null;
 const messageChannels = new Map();
+const realtimeFallbackChatIds = new Set();
 const messageChannelRetryTimers = new Map();
 const messageChannelRetryAttempts = new Map();
 const messagePresence = new Map();
@@ -137,8 +142,16 @@ let globalSearchTimer;
 let pendingActionCount = 0;
 let activityRefreshInProgress = false;
 let dashboardDataLoaded = false;
-let messagePollingTimer = null;
 const pendingProviderSaves = new Set();
+const pendingGroupActions = new Set();
+const pendingServiceToggles = new Set();
+const DASHBOARD_LOAD_ESTIMATE_KEY = "skillmate-dashboard-load-estimate-ms-v1";
+const ACTION_LOAD_ESTIMATE_MS = 15000;
+let dashboardLoadEstimateMs = ACTION_LOAD_ESTIMATE_MS;
+let dashboardLoadingStartedAt = 0;
+let dashboardLoadingProgress = 10;
+let dashboardLoadingPhase = "Checking your session…";
+let dashboardLoadingInterval = null;
 const ownProviderId = () => appUser?.id || "alex";
 const isOwnBooking = (booking) => booking.providerId === ownProviderId();
 const messageColumns = "id, conversation_id, sender_id, body, created_at, read_at, delivered_at, reply_to";
@@ -263,6 +276,7 @@ function chatDraftStorageKey() {
 }
 function setActiveConversation(conversationId) {
   activeConversationId = conversationId;
+  syncMessageChannels();
 }
 function pendingMessageStorageKey() {
   return `skillmate-pending-messages:${appUser?.id || "demo"}`;
@@ -539,11 +553,20 @@ function syncChatVisualViewport() {
   const root = document.documentElement;
   root.style.setProperty("--chat-visual-height", `${Math.round(viewport.height)}px`);
   root.style.setProperty("--chat-visual-top", `${Math.round(viewport.offsetTop)}px`);
+  const activeElement = document.activeElement;
+  const textEntryFocused = activeElement instanceof HTMLElement
+    && (activeElement.matches('textarea, input:not([type="button"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])')
+      || activeElement.isContentEditable);
+  const keyboardOpen = window.innerWidth <= 768 && textEntryFocused
+    && (window.innerHeight - viewport.height > 120 || window.screen.height - viewport.height > 220);
+  document.body.classList.toggle("mobile-keyboard-open", keyboardOpen);
 }
 syncChatVisualViewport();
 window.addEventListener("resize", syncChatVisualViewport);
 window.visualViewport?.addEventListener("resize", syncChatVisualViewport);
 window.visualViewport?.addEventListener("scroll", syncChatVisualViewport);
+document.addEventListener("focusin", syncChatVisualViewport);
+document.addEventListener("focusout", () => requestAnimationFrame(syncChatVisualViewport));
 function hiddenMessageStorageKey() {
   return `skillmate-hidden-messages:${appUser?.id || "demo"}`;
 }
@@ -640,6 +663,7 @@ function retryMessageChannel(chatId, channel) {
   if (messageChannels.get(chatId) !== channel) return;
   messageChannels.delete(chatId);
   messagePresence.delete(chatId);
+  realtimeFallbackChatIds.add(chatId);
   const attempt = messageChannelRetryAttempts.get(chatId) || 0;
   const delay = Math.min(30000, 1000 * (2 ** attempt));
   messageChannelRetryAttempts.set(chatId, attempt + 1);
@@ -654,8 +678,13 @@ function retryMessageChannel(chatId, channel) {
 }
 function syncMessageChannels() {
   if (!appSupabase || !appUser) return;
-  const conversations = state.messages.filter((chat) => !state.blocked.includes(chat.providerId));
+  const conversations = state.activePage === "messages" && activeConversationId
+    ? state.messages.filter((chat) => chat.id === activeConversationId && !state.blocked.includes(chat.providerId))
+    : [];
   const activeIds = new Set(conversations.map((chat) => chat.id));
+  for (const id of realtimeFallbackChatIds) {
+    if (!activeIds.has(id)) realtimeFallbackChatIds.delete(id);
+  }
   for (const [id, timer] of messageChannelRetryTimers) {
     if (activeIds.has(id)) continue;
     window.clearTimeout(timer);
@@ -674,9 +703,11 @@ function syncMessageChannels() {
   for (const chat of conversations) {
     if (messageChannels.has(chat.id) || messageChannelRetryTimers.has(chat.id)) continue;
     const channel = appSupabase.channel(`skillmate-chat:${chat.id}`, { config: { private: true, presence: { key: appUser.id } } })
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${chat.id}` }, () => {
-        markConversationMessagesDelivered(chat.id)
-          .then(() => refreshConversationMessages(chat.id, { force: true }))
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${chat.id}` }, (payload) => {
+        const delivery = payload.eventType === "INSERT" && payload.new?.sender_id !== appUser.id
+          ? markConversationMessagesDelivered(chat.id)
+          : Promise.resolve();
+        delivery.then(() => refreshConversationMessages(chat.id, { force: true }))
           .catch((error) => console.error("Could not refresh a realtime Skillmate conversation.", error));
       })
       .on("presence", { event: "sync" }, () => {
@@ -700,6 +731,7 @@ function syncMessageChannels() {
         if (messageChannels.get(chat.id) !== channel) return;
         if (status === "SUBSCRIBED") {
           messageChannelRetryAttempts.delete(chat.id);
+          realtimeFallbackChatIds.delete(chat.id);
           realtimeFallbackNoticeShown = false;
           const { error } = await channel.track({ user_id: appUser.id, typing: false, online_at: new Date().toISOString() });
           if (error) console.error("Could not publish Skillmate chat presence.", error);
@@ -712,7 +744,7 @@ function syncMessageChannels() {
             markConversationMessagesRead(chat.id).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
           }
         } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
-          console.warn(`Skillmate chat realtime channel ${status.toLowerCase()}; periodic message refresh remains active while reconnecting.`, chat.id, error || "");
+          console.warn(`Skillmate chat realtime channel ${status.toLowerCase()}; fallback polling is enabled while it reconnects.`, chat.id, error || "");
           if (!realtimeFallbackNoticeShown) {
             realtimeFallbackNoticeShown = true;
             showToast("Live chat updates are unavailable. Messages will refresh periodically until the connection returns.");
@@ -1030,7 +1062,7 @@ function renderGroups() {
     const joined = appSupabase ? Boolean(group.joinedByMe) : state.joinedGroups.includes(group.id);
     const full = group.joined >= group.capacity;
     const percent = Math.min(100, group.joined / group.capacity * 100);
-    return `<article class="group-card"><div class="group-card-heading"><span class="group-icon">${getCategoryIcon(provider?.category || "Other")}</span><span class="group-open">${full ? "Full" : "Open to join"}</span></div><h3>${escapeHTML(group.title)}</h3><p>${escapeHTML(group.service)} <span>· hosted by ${escapeHTML(group.host)}</span></p><div class="group-date">◷ ${formatDate(group.date)}</div><div class="group-progress"><span style="width:${percent}%"></span></div><div class="group-seats"><span>${group.joined} of ${group.capacity} students joined</span><strong>${currency(group.price)} <small>/ person</small></strong></div><button class="button ${joined ? "button-joined" : "button-outline"} group-join" type="button" data-join-group="${escapeHTML(group.id)}" ${full && !joined ? "disabled" : ""}>${joined ? "✓ You’re in — leave group" : full ? "Group is full" : "Join group"}</button><button class="group-message-link" type="button" data-message="${escapeHTML(group.providerId)}">Ask ${escapeHTML(provider?.name || "provider")} a question</button></article>`;
+    return `<article class="group-card"><div class="group-card-heading"><span class="group-icon">${getCategoryIcon(provider?.category || "Other")}</span><span class="group-open">${full ? "Full" : "Open to join"}</span></div><h3>${escapeHTML(group.title)}</h3><p>${escapeHTML(group.service)} <span>· hosted by ${escapeHTML(group.host)}</span></p><div class="group-date">◷ ${formatDate(group.date)}</div><div class="group-progress"><span style="width:${percent}%"></span></div><div class="group-seats"><span>${group.joined} of ${group.capacity} students joined</span><strong>${currency(group.price)} <small>/ person</small></strong></div><button class="button ${joined ? "button-joined" : "button-outline"} group-join" type="button" data-join-group="${escapeHTML(group.id)}" ${pendingGroupActions.has(group.id) || full && !joined ? "disabled" : ""}>${joined ? "✓ You’re in — leave group" : full ? "Group is full" : "Join group"}</button><button class="group-message-link" type="button" data-message="${escapeHTML(group.providerId)}">Ask ${escapeHTML(provider?.name || "provider")} a question</button></article>`;
   }).join("") : '<div class="empty-card"><strong>No open groups yet</strong><small>Start one and invite students on your campus.</small></div>';
 }
 function formatDate(dateString) {
@@ -1265,173 +1297,199 @@ function createChatMessageRow(message, grouped) {
 }
 function createPriceNegotiationPanel(chat) {
   const negotiations = priceNegotiations.filter(item => item.conversationId === chat.id);
-  const chatServices = connectedServices.filter(service => service.active
-    && service.negotiationMode !== "fixed"
-    && (service.providerId === appUser?.id || service.providerId === chat.providerId));
-  if (!negotiations.length && !chatServices.length) return null;
-  const section = document.createElement("section");
-  section.className = "chat-negotiations";
-  section.setAttribute("aria-label", "Price and booking tools");
-  const heading = document.createElement("div");
-  heading.className = "chat-negotiations-heading";
-  const headingTitle = document.createElement("strong");
-  headingTitle.textContent = "Price & booking";
-  const headingHint = document.createElement("small");
-  headingHint.textContent = "Formal offers need the other person’s acceptance. Messages alone never confirm a price.";
-  heading.append(headingTitle, headingHint);
-  section.append(heading);
-  if (!negotiations.length && chatServices.length) {
-    const starter = document.createElement("div");
-    starter.className = "chat-negotiation-starter";
-    for (const service of chatServices) {
-      const row = document.createElement("div");
-      row.className = "chat-negotiation-start-row";
-      const copy = document.createElement("span");
-      const title = document.createElement("strong");
-      title.textContent = service.title;
-      const mode = document.createElement("small");
-      mode.textContent = `${service.negotiationMode === "hybrid" ? "Hybrid · price + scope" : service.negotiationMode === "fixed" ? "Fixed Price" : "Negotiation · price only"} · ${currency(service.price)} listed`;
-      copy.append(title, mode);
-      row.append(copy);
-      const isProvider = service.providerId === appUser?.id;
-      const action = document.createElement("button");
-      action.type = "button";
-      action.className = "button button-small button-primary";
-      action.dataset.chatPriceStart = service.id;
-      action.dataset.providerId = service.providerId;
-      if (isProvider) {
-        action.dataset.chatPriceAction = "proposal";
-        action.textContent = "Propose a price";
-      } else {
-        action.dataset.chatPriceAction = "discuss";
-        action.textContent = "Discuss price";
-      }
-      row.append(action);
-      if (!isProvider && ["negotiation", "hybrid"].includes(service.negotiationMode)) {
-        const offer = document.createElement("button");
-        offer.type = "button";
-        offer.className = "button button-small button-outline";
-        offer.dataset.chatPriceStart = service.id;
-        offer.dataset.providerId = service.providerId;
-        offer.dataset.chatPriceAction = "offer";
-        offer.textContent = "Make an offer";
-        row.append(offer);
-      }
-      starter.append(row);
+  const serviceMap = new Map();
+  for (const service of connectedServices) {
+    if (service.active
+      && (service.providerId === appUser?.id || service.providerId === chat.providerId)) {
+      serviceMap.set(service.id, service);
     }
-    if (starter.children.length) section.append(starter);
   }
   for (const negotiation of negotiations) {
     const service = connectedServices.find(item => item.id === negotiation.serviceId);
-    const card = document.createElement("article");
-    card.className = "chat-negotiation-card";
-    const title = document.createElement("strong");
-    title.textContent = service?.title || "Service price";
-    const state = document.createElement("span");
-    state.className = "chat-negotiation-state";
-    state.textContent = negotiation.state === "agreed"
-      ? `Agreed price · ${currency(negotiation.agreedPrice)}`
-      : "No final price yet";
-    card.append(title, state);
-    for (const offer of negotiation.offers) {
-      const item = document.createElement("div");
-      item.className = "chat-offer-row";
-      const copy = document.createElement("span");
-      const proposer = document.createElement("strong");
-      proposer.textContent = offer.proposerId === appUser?.id ? "You" : chat.name || "Student";
-      const details = document.createElement("small");
-      details.textContent = `${currency(offer.amount)} · ${offer.status}`;
-      copy.append(proposer, details);
-      if (offer.message) {
-        const note = document.createElement("p");
-        note.textContent = offer.message;
-        copy.append(note);
-      }
-      item.append(copy);
-      if (service?.negotiationMode !== "fixed"
-        && offer.status === "pending" && offer.proposerId !== appUser?.id && negotiation.state === "open") {
-        const actions = document.createElement("span");
-        actions.className = "chat-offer-actions";
-        const mode = service?.negotiationMode || "chat";
-        const availableActions = [["accept", "Accept"], ["reject", "Reject"]];
-        if (["negotiation", "hybrid"].includes(mode)) availableActions.push(["counter", "Counter"]);
-        for (const [action, label] of availableActions) {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = action === "accept" ? "button button-small button-primary" : "button button-small button-outline";
-          button.dataset.priceAction = action;
-          button.dataset.offerId = offer.id;
-          button.dataset.negotiationId = negotiation.id;
-          button.dataset.serviceId = negotiation.serviceId;
-          button.dataset.providerId = negotiation.providerId;
-          button.textContent = label;
-          actions.append(button);
-        }
-        item.append(actions);
-      }
-      card.append(item);
-    }
-    if (negotiation.state === "agreed") {
-      const existingBooking = state.bookings.find(item => item.priceNegotiationId === negotiation.id);
-      if (negotiation.agreedScope) {
-        const scope = document.createElement("p");
-        scope.className = "chat-agreement-scope";
-        scope.textContent = `Agreed service scope: ${negotiation.agreedScope}`;
-        card.append(scope);
-      }
-      if (appUser?.id === negotiation.customerId && !existingBooking && service?.active !== false) {
-        const book = document.createElement("button");
-        book.type = "button";
-        book.className = "button button-small button-primary";
-        book.dataset.priceAction = "book";
-        book.dataset.negotiationId = negotiation.id;
-        book.dataset.serviceId = negotiation.serviceId;
-        book.dataset.providerId = negotiation.providerId;
-        book.textContent = "Continue to Booking";
-        const bookingHint = document.createElement("small");
-        bookingHint.className = "chat-booking-next-step";
-        bookingHint.textContent = "Review the appointment details, then send a request for the provider to confirm.";
-        card.append(bookingHint);
-        card.append(book);
-      } else if (existingBooking) {
-        const bookingStatus = document.createElement("small");
-        bookingStatus.className = "chat-booking-next-step";
-        bookingStatus.textContent = `Booking request ${existingBooking.status.toLowerCase()} · ${formatDate(existingBooking.date)} ${existingBooking.time}`;
-        card.append(bookingStatus);
-      }
-    } else {
-      const hasPending = negotiation.offers.some(item => item.status === "pending");
-      const mode = service?.negotiationMode || "chat";
-      if (!hasPending && appUser?.id === negotiation.providerId && ["negotiation", "hybrid"].includes(mode)) {
-        const proposal = document.createElement("button");
-        proposal.type = "button";
-        proposal.className = "button button-small button-outline";
-        proposal.dataset.priceAction = "proposal";
-        proposal.dataset.negotiationId = negotiation.id;
-        proposal.dataset.serviceId = negotiation.serviceId;
-        proposal.dataset.providerId = negotiation.providerId;
-        proposal.textContent = "Send formal price proposal";
-        card.append(proposal);
-      } else if (!hasPending && appUser?.id === negotiation.customerId && ["negotiation", "hybrid"].includes(mode)) {
-        const offer = document.createElement("button");
-        offer.type = "button";
-        offer.className = "button button-small button-primary";
-        offer.dataset.priceAction = "initial";
-        offer.dataset.negotiationId = negotiation.id;
-        offer.dataset.serviceId = negotiation.serviceId;
-        offer.dataset.providerId = negotiation.providerId;
-        offer.textContent = "Make an offer";
-        card.append(offer);
-      } else if (!hasPending && appUser?.id === negotiation.customerId && mode === "negotiation") {
-        const prompt = document.createElement("small");
-        prompt.className = "chat-booking-next-step";
-        prompt.textContent = "Discuss the price in chat or make a formal offer. The listed service scope stays the same.";
-        card.append(prompt);
-      }
-    }
-    section.append(card);
+    if (service) serviceMap.set(service.id, service);
   }
+  const chatServices = [...serviceMap.values()];
+  if (!chatServices.length) return null;
+  const selectedServiceId = chatNegotiationServiceSelection.get(chat.id);
+  const selectedService = chatServices.find(service => service.id === selectedServiceId)
+    || chatServices.find(service => negotiations.some(item => item.serviceId === service.id))
+    || chatServices[0];
+  chatNegotiationServiceSelection.set(chat.id, selectedService.id);
+  const negotiation = negotiations.find(item => item.serviceId === selectedService.id);
+  const section = document.createElement("section");
+  section.className = "chat-negotiations";
+  section.setAttribute("aria-label", "Service price and negotiation status");
+  const serviceCopy = document.createElement("div");
+  serviceCopy.className = "chat-negotiation-service";
+  if (chatServices.length > 1) {
+    const selectorLabel = document.createElement("label");
+    selectorLabel.className = "chat-service-select-label";
+    selectorLabel.htmlFor = "chat-service-select";
+    selectorLabel.textContent = "Service";
+    const selector = document.createElement("select");
+    selector.id = "chat-service-select";
+    selector.dataset.chatServiceSelect = "";
+    selector.setAttribute("aria-label", "Choose a service for this conversation");
+    for (const service of chatServices) {
+      const option = document.createElement("option");
+      option.value = service.id;
+      option.textContent = service.title;
+      option.selected = service.id === selectedService.id;
+      selector.append(option);
+    }
+    serviceCopy.append(selectorLabel, selector);
+  } else {
+    const title = document.createElement("strong");
+    title.className = "chat-negotiation-service-name";
+    title.textContent = selectedService.title;
+    serviceCopy.append(title);
+  }
+  const listedPrice = document.createElement("small");
+  listedPrice.className = "chat-negotiation-listed-price";
+  listedPrice.textContent = selectedService.negotiationMode === "fixed"
+    ? `Fixed price · ${currency(selectedService.price)}`
+    : negotiation?.state === "agreed"
+      ? `${currency(negotiation.listedPrice ?? selectedService.price)} → ${currency(negotiation.agreedPrice)}`
+      : `${currency(negotiation?.listedPrice ?? selectedService.price)} listed`;
+  if (negotiation?.state === "agreed") {
+    listedPrice.title = `${currency(negotiation.listedPrice ?? selectedService.price)} listed; ${currency(negotiation.agreedPrice)} agreed`;
+    listedPrice.setAttribute("aria-label", listedPrice.title);
+  }
+  serviceCopy.append(listedPrice);
+  if (negotiation?.agreedScope) {
+    const scope = document.createElement("small");
+    scope.className = "chat-negotiation-scope";
+    scope.textContent = `Agreed scope: ${negotiation.agreedScope}`;
+    serviceCopy.append(scope);
+  }
+
+  const status = document.createElement("span");
+  status.className = "chat-negotiation-state";
+  const pendingOffer = negotiation?.offers.find(offer => offer.status === "pending");
+  const latestOffer = negotiation?.offers[negotiation.offers.length - 1];
+  status.textContent = selectedService.negotiationMode === "fixed" ? "Fixed Price"
+    : negotiation?.state === "agreed"
+    ? "Agreed"
+    : pendingOffer ? "Proposal pending"
+      : latestOffer ? `${latestOffer.status === "countered" ? "Counteroffer" : "Proposal"} ${latestOffer.status}`
+        : negotiation?.state === "open" ? "Negotiation open" : "No negotiation";
+  if (negotiation?.state === "agreed") {
+    status.title = `Agreed price: ${currency(negotiation.agreedPrice)}`;
+    status.setAttribute("aria-label", `Agreed price ${currency(negotiation.agreedPrice)}`);
+  }
+
+  const controls = document.createElement("div");
+  controls.className = "chat-negotiation-controls";
+  controls.append(status);
+  const actions = document.createElement("div");
+  actions.className = "chat-negotiation-actions";
+  if (selectedService.negotiationMode === "fixed") {
+    if (selectedService.providerId !== appUser?.id && selectedService.active !== false) {
+      const book = document.createElement("button");
+      book.type = "button";
+      book.className = "button button-small button-primary";
+      book.dataset.priceAction = "book";
+      book.dataset.serviceId = selectedService.id;
+      book.dataset.providerId = selectedService.providerId;
+      book.textContent = "Continue to Booking";
+      actions.append(book);
+    }
+  } else {
+    const canPropose = negotiation?.state === "open" && !pendingOffer;
+    const propose = document.createElement("button");
+    propose.type = "button";
+    propose.className = `button button-small button-primary${canPropose ? "" : " chat-propose-inactive"}`;
+    propose.dataset.chatPricePropose = "";
+    propose.dataset.serviceId = selectedService.id;
+    propose.dataset.providerId = selectedService.providerId;
+    propose.dataset.negotiationId = negotiation?.id || "";
+    propose.disabled = !canPropose;
+    if (!canPropose) {
+      propose.title = !negotiation
+        ? "Start a price discussion for this service before sending a proposal."
+        : negotiation.state === "agreed"
+          ? "A final price has already been agreed for this service."
+          : pendingOffer
+        ? "A proposal for this service is waiting for a response."
+        : "This negotiation is not open for proposals.";
+      propose.setAttribute("aria-label", propose.title);
+    }
+    propose.textContent = "Propose Price";
+    actions.append(propose);
+  }
+
+  if (selectedService.negotiationMode !== "fixed" && negotiation?.state === "agreed") {
+    const existingBooking = state.bookings.find(item => item.priceNegotiationId === negotiation.id);
+    if (appUser?.id === negotiation.customerId && !existingBooking && selectedService.active !== false) {
+      const book = document.createElement("button");
+      book.type = "button";
+      book.className = "button button-small button-outline";
+      book.dataset.priceAction = "book";
+      book.dataset.negotiationId = negotiation.id;
+      book.dataset.serviceId = negotiation.serviceId;
+      book.dataset.providerId = negotiation.providerId;
+      book.textContent = "Continue to Booking";
+      actions.append(book);
+    } else if (existingBooking) {
+      const bookingStatus = document.createElement("small");
+      bookingStatus.className = "chat-booking-next-step";
+      bookingStatus.textContent = `Booking ${existingBooking.status.toLowerCase()} · ${formatDate(existingBooking.date)} ${existingBooking.time}`;
+      actions.append(bookingStatus);
+    }
+  }
+  if (actions.childElementCount) controls.append(actions);
+  section.append(serviceCopy, controls);
   return section;
+}
+function createChatPriceOfferCard(offer, negotiation, service, chat) {
+  const card = document.createElement("article");
+  card.className = `chat-proposal-card${offer.proposerId === appUser?.id ? " chat-proposal-outgoing" : ""}`;
+  card.dataset.priceOfferId = offer.id;
+  card.setAttribute("aria-label", "Price proposal");
+  const heading = document.createElement("div");
+  heading.className = "chat-proposal-heading";
+  const proposer = document.createElement("strong");
+  proposer.textContent = offer.proposerId === appUser?.id ? "You proposed" : `${chat.name || "Student"} proposed`;
+  const amount = document.createElement("strong");
+  amount.className = "chat-proposal-amount";
+  amount.textContent = currency(offer.amount);
+  heading.append(proposer, amount);
+  const meta = document.createElement("div");
+  meta.className = "chat-proposal-meta";
+  const serviceName = document.createElement("span");
+  serviceName.textContent = service?.title || "Service price";
+  const offerStatus = document.createElement("span");
+  offerStatus.className = `chat-proposal-status chat-proposal-status-${offer.status}`;
+  offerStatus.textContent = offer.status.charAt(0).toUpperCase() + offer.status.slice(1);
+  meta.append(serviceName, offerStatus);
+  card.append(heading, meta);
+  if (offer.message) {
+    const note = document.createElement("p");
+    note.className = "chat-proposal-message";
+    note.textContent = offer.message;
+    card.append(note);
+  }
+  if (service?.negotiationMode !== "fixed" && offer.status === "pending"
+    && offer.proposerId !== appUser?.id && negotiation.state === "open") {
+    const actions = document.createElement("span");
+    actions.className = "chat-offer-actions";
+    const availableActions = [["accept", "Accept"], ["reject", "Reject"]];
+    if (["negotiation", "hybrid"].includes(service?.negotiationMode)) availableActions.push(["counter", "Counter"]);
+    for (const [action, label] of availableActions) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = action === "accept" ? "button button-small button-primary" : "button button-small button-outline";
+      button.dataset.priceAction = action;
+      button.dataset.offerId = offer.id;
+      button.dataset.negotiationId = negotiation.id;
+      button.dataset.serviceId = negotiation.serviceId;
+      button.dataset.providerId = negotiation.providerId;
+      button.textContent = label;
+      actions.append(button);
+    }
+    card.append(actions);
+  }
+  return card;
 }
 function renderChat(options = {}) {
   const chat = state.messages.find((item) => item.id === activeConversationId);
@@ -1502,8 +1560,21 @@ function renderChat(options = {}) {
   let previousDate = "";
   let previousMessage = null;
   const visibleMessages = chat.messages.filter((message) => !isHiddenMessage(message));
-  for (const message of visibleMessages) {
-    const messageDate = message.createdAt ? new Date(message.createdAt).toDateString() : "Today";
+  const timeline = [
+    ...visibleMessages.map((message, index) => ({ type: "message", item: message, index })),
+    ...priceNegotiations
+      .filter(item => item.conversationId === chat.id)
+      .flatMap(item => item.offers.map((offer, index) => ({
+        type: "proposal", item: offer, negotiation: item, index,
+      }))),
+  ].sort((left, right) => {
+    const leftTime = new Date(left.item.createdAt || 0).getTime();
+    const rightTime = new Date(right.item.createdAt || 0).getTime();
+    return leftTime - rightTime || (left.type === right.type ? left.index - right.index : left.type === "message" ? -1 : 1);
+  });
+  for (const entry of timeline) {
+    const item = entry.item;
+    const messageDate = item.createdAt ? new Date(item.createdAt).toDateString() : "Today";
     if (messageDate !== previousDate) {
       let dateRow = existingDateRows.get(messageDate);
       if (!dateRow) {
@@ -1514,11 +1585,18 @@ function renderChat(options = {}) {
         pill.className = "chat-date-pill";
         dateRow.append(pill);
       }
-      dateRow.querySelector(".chat-date-pill").textContent = message.createdAt ? formatChatDate(message.createdAt) : "Today";
+      dateRow.querySelector(".chat-date-pill").textContent = item.createdAt ? formatChatDate(item.createdAt) : "Today";
       orderedChildren.push(dateRow);
       previousDate = messageDate;
       previousMessage = null;
     }
+    if (entry.type === "proposal") {
+      const service = connectedServices.find(candidate => candidate.id === entry.negotiation.serviceId);
+      orderedChildren.push(createChatPriceOfferCard(item, entry.negotiation, service, chat));
+      previousMessage = null;
+      continue;
+    }
+    const message = item;
     const sameSender = previousMessage && (previousMessage.senderId || previousMessage.sender) === (message.senderId || message.sender);
     const grouped = sameSender
       && new Date(message.createdAt || 0) - new Date(previousMessage.createdAt || 0) < 5 * 60 * 1000;
@@ -1530,7 +1608,8 @@ function renderChat(options = {}) {
     orderedChildren.push(row);
     previousMessage = message;
   }
-  if (!visibleMessages.length) {
+  const hasTimelineItems = timeline.length > 0;
+  if (!hasTimelineItems) {
     let empty = messages.querySelector(".chat-empty-state");
     if (!empty) {
       empty = document.createElement("div");
@@ -1640,7 +1719,7 @@ function serviceDetailLabel(service) {
 }
 function renderListings() {
   const target = document.querySelector("#listing-list");
-  target.innerHTML = state.services.length ? state.services.map((service) => `<article class="listing-card">${serviceCoverUrl(service) ? `<img class="service-list-cover" src="${escapeHTML(serviceCoverUrl(service))}" alt="" loading="lazy" />` : `<span class="service-list-icon">${getCategoryIcon(service.category)}</span>`}<div class="listing-copy"><div class="listing-title"><strong>${escapeHTML(service.title)}</strong><span class="listing-status ${service.active ? "listing-active" : "listing-paused"}">${service.active ? "Active" : "Paused"}</span></div><small>${escapeHTML(service.category)} ${service.groups ? "· Open to groups" : ""}</small><p>${escapeHTML(service.description)}</p><small>${escapeHTML(serviceDetailLabel(service))}</small></div><strong class="listing-price">${servicePriceLabel(service)}</strong><div class="listing-actions"><button class="button button-small button-outline" type="button" data-edit-service="${escapeHTML(service.id)}">Edit</button><button class="subtle-button" type="button" data-toggle-service="${escapeHTML(service.id)}">${service.active ? "Pause" : "Activate"}</button></div></article>`).join("") : '<div class="empty-card"><strong>Your first service starts here</strong><small>List a skill to help students find and book you.</small><button class="button button-primary button-small" type="button" data-open="service-modal">Add a service</button></div>';
+  target.innerHTML = state.services.length ? state.services.map((service) => `<article class="listing-card">${serviceCoverUrl(service) ? `<img class="service-list-cover" src="${escapeHTML(serviceCoverUrl(service))}" alt="" loading="lazy" />` : `<span class="service-list-icon">${getCategoryIcon(service.category)}</span>`}<div class="listing-copy"><div class="listing-title"><strong>${escapeHTML(service.title)}</strong><span class="listing-status ${service.active ? "listing-active" : "listing-paused"}">${service.active ? "Active" : "Paused"}</span></div><small>${escapeHTML(service.category)} ${service.groups ? "· Open to groups" : ""}</small><p>${escapeHTML(service.description)}</p><small>${escapeHTML(serviceDetailLabel(service))}</small></div><strong class="listing-price">${servicePriceLabel(service)}</strong><div class="listing-actions"><button class="button button-small button-outline" type="button" data-edit-service="${escapeHTML(service.id)}">Edit</button><button class="subtle-button" type="button" data-toggle-service="${escapeHTML(service.id)}" ${pendingServiceToggles.has(service.id) ? "disabled aria-busy=\"true\"" : ""}>${service.active ? "Pause" : "Activate"}</button></div></article>`).join("") : '<div class="empty-card"><strong>Your first service starts here</strong><small>List a skill to help students find and book you.</small><button class="button button-primary button-small" type="button" data-open="service-modal">Add a service</button></div>';
 }
 function renderPortfolio() {
   const target = document.querySelector("#portfolio-grid");
@@ -1851,9 +1930,19 @@ async function refreshPriceNegotiations() {
     })),
   }));
 }
+async function loadAllRows(createQuery, pageSize = DATA_PAGE_SIZE) {
+  const rows = [];
+  for (let start = 0; ; start += pageSize) {
+    const { data, error } = await createQuery().range(start, start + pageSize - 1);
+    if (error) throw error;
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < pageSize) return { data: rows, error: null };
+  }
+}
 async function loadSupabaseState() {
-  const conversationDirectoryRequest = Promise.resolve(appSupabase.from("conversation_directory")
-    .select("conversation_id, other_user_id, other_user_name"));
+  const conversationDirectoryRequest = loadAllRows(() => appSupabase.from("conversation_directory")
+    .select("conversation_id, other_user_id, other_user_name").order("conversation_id", { ascending: true }));
   const groupedMessagesRequest = conversationDirectoryRequest.then(({ data, error }) => {
     if (error) throw error;
     return loadConversationMessageGroups(data || []);
@@ -1864,17 +1953,25 @@ async function loadSupabaseState() {
     verification, groupedMessages, ownStudentIdentifier,
   ] = await Promise.all([
     loadAccountProfile(appUser.id),
-    appSupabase.from("provider_directory").select("*"),
-    appSupabase.from("services").select("*").eq("provider_id", appUser.id).order("created_at", { ascending: false }),
-    appSupabase.from("booking_directory").select("*").order("scheduled_at", { ascending: true }),
-    appSupabase.from("group_directory").select("*").in("status", ["open", "full"]).order("scheduled_at", { ascending: true }),
-    appSupabase.from("group_booking_members").select("group_booking_id").eq("student_id", appUser.id),
-    appSupabase.from("user_locations").select("user_id, location_name"),
-    appSupabase.from("saved_services").select("service_id"),
-    appSupabase.from("user_blocks").select("blocked_id").eq("blocker_id", appUser.id),
-    appSupabase.from("reviews").select("booking_id, provider_id, rating, body, created_at"),
-    appSupabase.from("portfolio_items").select("*").eq("provider_id", appUser.id).order("created_at", { ascending: false }),
-    appSupabase.from("portfolio_items").select("provider_id, title, description, image_path").order("created_at", { ascending: false }),
+    loadAllRows(() => appSupabase.from("provider_directory").select("*").order("service_id", { ascending: true })),
+    loadAllRows(() => appSupabase.from("services").select("*").eq("provider_id", appUser.id)
+      .order("created_at", { ascending: false }).order("id", { ascending: false })),
+    loadAllRows(() => appSupabase.from("booking_directory").select("*")
+      .order("scheduled_at", { ascending: true }).order("id", { ascending: true })),
+    loadAllRows(() => appSupabase.from("group_directory").select("*").in("status", ["open", "full"])
+      .order("scheduled_at", { ascending: true }).order("id", { ascending: true })),
+    loadAllRows(() => appSupabase.from("group_booking_members").select("group_booking_id")
+      .eq("student_id", appUser.id).order("group_booking_id", { ascending: true })),
+    loadAllRows(() => appSupabase.from("user_locations").select("user_id, location_name").order("user_id", { ascending: true })),
+    loadAllRows(() => appSupabase.from("saved_services").select("service_id").order("service_id", { ascending: true })),
+    loadAllRows(() => appSupabase.from("user_blocks").select("blocked_id")
+      .eq("blocker_id", appUser.id).order("blocked_id", { ascending: true })),
+    loadAllRows(() => appSupabase.from("reviews").select("booking_id, provider_id, rating, body, created_at")
+      .order("booking_id", { ascending: true })),
+    loadAllRows(() => appSupabase.from("portfolio_items").select("*").eq("provider_id", appUser.id)
+      .order("created_at", { ascending: false }).order("id", { ascending: false })),
+    loadAllRows(() => appSupabase.from("portfolio_items").select("provider_id, title, description, image_path")
+      .order("created_at", { ascending: false }).order("id", { ascending: false })),
     conversationDirectoryRequest,
     appSupabase.from("verification_requests").select("id, status").eq("student_id", appUser.id).eq("status", "open").maybeSingle(),
     groupedMessagesRequest,
@@ -2021,9 +2118,10 @@ async function loadSupabaseState() {
 }
 async function refreshLiveBookings() {
   const [bookings, userLocations, ownReviews] = await Promise.all([
-    appSupabase.from("booking_directory").select("*").order("scheduled_at", { ascending: true }),
-    appSupabase.from("user_locations").select("user_id, location_name"),
-    appSupabase.from("reviews").select("booking_id"),
+    loadAllRows(() => appSupabase.from("booking_directory").select("*")
+      .order("scheduled_at", { ascending: true }).order("id", { ascending: true })),
+    loadAllRows(() => appSupabase.from("user_locations").select("user_id, location_name").order("user_id", { ascending: true })),
+    loadAllRows(() => appSupabase.from("reviews").select("booking_id").order("booking_id", { ascending: true })),
   ]);
   for (const result of [bookings, userLocations, ownReviews]) {
     if (result.error) throw result.error;
@@ -2054,10 +2152,10 @@ async function refreshLiveBookings() {
   renderBookingActivity();
 }
 async function refreshLiveMessages() {
-  const { data: conversations, error: conversationsError } = await appSupabase
+  const { data: conversations } = await loadAllRows(() => appSupabase
     .from("conversation_directory")
-    .select("conversation_id, other_user_id, other_user_name");
-  if (conversationsError) throw conversationsError;
+    .select("conversation_id, other_user_id, other_user_name")
+    .order("conversation_id", { ascending: true }));
   const groupedMessages = await loadConversationMessageGroups(conversations || []);
   const previousNegotiations = JSON.stringify(priceNegotiations);
   await refreshPriceNegotiations();
@@ -2105,7 +2203,9 @@ async function refreshLiveMessages() {
 async function refreshLiveActivity() {
   if (!appSupabase || !appUser || !dashboardDataLoaded || document.hidden || pendingActionCount || activityRefreshInProgress) return;
   const pageNeedsBookings = ["home", "bookings", "provider", "earnings"].includes(state.activePage);
-  const pageNeedsMessages = state.activePage === "messages";
+  const pageNeedsMessages = state.activePage === "messages"
+    && Boolean(activeConversationId)
+    && realtimeFallbackChatIds.has(activeConversationId);
   if (!pageNeedsBookings && !pageNeedsMessages) return;
   activityRefreshInProgress = true;
   try {
@@ -2115,26 +2215,33 @@ async function refreshLiveActivity() {
     activityRefreshInProgress = false;
   }
 }
-function startMessagePolling() {
-  if (messagePollingTimer) return;
-  messagePollingTimer = window.setInterval(() => {
-    if (state.activePage !== "messages" || document.hidden) return;
-    refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate messages.", error));
-  }, 8000);
-}
-function stopMessagePolling() {
-  window.clearInterval(messagePollingTimer);
-  messagePollingTimer = null;
-}
 function initialsFor(name = "Student") {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 async function persistBookingStatus(bookingId, status) {
-  const { error } = await appSupabase.rpc("update_booking_status", {
-    p_booking_id: bookingId, p_status: toDatabaseStatus(status),
-  });
-  if (error) throw error;
-  await refreshSupabaseState();
+  const booking = state.bookings.find((item) => item.id === bookingId);
+  const previousStatus = booking?.status;
+  if (booking) {
+    booking.status = status;
+    renderAll();
+  }
+  try {
+    const { error } = await appSupabase.rpc("update_booking_status", {
+      p_booking_id: bookingId, p_status: toDatabaseStatus(status),
+    });
+    if (error) throw error;
+  } catch (error) {
+    if (booking) {
+      booking.status = previousStatus;
+      renderAll();
+    }
+    throw error;
+  }
+  try {
+    await refreshSupabaseState();
+  } catch (error) {
+    console.error("Booking status was saved, but the latest account data could not be refreshed.", error);
+  }
   renderAll();
 }
 function handleAppointmentActions(event) {
@@ -2164,20 +2271,51 @@ function handleAppointmentActions(event) {
   }
   const accept = responseButton.dataset.appointmentResponse === "accept";
   const booking = state.bookings.find(item => item.pendingAppointmentProposalId === responseButton.dataset.proposalId);
+  const previousAppointment = booking ? {
+    scheduledAt: booking.scheduledAt,
+    date: booking.date,
+    time: booking.time,
+    pendingAppointmentProposalId: booking.pendingAppointmentProposalId,
+    pendingAppointmentAt: booking.pendingAppointmentAt,
+  } : null;
   runAction(async () => {
     const { error } = await appSupabase.rpc("respond_booking_appointment", {
       p_proposal_id: responseButton.dataset.proposalId,
       p_accept: accept,
     });
     if (error) throw error;
-    await refreshSupabaseState();
+    let refreshFailed = false;
+    try {
+      await refreshSupabaseState();
+    } catch (refreshError) {
+      console.error("Appointment response was saved, but the latest booking data could not be refreshed.", refreshError);
+      refreshFailed = true;
+    }
     renderAll();
-    showToast(accept
+    showToast(refreshFailed
+      ? "Your response was saved. Reload the page to refresh the latest booking details."
+      : accept
       ? booking?.status === "Confirmed"
         ? "Suggested time accepted. The confirmed booking schedule is updated."
         : "Suggested time accepted. The provider can now confirm the booking."
-      : "Suggested time declined. The original appointment time remains.");
-  }, "Could not respond to the suggested appointment.");
+      : "Suggested time declined. The original appointment time remains.", refreshFailed ? "error" : "success");
+  }, "Could not respond to the suggested appointment.", "Updating appointment…", {
+    optimistic: () => {
+      if (!booking) return;
+      if (accept && booking.pendingAppointmentAt) {
+        booking.scheduledAt = booking.pendingAppointmentAt;
+        const proposedAt = new Date(booking.pendingAppointmentAt);
+        booking.date = localDateInputValue(proposedAt);
+        booking.time = proposedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      }
+      booking.pendingAppointmentProposalId = "";
+      booking.pendingAppointmentAt = "";
+    },
+    rollback: () => {
+      if (booking && previousAppointment) Object.assign(booking, previousAppointment);
+    },
+    renderOptimistic: renderAll,
+  });
   return true;
 }
 function handleNegotiationChatAction(event) {
@@ -2215,13 +2353,78 @@ document.querySelector("#appointment-proposal-form").addEventListener("submit", 
     showToast("Time suggestion sent. The booking will stay unconfirmed until the customer responds.");
   }, "Could not send this time suggestion.");
 });
+function updateDashboardLoadingProgress() {
+  if (!dashboardLoadingStartedAt) return;
+  const elapsed = performance.now() - dashboardLoadingStartedAt;
+  const estimatedRemaining = Math.max(0, Math.ceil((dashboardLoadEstimateMs - elapsed) / 1000));
+  const progress = Math.min(95, Math.max(
+    dashboardLoadingProgress,
+    Math.round(10 + (elapsed / dashboardLoadEstimateMs) * 85),
+  ));
+  document.querySelector("#dashboard-loading-label").textContent = dashboardLoadingPhase;
+  document.querySelector("#dashboard-loading-bar").value = progress;
+  document.querySelector("#dashboard-loading-elapsed").textContent = `${Math.floor(elapsed / 1000)} seconds elapsed`;
+  document.querySelector("#dashboard-loading-remaining").textContent = estimatedRemaining
+    ? `Estimated time remaining: about ${estimatedRemaining} ${estimatedRemaining === 1 ? "second" : "seconds"}`
+    : "Estimated time remaining: taking longer than usual";
+}
+function setDashboardLoadingPhase(progress, label) {
+  dashboardLoadingProgress = Math.max(dashboardLoadingProgress, progress);
+  dashboardLoadingPhase = label;
+  if (!document.querySelector("#dashboard-loading-progress").hidden) updateDashboardLoadingProgress();
+}
+function startDashboardLoading() {
+  dashboardLoadingStartedAt = performance.now();
+  try {
+    const previousEstimate = Number(localStorage.getItem(DASHBOARD_LOAD_ESTIMATE_KEY));
+    if (Number.isFinite(previousEstimate) && previousEstimate >= 1000 && previousEstimate <= 120000) {
+      dashboardLoadEstimateMs = previousEstimate;
+    }
+  } catch (error) {
+    console.warn("Could not read the dashboard loading-time estimate.", error);
+  }
+  window.setTimeout(() => {
+    if (!document.body.classList.contains("app-auth-pending")) return;
+    const status = document.querySelector("#app-auth-status");
+    status.hidden = false;
+    document.querySelector("#dashboard-loading-skeleton").hidden = false;
+  }, 1000);
+  window.setTimeout(() => {
+    if (!document.body.classList.contains("app-auth-pending")) return;
+    document.querySelector("#dashboard-loading-skeleton").hidden = true;
+    document.querySelector("#dashboard-loading-progress").hidden = false;
+    updateDashboardLoadingProgress();
+    dashboardLoadingInterval = window.setInterval(updateDashboardLoadingProgress, 1000);
+  }, 10000);
+}
+function finishDashboardLoading() {
+  if (!dashboardLoadingStartedAt) return;
+  const duration = performance.now() - dashboardLoadingStartedAt;
+  window.clearInterval(dashboardLoadingInterval);
+  dashboardLoadingInterval = null;
+  document.querySelector("#app-auth-status").hidden = true;
+  try {
+    const previousEstimate = Number(localStorage.getItem(DASHBOARD_LOAD_ESTIMATE_KEY));
+    const estimate = Number.isFinite(previousEstimate) && previousEstimate >= 1000 && previousEstimate <= 120000
+      ? Math.round(previousEstimate * 0.7 + duration * 0.3)
+      : Math.round(duration);
+    localStorage.setItem(DASHBOARD_LOAD_ESTIMATE_KEY, String(Math.max(1000, Math.min(120000, estimate))));
+  } catch (error) {
+    console.warn("Could not save the dashboard loading-time estimate.", error);
+  }
+  dashboardLoadingStartedAt = 0;
+}
 async function runAction(action, failureMessage, loadingMessage = "Saving your changes…", {
   inlineFeedback,
   submitButton,
   friendlyFailureMessage,
+  optimistic,
+  rollback,
+  renderOptimistic,
 } = {}) {
   const loadingIndicator = document.querySelector("#loading-indicator");
   const loadingLabel = document.querySelector("#loading-label");
+  const longStatus = document.querySelector("#loading-long-status");
   const activeElement = document.activeElement;
   const control = submitButton || (activeElement instanceof HTMLButtonElement
     ? activeElement
@@ -2229,30 +2432,75 @@ async function runAction(action, failureMessage, loadingMessage = "Saving your c
       ? activeElement.closest("form")?.querySelector('button[type="submit"]')
       : null);
   const controlWasDisabled = control?.disabled ?? false;
+  const actionStartedAt = performance.now();
+  let loadingTimer;
+  let longLoadingTimer;
+  let progressInterval;
+  const showActionLoading = () => {
+    if (inlineFeedback) {
+      inlineFeedback.hidden = false;
+      inlineFeedback.dataset.state = "loading";
+      inlineFeedback.textContent = loadingMessage;
+    } else {
+      loadingLabel.textContent = loadingMessage;
+      loadingIndicator.hidden = false;
+    }
+  };
+  const updateActionProgress = () => {
+    const elapsed = performance.now() - actionStartedAt;
+    const estimateRemaining = Math.max(0, Math.ceil((ACTION_LOAD_ESTIMATE_MS - elapsed) / 1000));
+    document.querySelector("#loading-progress").value = Math.min(95, Math.round(10 + (elapsed / ACTION_LOAD_ESTIMATE_MS) * 85));
+    document.querySelector("#loading-elapsed").textContent = `${Math.floor(elapsed / 1000)} seconds elapsed`;
+    document.querySelector("#loading-remaining").textContent = estimateRemaining
+      ? `Estimated time remaining: about ${estimateRemaining} ${estimateRemaining === 1 ? "second" : "seconds"}`
+      : "Estimated time remaining: taking longer than usual";
+  };
   pendingActionCount += 1;
-  loadingLabel.textContent = loadingMessage;
-  loadingIndicator.hidden = Boolean(inlineFeedback);
-  if (inlineFeedback) {
-    inlineFeedback.hidden = false;
-    inlineFeedback.dataset.state = "loading";
-    inlineFeedback.textContent = loadingMessage;
-  }
+  let optimisticApplied = false;
+  loadingTimer = window.setTimeout(showActionLoading, 1000);
+  longLoadingTimer = window.setTimeout(() => {
+    loadingIndicator.hidden = false;
+    loadingLabel.textContent = loadingMessage;
+    longStatus.hidden = false;
+    loadingIndicator.classList.add("is-long-running");
+    updateActionProgress();
+    progressInterval = window.setInterval(updateActionProgress, 1000);
+  }, 10000);
   document.querySelector("#app-shell").setAttribute("aria-busy", "true");
   if (control && !control.disabled) {
     control.disabled = true;
     control.setAttribute("aria-busy", "true");
   }
   try {
+    if (optimistic) {
+      optimisticApplied = true;
+      optimistic();
+      renderOptimistic?.();
+    }
     await action();
   } catch (error) {
+    if (optimisticApplied && rollback) {
+      try {
+        rollback();
+        renderOptimistic?.();
+      } catch (rollbackError) {
+        console.error("Could not roll back an optimistic Skillmate update.", rollbackError);
+        showToast("This change could not be saved or restored. Refresh the page to reload your account.", "error");
+      }
+    }
     console.error(failureMessage, error);
     if (inlineFeedback) {
+      inlineFeedback.hidden = false;
       inlineFeedback.dataset.state = "error";
       inlineFeedback.textContent = error.userMessage || friendlyFailureMessage || failureMessage;
     } else {
       showToast(failureMessage, "error");
     }
   } finally {
+    window.clearTimeout(loadingTimer);
+    window.clearTimeout(longLoadingTimer);
+    window.clearInterval(progressInterval);
+    if (inlineFeedback?.dataset.state === "loading") inlineFeedback.hidden = true;
     if (control && control.isConnected) {
       control.disabled = controlWasDisabled;
       if (!controlWasDisabled) control.removeAttribute("aria-busy");
@@ -2260,16 +2508,18 @@ async function runAction(action, failureMessage, loadingMessage = "Saving your c
     pendingActionCount = Math.max(0, pendingActionCount - 1);
     if (!pendingActionCount) {
       loadingIndicator.hidden = true;
+      loadingIndicator.classList.remove("is-long-running");
+      longStatus.hidden = true;
       document.querySelector("#app-shell").removeAttribute("aria-busy");
     }
   }
 }
 function showConnectedApp() {
   const status = document.querySelector("#app-auth-status");
+  finishDashboardLoading();
   document.body.classList.remove("app-auth-pending");
   document.querySelector("#app-shell").hidden = false;
-  status.classList.add("is-exiting");
-  window.setTimeout(() => { status.hidden = true; }, 250);
+  status.hidden = true;
 }
 function syncSellerNavigation() {
   const isSeller = state.services.length > 0;
@@ -2316,6 +2566,7 @@ async function bootstrapStudentApp() {
     }
   });
   let timeoutId;
+  setDashboardLoadingPhase(12, "Checking your session…");
   const { data, error } = await Promise.race([
     appSupabase.auth.getSession(),
     new Promise((_, reject) => {
@@ -2327,6 +2578,7 @@ async function bootstrapStudentApp() {
     window.location.replace("login.html");
     return;
   }
+  setDashboardLoadingPhase(28, "Securing your session…");
   try {
     await window.syncSkillmateServerSession(data.session);
   } catch (sessionError) {
@@ -2336,6 +2588,7 @@ async function bootstrapStudentApp() {
     }
     throw sessionError;
   }
+  setDashboardLoadingPhase(42, "Loading your profile…");
   const { data: profile, error: profileError } = await loadAccountProfile(data.session.user.id);
   if (profileError) throw profileError;
   // Email sign-up already collected these details; do not ask for them again.
@@ -2353,6 +2606,7 @@ async function bootstrapStudentApp() {
   loadHiddenMessages();
   loadChatDrafts();
   loadPendingMessages();
+  setDashboardLoadingPhase(58, "Preparing your workspace…");
   state.profile = {
     name: profile.full_name,
     university: profile.university,
@@ -2382,7 +2636,7 @@ async function bootstrapStudentApp() {
   loadAccountSettings();
   document.querySelector(".campus-card strong").textContent = state.profile.university || "Your campus";
   document.querySelector(".campus-card small").textContent = state.profile.course || "Student account";
-  showConnectedApp();
+  setDashboardLoadingPhase(72, "Syncing bookings, services and messages…");
   try {
     await refreshSupabaseState();
     dashboardDataLoaded = true;
@@ -2401,6 +2655,8 @@ async function bootstrapStudentApp() {
     console.error("Could not refresh Skillmate account data.", refreshError);
     showToast("Some account data could not be refreshed. Your cached conversations are still available.", "error");
   }
+  setDashboardLoadingPhase(96, "Finishing your dashboard…");
+  showConnectedApp();
   document.querySelector("#booking-count").textContent = String(
     state.bookings.filter((booking) => !["Declined", "Cancelled", "Completed"].includes(booking.status)).length,
   );
@@ -2428,10 +2684,17 @@ function showPage(page, options = {}) {
   if (page === "profile") page = "profile-settings";
   const view = document.querySelector(`[data-view="${page}"]`);
   if (!view) return;
+  const pageTitles = {
+    home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers",
+    provider: "My services", earnings: "Estimated earnings", "profile-settings": "Your profile",
+    "help-support": "Help & Support",
+  };
+  const pageTitle = pageTitles[page];
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
   const pageHash = `#${page}`;
   if (window.location.hash !== pageHash) {
-    window.history.pushState(null, "", `${window.location.pathname}${window.location.search}${pageHash}`);
+    persistPageScrollPosition();
+    window.history.pushState({ ...pageHistoryState(), skillmatePage: page, skillmateScrollY: 0 }, "", `${window.location.pathname}${window.location.search}${pageHash}`);
   }
   if (page === "messages") {
     if (!options.openConversation) {
@@ -2441,8 +2704,7 @@ function showPage(page, options = {}) {
   }
   state.activePage = page;
   saveState();
-  if (page === "messages") startMessagePolling();
-  else stopMessagePolling();
+  syncMessageChannels();
   document.querySelectorAll(".view").forEach((element) => element.classList.toggle("active-view", element === view));
   document.querySelectorAll(".nav-link[data-page]").forEach((element) => {
     element.classList.toggle("active", element.dataset.page === page);
@@ -2457,11 +2719,8 @@ function showPage(page, options = {}) {
   document.body.classList.remove("search-open");
   globalSearch.setAttribute("aria-expanded", "false");
   document.querySelector("#search-suggestions").hidden = true;
-  document.querySelector("#breadcrumb-title").textContent = {
-    home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers",
-    provider: "My services", earnings: "Estimated earnings", "profile-settings": "Your profile",
-    "help-support": "Help & Support",
-  }[page];
+  document.querySelector("#breadcrumb-title").textContent = pageTitle;
+  document.title = `${pageTitle} | Skillmate`;
   closeSidebar(sidebar.contains(document.activeElement));
   if (page === "saved") renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders).filter((provider) => state.saved.includes(provider.id)));
   if (page === "messages") {
@@ -2474,10 +2733,24 @@ function showPage(page, options = {}) {
   if (page === "provider") { renderListings(); renderPortfolio(); renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true }); }
   if (page === "earnings") renderEarnings();
   if (page === "bookings") renderBookingList("user-booking-list", bookingsForActiveFilter());
-  window.scrollTo({ top: 0, behavior: "auto" });
+  window.scrollTo({ top: Number.isFinite(options.restoreScroll) ? Math.max(0, options.restoreScroll) : 0, behavior: "auto" });
   if (appSupabase && appUser && ["home", "bookings", "messages", "provider", "earnings"].includes(page)) {
     refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate activity for this page.", error));
   }
+}
+let pageScrollSaveTimer = null;
+function pageHistoryState() {
+  const currentState = window.history.state;
+  return currentState && typeof currentState === "object" && !Array.isArray(currentState) ? currentState : {};
+}
+function persistPageScrollPosition() {
+  window.clearTimeout(pageScrollSaveTimer);
+  pageScrollSaveTimer = null;
+  window.history.replaceState({
+    ...pageHistoryState(),
+    skillmatePage: window.location.hash.slice(1) || "home",
+    skillmateScrollY: window.scrollY,
+  }, "");
 }
 function openBooking(providerId, serviceId, negotiationId = "") {
   if (requireCustomerReview()) return;
@@ -2500,27 +2773,73 @@ function openBooking(providerId, serviceId, negotiationId = "") {
   document.querySelector("#booking-provider-id").value = providerId;
   document.querySelector("#booking-negotiation-id").value = negotiationId;
   currentBookingNegotiationId = negotiationId;
-  document.querySelector("#booking-description").textContent = negotiation
-    ? `Review the terms you agreed with ${provider.name}, then send a booking request. The provider will confirm the appointment.`
-    : `Choose a service from ${provider.name}. Your preferred appointment time will be confirmed by the provider.`;
   document.querySelector("#booking-service").innerHTML = services.map((service) => `<option value="${escapeHTML(service.id)}">${escapeHTML(service.title)} · ${servicePriceLabel(service)}</option>`).join("");
   document.querySelector("#booking-service").disabled = Boolean(negotiation);
   if (negotiation) document.querySelector("#booking-service").value = bookingService.id;
   else if (serviceId && services.some(service => service.id === serviceId)) document.querySelector("#booking-service").value = serviceId;
+  document.querySelector("#booking-service-switch").hidden = services.length <= 1 || Boolean(negotiation);
+  const selectedService = negotiation ? bookingService : services.find(item => item.id === document.querySelector("#booking-service").value);
+  const savedDraft = !negotiation && selectedService
+    ? bookingDrafts.get(`${providerId}:${selectedService.id}`)
+    : null;
   document.querySelector("#booking-confirm-label").hidden = !negotiation;
   document.querySelector("#booking-confirm-details").required = Boolean(negotiation);
-  document.querySelector("#booking-payment-note").textContent = negotiation
-    ? "No payment is taken by Skillmate. You can message the provider if the price or service scope needs to change; those terms cannot be edited in this request."
-    : "No payment is taken by Skillmate. Agree on any final price with the provider before the service starts.";
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   document.querySelector("#booking-date").min = localDateInputValue();
   document.querySelector("#booking-date").value = localDateInputValue(tomorrow);
   document.querySelector("#booking-time").value = "10:00";
   document.querySelector("#booking-note").value = "";
   document.querySelector("#booking-location").value = "";
+  document.querySelector("#booking-location-type").value = "";
   document.querySelector("#booking-confirm-details").checked = false;
+  document.querySelector("#booking-instructions").open = false;
+  if (savedDraft) {
+    document.querySelector("#booking-date").value = savedDraft.date;
+    document.querySelector("#booking-time").value = savedDraft.time;
+    document.querySelector("#booking-note").value = savedDraft.note;
+    document.querySelector("#booking-location").value = savedDraft.location;
+    document.querySelector("#booking-instructions").open = Boolean(savedDraft.note);
+  }
   updateBookingSummary();
+  if (savedDraft) {
+    const savedLocationType = savedDraft.locationType
+      || (savedDraft.location === "Online" ? "online" : savedDraft.location === "On campus" ? "campus" : savedDraft.location ? "other" : "");
+    const locationType = document.querySelector("#booking-location-type");
+    if ([...locationType.options].some(option => option.value === savedLocationType)) locationType.value = savedLocationType;
+    if (savedLocationType === "other" && savedDraft.location && !savedDraft.locationType) {
+      document.querySelector("#booking-location").value = savedDraft.location.replace(/^Other:\s*/, "");
+    }
+    updateBookingLocationVisibility();
+  }
   openModal("booking-modal");
+}
+function updateBookingLocationVisibility() {
+  const isOtherLocation = document.querySelector("#booking-location-type").value === "other";
+  document.querySelector("#booking-location-details").hidden = !isOtherLocation;
+  document.querySelector("#booking-location").required = isOtherLocation;
+}
+function updateBookingLocationOptions(service) {
+  const locationType = document.querySelector("#booking-location-type");
+  const previousValue = locationType.value;
+  const choices = service.deliveryMethod === "online"
+    ? [["online", "Online"]]
+    : service.deliveryMethod === "in_person"
+      ? [["campus", "On campus"], ["other", "Other location"]]
+      : [["online", "Online"], ["campus", "On campus"], ["other", "Other location"]];
+  locationType.replaceChildren(new Option("Choose a location", ""));
+  choices.forEach(([value, label]) => locationType.add(new Option(label, value)));
+  if (choices.some(([value]) => value === previousValue)) locationType.value = previousValue;
+  else if (service.deliveryMethod === "online") locationType.value = "online";
+  else if (service.deliveryMethod === "in_person") locationType.value = "campus";
+  else locationType.value = "";
+  updateBookingLocationVisibility();
+}
+function bookingLocationValue() {
+  const locationType = document.querySelector("#booking-location-type").value;
+  if (locationType === "online") return "Online";
+  if (locationType === "campus") return "On campus";
+  if (locationType === "other") return `Other: ${document.querySelector("#booking-location").value.trim()}`;
+  return "";
 }
 function updateBookingSummary() {
   const providerId = document.querySelector("#booking-provider-id").value;
@@ -2537,25 +2856,46 @@ function updateBookingSummary() {
     ? priceNegotiations.find(item => item.id === currentBookingNegotiationId && item.state === "agreed")
     : null;
   const agreementReview = document.querySelector("#booking-agreement-review");
-  const regularPriceSummary = document.querySelector("#booking-price-label").closest(".booking-summary");
   agreementReview.hidden = !negotiation;
-  regularPriceSummary.hidden = Boolean(negotiation);
+  document.querySelector("#booking-summary-service").textContent = service.title;
+  document.querySelector("#booking-provider-name").textContent = getProvider(providerId)?.name || "";
+  const negotiationMode = window.skillmateServiceUtils.normalizeNegotiationMode(service.negotiationMode);
+  const isNegotiable = ["negotiation", "hybrid"].includes(negotiationMode);
+  document.querySelector("#booking-negotiable-badge").textContent = negotiation ? "Agreed" : isNegotiable ? "Negotiable" : "Fixed price";
+  document.querySelector("#booking-price-label").textContent = negotiation ? "Agreed price" : "Listed price";
+  document.querySelector("#booking-price").textContent = currency(negotiation?.agreedPrice ?? service.price);
+  document.querySelector("#booking-negotiation-option").hidden = !isNegotiable || Boolean(negotiation);
+  document.querySelector("#booking-availability-note").textContent = negotiation
+    ? "The provider must confirm this agreed booking request."
+    : "The provider must confirm your requested appointment.";
+  updateBookingLocationOptions(service);
   if (negotiation) {
     document.querySelector("#booking-provider-summary").textContent = getProvider(negotiation.providerId)?.name || "Your provider";
     document.querySelector("#booking-scope-summary").textContent = negotiation.agreedScope || service.description || "Service as agreed in messages.";
     document.querySelector("#booking-original-price").textContent = currency(negotiation.listedPrice);
     document.querySelector("#booking-agreed-price").textContent = currency(negotiation.agreedPrice);
-  } else {
-    document.querySelector("#booking-price-label").textContent = "Price";
-    document.querySelector("#booking-price").textContent = currency(service.price);
-    document.querySelector("#booking-price-detail").textContent =
-      [serviceDetailLabel(service), service.negotiationMode === "fixed"
-        ? "Final price for the scope described in this listing."
-        : "Agree the final price with your provider before booking."].filter(Boolean).join(" · ");
   }
 }
 document.querySelector("#booking-service").addEventListener("change", updateBookingSummary);
-function openPriceOfferForm({ providerId, serviceId, action = "initial", negotiationId = "", offerId = "", conversationId = "", amount = "", description = "" }) {
+document.querySelector("#booking-location-type").addEventListener("change", updateBookingLocationVisibility);
+document.querySelector("#booking-negotiate").addEventListener("click", () => {
+  const providerId = document.querySelector("#booking-provider-id").value;
+  const serviceId = document.querySelector("#booking-service").value;
+  const service = providerServices(providerId).find(item => item.id === serviceId);
+  if (!service || !["negotiation", "hybrid"].includes(service.negotiationMode)) {
+    showToast("Price negotiation is available only for Negotiable services.", "error");
+    return;
+  }
+  bookingDrafts.set(`${providerId}:${serviceId}`, {
+    date: document.querySelector("#booking-date").value,
+    time: document.querySelector("#booking-time").value,
+    note: document.querySelector("#booking-note").value,
+    locationType: document.querySelector("#booking-location-type").value,
+    location: document.querySelector("#booking-location").value,
+  });
+  openServiceDiscussion(providerId, serviceId);
+});
+function openPriceOfferForm({ providerId, serviceId, action = "initial", negotiationId = "", offerId = "", conversationId = "", amount = "", description = "", chatProposal = false }) {
   if (!appSupabase) {
     showToast("Price negotiation requires a connected Skillmate account.", "error");
     return;
@@ -2573,7 +2913,7 @@ function openPriceOfferForm({ providerId, serviceId, action = "initial", negotia
   document.querySelector("#price-offer-amount").value = amount;
   const service = connectedServices.find(item => item.id === serviceId);
   const messageLabel = document.querySelector("#price-offer-message").closest("label");
-  messageLabel.hidden = action === "proposal" && service?.negotiationMode !== "hybrid";
+  messageLabel.hidden = action === "proposal" && service?.negotiationMode !== "hybrid" && !chatProposal;
   const messageHint = messageLabel.querySelector(".label-hint");
   if (messageHint) messageHint.textContent = service?.negotiationMode === "hybrid"
     ? "(optional · describe scope changes)"
@@ -2585,6 +2925,13 @@ function openPriceOfferForm({ providerId, serviceId, action = "initial", negotia
   document.querySelector("#price-offer-title").textContent = action === "counter" ? "Send a counteroffer" : action === "proposal" ? "Send a formal price proposal" : "Make a price offer";
   document.querySelector("#price-offer-description").textContent = description
     || (action === "counter" ? "The other person must explicitly accept or reject your counteroffer." : "A price is only final after the other person explicitly accepts it.");
+  const modal = document.querySelector("#price-offer-modal");
+  modal.classList.toggle("chat-price-sheet", chatProposal);
+  const serviceSummary = document.querySelector("#price-offer-service-summary");
+  serviceSummary.hidden = !chatProposal;
+  document.querySelector("#price-offer-service-name").textContent = service?.title || "Selected service";
+  document.querySelector("#price-offer-listed-price").textContent = currency(service?.price ?? 0);
+  document.querySelector("#price-offer-submit").textContent = chatProposal ? "Send Proposal" : "Send offer";
   document.querySelector("#price-offer-feedback").hidden = true;
   openModal("price-offer-modal");
 }
@@ -2615,7 +2962,11 @@ async function openServiceDiscussion(providerId, serviceId) {
     if (error) throw error;
     await refreshSupabaseState();
     setActiveConversation(conversationId);
-    document.querySelector("#provider-detail-modal").close();
+    chatNegotiationServiceSelection.set(conversationId, serviceId);
+    for (const modalId of ["#provider-detail-modal", "#booking-modal"]) {
+      const modal = document.querySelector(modalId);
+      if (modal.open) modal.close();
+    }
     showPage("messages", { openConversation: true });
     renderConversations();
   }, "Could not open price discussion.", "Opening your conversation…", {
@@ -2640,7 +2991,8 @@ document.querySelector("#price-offer-form").addEventListener("submit", event => 
   const offerId = document.querySelector("#price-offer-response-id").value;
   const activeConversationId = document.querySelector("#price-offer-conversation-id").value;
   const service = connectedServices.find(item => item.id === serviceId);
-  const message = action === "proposal" && service?.negotiationMode !== "hybrid"
+  const isChatProposal = document.querySelector("#price-offer-modal").classList.contains("chat-price-sheet");
+  const message = action === "proposal" && service?.negotiationMode !== "hybrid" && !isChatProposal
     ? "" : document.querySelector("#price-offer-message").value.trim();
   const feedback = document.querySelector("#price-offer-feedback");
   runAction(async () => {
@@ -2912,7 +3264,14 @@ document.querySelector("#global-search").addEventListener("input", () => {
 const globalSearch = document.querySelector("#global-search");
 const searchSuggestions = document.querySelector("#search-suggestions");
 const searchClear = document.querySelector("#search-clear");
-window.addEventListener("popstate", () => showPage(window.location.hash.slice(1) || "home"));
+if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
+window.addEventListener("scroll", () => {
+  window.clearTimeout(pageScrollSaveTimer);
+  pageScrollSaveTimer = window.setTimeout(persistPageScrollPosition, 120);
+}, { passive: true });
+window.addEventListener("popstate", (event) => showPage(window.location.hash.slice(1) || "home", {
+  restoreScroll: Number.isFinite(event.state?.skillmateScrollY) ? event.state.skillmateScrollY : 0,
+}));
 window.addEventListener("hashchange", () => {
   const page = window.location.hash.slice(1) || "home";
   if (page !== state.activePage) showPage(page);
@@ -3041,7 +3400,6 @@ function handleCardAction(event) {
       return;
     }
     const saving = !state.saved.includes(id);
-    const previousSaved = [...state.saved];
     state.saved = saving
       ? [...new Set([...state.saved, id])]
       : state.saved.filter((savedId) => savedId !== id);
@@ -3070,7 +3428,9 @@ function handleCardAction(event) {
           saveState();
         }
       } catch (error) {
-        state.saved = previousSaved;
+        state.saved = saving
+          ? state.saved.filter((savedId) => savedId !== id)
+          : [...new Set([...state.saved, id])];
         renderMarketplace();
         if (state.activePage === "saved") {
           renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders)
@@ -3107,19 +3467,36 @@ document.querySelector("#group-grid").addEventListener("click", (event) => {
   if (!button) return;
   const group = state.groups.find((item) => item.id === button.dataset.joinGroup);
   if (!group) return;
+  if (pendingGroupActions.has(group.id)) return;
   if (!group.joinedByMe && requireCustomerReview()) return;
   if (appSupabase) {
-    runAction(async () => {
-      const { error } = await appSupabase.rpc(group.joinedByMe ? "leave_group_booking" : "join_group_booking", { p_group_id: group.id });
-      if (error) throw error;
-      await refreshSupabaseState();
-      renderAll();
-      showToast(group.joinedByMe
+    const wasJoined = group.joinedByMe;
+    const previousGroup = { joined: group.joined, joinedByMe: group.joinedByMe, status: group.status };
+    pendingGroupActions.add(group.id);
+    group.joinedByMe = !wasJoined;
+    group.joined = Math.max(1, Math.min(group.capacity, group.joined + (wasJoined ? -1 : 1)));
+    group.status = group.joined >= group.capacity ? "Full" : "Open";
+    renderGroups();
+    void runAction(async () => {
+      try {
+        const { error } = await appSupabase.rpc(wasJoined ? "leave_group_booking" : "join_group_booking", { p_group_id: group.id });
+        if (error) throw error;
+        await refreshSupabaseState();
+        renderAll();
+      } catch (error) {
+        Object.assign(group, previousGroup);
+        renderGroups();
+        throw error;
+      }
+      showToast(wasJoined
         ? group.hostId === appUser.id
           ? "You cancelled the group booking. Members and the provider have been notified."
           : "You’ve left the group. Your place is free for another student."
         : "You’re in! Message the host to coordinate your group booking.");
-    }, "Could not update your group booking.");
+    }, "Could not update your group booking.").finally(() => {
+      pendingGroupActions.delete(group.id);
+      renderGroups();
+    });
     return;
   }
   const joined = state.joinedGroups.includes(group.id);
@@ -3144,6 +3521,7 @@ document.querySelector("#group-grid").addEventListener("click", (event) => {
 });
 document.querySelector("#booking-form").addEventListener("submit", (event) => {
   event.preventDefault();
+  if (bookingSubmissionPending) return;
   if (requireCustomerReview()) return;
   if (document.querySelector("#booking-confirm-details").required
       && !document.querySelector("#booking-confirm-details").checked) {
@@ -3153,6 +3531,13 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
   const providerId = document.querySelector("#booking-provider-id").value;
   const service = providerServices(providerId).find((item) => item.id === document.querySelector("#booking-service").value);
   if (!service) { showToast("Choose an available service first."); return; }
+  const locationType = document.querySelector("#booking-location-type").value;
+  if (!locationType) { showToast("Choose where the service will take place.", "error"); return; }
+  if (locationType === "other" && !document.querySelector("#booking-location").value.trim()) {
+    showToast("Add a location or meeting point.", "error");
+    return;
+  }
+  const bookingDraftKey = `${providerId}:${service.id}`;
   const appointmentDate = document.querySelector("#booking-date").value;
   const appointmentTime = document.querySelector("#booking-time").value;
   const scheduledAt = parseLocalAppointment(appointmentDate, appointmentTime);
@@ -3170,6 +3555,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
       showToast("This agreed price is no longer available for this service.", "error");
       return;
     }
+    bookingSubmissionPending = true;
     const temporaryId = `pending-booking-${Date.now()}`;
     const pendingBooking = {
       id: temporaryId, providerId, customerId: appUser.id, customer: state.profile.name,
@@ -3177,7 +3563,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
       listedPrice: negotiation?.listedPrice ?? Number(service.price), priceNegotiationId: negotiationId,
       scopeSnapshot: negotiation?.agreedScope || "",
       currency: service.currency || "GHS", date: appointmentDate,
-      requestedLocation: document.querySelector("#booking-location").value.trim(),
+      requestedLocation: bookingLocationValue(),
       time: scheduledAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       status: "Pending", type: "Individual",
       note: document.querySelector("#booking-note").value.trim(), reviewed: false,
@@ -3202,6 +3588,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
         const { error } = result;
         if (error) throw error;
         await refreshSupabaseState();
+        bookingDrafts.delete(bookingDraftKey);
         event.target.closest("dialog").close();
         renderAll();
         showPage("bookings");
@@ -3211,17 +3598,22 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
         renderAll();
         throw error;
       }
-    }, "Could not send the booking request.");
+    }, "Could not send the booking request.").finally(() => {
+      bookingSubmissionPending = false;
+    });
     return;
   }
+  bookingSubmissionPending = true;
   state.bookings.unshift({
     id: `booking-${Date.now()}`, providerId, service: service.title, price: Number(service.price),
     date: appointmentDate, time: scheduledAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
     status: "Pending", type: "Individual", note: document.querySelector("#booking-note").value.trim(),
-    requestedLocation: document.querySelector("#booking-location").value.trim(),
+    requestedLocation: bookingLocationValue(),
     reviewed: false, customer: state.profile.name,
   });
+  bookingDrafts.delete(bookingDraftKey);
   saveState();
+  bookingSubmissionPending = false;
   event.target.closest("dialog").close();
   renderAll();
   showPage("bookings");
@@ -3353,39 +3745,35 @@ document.querySelector("#conversation-search").addEventListener("input", () => {
   window.clearTimeout(conversationSearchTimer);
   conversationSearchTimer = window.setTimeout(() => renderConversations({ preserveChatState: true }), 300);
 });
+document.querySelector("#chat-panel").addEventListener("change", event => {
+  const selector = event.target.closest("[data-chat-service-select]");
+  if (!selector) return;
+  chatNegotiationServiceSelection.set(activeConversationId, selector.value);
+  const chat = state.messages.find(item => item.id === activeConversationId);
+  const currentPanel = selector.closest(".chat-negotiations");
+  const updatedPanel = chat && createPriceNegotiationPanel(chat);
+  if (updatedPanel) {
+    currentPanel.replaceWith(updatedPanel);
+    updatedPanel.querySelector("[data-chat-service-select]")?.focus({ preventScroll: true });
+  }
+});
 document.querySelector("#chat-panel").addEventListener("click", (event) => {
-  const startPriceAction = event.target.closest("[data-chat-price-start]");
-  if (startPriceAction) {
-    const service = connectedServices.find(item => item.id === startPriceAction.dataset.chatPriceStart);
+  const proposePrice = event.target.closest("[data-chat-price-propose]");
+  if (proposePrice) {
+    const service = connectedServices.find(item => item.id === proposePrice.dataset.serviceId);
     const chat = state.messages.find(item => item.id === activeConversationId);
     if (!service || !chat) return;
-    const action = startPriceAction.dataset.chatPriceAction;
-    if (action === "offer" || action === "proposal") {
-      openPriceOfferForm({
-        providerId: service.providerId,
-        serviceId: service.id,
-        action: action === "offer" ? "initial" : "proposal",
-        conversationId: chat.id,
-        description: action === "offer"
-          ? `Offer a price for ${service.title}. The provider must explicitly accept, reject or counter.`
-          : `Propose a formal price for ${service.title}. The customer must explicitly accept or reject it.`,
-      });
-      return;
-    }
-    runAction(async () => {
-      const { error } = await appSupabase.rpc("create_price_negotiation", {
-        p_service_id: service.id,
-        p_conversation_id: chat.id,
-        p_initial_amount: null,
-        p_message: "",
-      });
-      if (error) throw error;
-      await refreshSupabaseState();
-      setActiveConversation(chat.id);
-      renderConversations({ preserveChatState: true });
-      showToast("Price discussion started. Agree through an explicit proposal here; chat messages alone don’t set the price.");
-    }, "Could not start this price discussion.", "Starting price discussion…", {
-      friendlyFailureMessage: "Could not start this price discussion. Check that the selected service is still available.",
+    const action = service.providerId === appUser?.id ? "proposal" : "initial";
+    openPriceOfferForm({
+      providerId: service.providerId,
+      serviceId: service.id,
+      action,
+      negotiationId: proposePrice.dataset.negotiationId,
+      conversationId: chat.id,
+      description: action === "initial"
+        ? `Propose a price for ${service.title}. The provider must explicitly accept, reject or counter.`
+        : `Propose a price for ${service.title}. The customer must explicitly accept or reject it.`,
+      chatProposal: true,
     });
     return;
   }
@@ -3412,6 +3800,10 @@ document.querySelector("#chat-panel").addEventListener("click", (event) => {
       return;
     }
     const chat = state.messages.find(item => item.id === activeConversationId);
+    const negotiation = priceNegotiations.find(item => item.id === priceAction.dataset.negotiationId);
+    const offer = negotiation?.offers.find(item => item.id === priceAction.dataset.offerId);
+    const previousNegotiation = negotiation ? { ...negotiation } : null;
+    const previousOfferStatus = offer?.status;
     runAction(async () => {
       const { error } = await appSupabase.rpc("decide_price_offer", {
         p_offer_id: priceAction.dataset.offerId,
@@ -3420,12 +3812,35 @@ document.querySelector("#chat-panel").addEventListener("click", (event) => {
         p_message: "",
       });
       if (error) throw error;
-      await refreshSupabaseState();
+      let refreshFailed = false;
+      try {
+        await refreshSupabaseState();
+      } catch (refreshError) {
+        console.error("Price response was saved, but the latest negotiation data could not be refreshed.", refreshError);
+        refreshFailed = true;
+      }
       if (chat) setActiveConversation(chat.id);
       renderConversations({ preserveChatState: true });
-      showToast(action === "accept" ? "Price accepted. The agreed price is now ready for booking." : "Price offer rejected.", "success");
+      showToast(refreshFailed
+        ? "Your response was saved. Reload the page to refresh the latest price details."
+        : action === "accept" ? "Price accepted. The agreed price is now ready for booking." : "Price offer rejected.",
+      refreshFailed ? "error" : "success");
     }, "Could not update this price offer.", "Updating price offer…", {
       friendlyFailureMessage: "This offer may already have been answered or is no longer available.",
+      optimistic: () => {
+        if (!negotiation || !offer) return;
+        offer.status = action === "accept" ? "accepted" : "rejected";
+        if (action === "accept") {
+          negotiation.state = "agreed";
+          negotiation.agreedPrice = offer.amount;
+          negotiation.acceptedOfferId = offer.id;
+        }
+      },
+      rollback: () => {
+        if (negotiation && previousNegotiation) Object.assign(negotiation, previousNegotiation);
+        if (offer) offer.status = previousOfferStatus;
+      },
+      renderOptimistic: () => renderConversations({ preserveChatState: true }),
     });
     return;
   }
@@ -3615,16 +4030,32 @@ document.querySelector("#listing-list").addEventListener("click", (event) => {
   }
   if (toggle) {
     const service = state.services.find((item) => item.id === toggle.dataset.toggleService);
+    if (!service) return;
     if (appSupabase) {
-      runAction(async () => {
-        const { error } = await appSupabase.from("services").update({ is_active: !service.active })
-          .eq("id", service.id).eq("provider_id", appUser.id);
-        if (error) throw error;
-        await refreshSupabaseState();
-        populateServiceSelects();
+      if (pendingServiceToggles.has(service.id)) return;
+      pendingServiceToggles.add(service.id);
+      const previousActive = service.active;
+      service.active = !previousActive;
+      renderAll();
+      void runAction(async () => {
+        try {
+          const { error } = await appSupabase.from("services").update({ is_active: service.active })
+            .eq("id", service.id).eq("provider_id", appUser.id);
+          if (error) throw error;
+          await refreshSupabaseState();
+          populateServiceSelects();
+          renderAll();
+        } catch (error) {
+          const currentService = state.services.find((item) => item.id === service.id);
+          if (currentService) currentService.active = previousActive;
+          renderAll();
+          throw error;
+        }
+        showToast(service.active ? "Service is active." : "Service paused. It won’t appear in search.");
+      }, "Could not update this service.").finally(() => {
+        pendingServiceToggles.delete(service.id);
         renderAll();
-        showToast(service.active ? "Service paused. It won’t appear in search." : "Service is active.");
-      }, "Could not update this service.");
+      });
       return;
     }
     service.active = !service.active;
@@ -3633,7 +4064,7 @@ document.querySelector("#listing-list").addEventListener("click", (event) => {
     showToast(service.active ? "Service is active." : "Service paused. It won’t appear in search.");
   }
 });
-async function persistStudentProfileDetails(details) {
+async function persistStudentProfileDetails(details, previousProfile = state.profile) {
   const result = await appSupabase.rpc("save_student_profile", {
     p_full_name: details.name, p_university: details.university, p_bio: details.bio,
     p_location: details.location, p_student_id_number: details.studentIdNumber,
@@ -3641,9 +4072,9 @@ async function persistStudentProfileDetails(details) {
   if (result.error?.code !== "PGRST202") return result;
   // A legacy deployment may save a bio/name edit without touching private identity.
   // Refuse multi-part edits until the atomic profile function is available.
-  if (details.university !== state.profile.university
-    || details.location !== (state.profile.location || "")
-    || (details.studentIdNumber && details.studentIdNumber !== (state.profile.studentIdNumber || ""))) {
+  if (details.university !== previousProfile.university
+    || details.location !== (previousProfile.location || "")
+    || (details.studentIdNumber && details.studentIdNumber !== (previousProfile.studentIdNumber || ""))) {
     const error = new Error("Student details are temporarily unavailable. Your changes have not been saved.");
     error.userMessage = error.message;
     throw error;
@@ -3663,9 +4094,11 @@ document.querySelector("#profile-form").addEventListener("submit", (event) => {
     return;
   }
   if (appSupabase) {
+    const previousProfile = { ...state.profile };
+    const campusChanged = university !== previousProfile.university;
     runAction(async () => {
       let canceledVerificationPhoto = "";
-      if (university !== state.profile.university) {
+      if (campusChanged) {
         const { data: verificationRequest, error: verificationError } = await appSupabase.from("verification_requests")
           .select("id_photo_path").eq("student_id", appUser.id).eq("status", "open").maybeSingle();
         if (verificationError && !["42703", "PGRST204"].includes(verificationError.code)) throw verificationError;
@@ -3674,7 +4107,10 @@ document.querySelector("#profile-form").addEventListener("submit", (event) => {
         }
         canceledVerificationPhoto = verificationRequest?.id_photo_path || "";
       }
-      const { error } = await persistStudentProfileDetails({ name, university, bio, location, studentIdNumber });
+      const { error } = await persistStudentProfileDetails(
+        { name, university, bio, location, studentIdNumber },
+        previousProfile,
+      );
       if (error) throw error;
       let verificationPhotoCleanupFailed = false;
       if (canceledVerificationPhoto) {
@@ -3687,7 +4123,7 @@ document.querySelector("#profile-form").addEventListener("submit", (event) => {
           verificationPhotoCleanupFailed = true;
         }
       }
-      if (university !== state.profile.university) state.profile.verified = false;
+      if (campusChanged) state.profile.verified = false;
       Object.assign(state.profile, { name, university, bio, location });
       if (studentIdNumber) state.profile.studentIdNumber = studentIdNumber;
       state.profile.identityComplete = Boolean(name && university && state.profile.studentIdNumber);
@@ -3712,7 +4148,16 @@ document.querySelector("#profile-form").addEventListener("submit", (event) => {
             : emailChanged ? "Profile updated. Confirm the email change using the link sent to your new address."
               : "Your student profile has been updated.",
       verificationPhotoCleanupFailed || emailError || refreshFailed ? "error" : "success");
-    }, "Could not update your profile.");
+    }, "Could not update your profile.", "Updating your profile…", {
+      optimistic: () => {
+        Object.assign(state.profile, { name, university, bio, location });
+        if (studentIdNumber) state.profile.studentIdNumber = studentIdNumber;
+        state.profile.identityComplete = Boolean(name && university && state.profile.studentIdNumber);
+        if (campusChanged) state.profile.verified = false;
+      },
+      rollback: () => Object.assign(state.profile, previousProfile),
+      renderOptimistic: renderAll,
+    });
     return;
   }
   state.profile.name = name;
@@ -3871,6 +4316,7 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
     return;
   }
   setSettingsFeedback(feedback, "");
+  const previousProfile = { ...state.profile };
   runAction(async () => {
     let avatarPath = "";
     let uploadedCvPath = "";
@@ -3882,10 +4328,12 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
     let cvPath = previousCvPath;
     let cvName = previousCvName;
     if (photo) {
-      const extension = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" })[photo.type];
-      avatarPath = `${appUser.id}/${crypto.randomUUID()}.${extension}`;
+      const compressedPhoto = await window.skillmateServiceUtils.compressImageFile(photo, {
+        maxDimension: 1200, quality: 0.82,
+      });
+      avatarPath = `${appUser.id}/${crypto.randomUUID()}.webp`;
       const { error: uploadError } = await appSupabase.storage.from("profile-avatars")
-        .upload(avatarPath, photo, { contentType: photo.type, cacheControl: "3600" });
+        .upload(avatarPath, compressedPhoto, { contentType: compressedPhoto.type, cacheControl: "3600" });
       if (uploadError) throw uploadError;
       avatarUrl = appSupabase.storage.from("profile-avatars").getPublicUrl(avatarPath).data.publicUrl;
     }
@@ -3935,7 +4383,7 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
       p_phone_number: phoneNumber, p_avatar_url: avatarUrl,
     });
     if (result.error?.code === "PGRST202") {
-      if (university !== state.profile.university) {
+      if (campusChanged) {
         result.error.userMessage = "Campus changes are unavailable until the site setup is completed. Your changes have not been saved.";
       } else {
         delete profileUpdate.university;
@@ -4008,6 +4456,12 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
   }, "Could not save your profile.", "Saving your profile…", {
     inlineFeedback: feedback,
     submitButton: form.querySelector('button[type="submit"]'),
+    optimistic: () => {
+      Object.assign(state.profile, { name, university, bio, phoneNumber });
+      if (campusChanged) state.profile.verified = false;
+    },
+    rollback: () => Object.assign(state.profile, previousProfile),
+    renderOptimistic: renderAll,
   });
 });
 document.querySelector("#password-change-form").addEventListener("submit", (event) => {
@@ -4038,20 +4492,24 @@ document.querySelector("#settings-notifications-save").addEventListener("click",
   const button = event.currentTarget;
   const feedback = document.querySelector("#notification-settings-feedback");
   if (!accountSettingsColumnsAvailable) return;
+  const notifyBookingUpdates = document.querySelector("#settings-notify-bookings").checked;
+  const notifyMessages = document.querySelector("#settings-notify-messages").checked;
+  const previousSettings = {
+    notifyBookingUpdates: state.profile.notifyBookingUpdates,
+    notifyMessages: state.profile.notifyMessages,
+  };
   runAction(async () => {
-    const notifyBookingUpdates = document.querySelector("#settings-notify-bookings").checked;
-    const notifyMessages = document.querySelector("#settings-notify-messages").checked;
     const { error } = await appSupabase.from("profiles").update({
       notify_booking_updates: notifyBookingUpdates,
       notify_messages: notifyMessages,
     }).eq("id", appUser.id);
     if (error) throw error;
-    state.profile.notifyBookingUpdates = notifyBookingUpdates;
-    state.profile.notifyMessages = notifyMessages;
     setSettingsFeedback(feedback, "Notification settings have been saved.");
   }, "Could not save notification settings.", "Saving notification settings…", {
     inlineFeedback: feedback,
     submitButton: button,
+    optimistic: () => Object.assign(state.profile, { notifyBookingUpdates, notifyMessages }),
+    rollback: () => Object.assign(state.profile, previousSettings),
   });
 });
 document.querySelector("#settings-push-toggle").addEventListener("click", (event) => {
@@ -4157,10 +4615,12 @@ document.querySelector("#support-ticket-form").addEventListener("submit", (event
       const { error: setupError } = await appSupabase.from("support_tickets").select("id").limit(0);
       if (setupError) throw setupError;
       if (screenshot) {
-        const extension = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" })[screenshot.type];
-        screenshotPath = `${appUser.id}/${crypto.randomUUID()}.${extension}`;
+        const compressedScreenshot = await window.skillmateServiceUtils.compressImageFile(screenshot, {
+          maxDimension: 1600, quality: 0.82,
+        });
+        screenshotPath = `${appUser.id}/${crypto.randomUUID()}.webp`;
         const { error: uploadError } = await appSupabase.storage.from("support-screenshots")
-          .upload(screenshotPath, screenshot, { contentType: screenshot.type, cacheControl: "3600" });
+          .upload(screenshotPath, compressedScreenshot, { contentType: compressedScreenshot.type, cacheControl: "3600" });
         if (uploadError) throw uploadError;
       }
       const { error } = await appSupabase.from("support_tickets").insert({
@@ -4269,17 +4729,18 @@ function readImage(file) {
 document.querySelector("#portfolio-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const file = document.querySelector("#portfolio-image").files[0];
-  if (file && !file.type.startsWith("image/")) { showToast("Choose an image file for your portfolio."); return; }
+  if (file && !["image/jpeg", "image/png", "image/webp"].includes(file.type)) { showToast("Choose a JPG, PNG or WebP image for your portfolio."); return; }
   if (file && file.size > 1000000) { showToast("Please choose an image smaller than 1 MB."); return; }
   if (appSupabase) {
     runAction(async () => {
       let imagePath = null;
       if (file) {
-        const extension = file.type.split("/")[1].replace("jpeg", "jpg");
-        if (!["png", "jpg", "webp", "gif"].includes(extension)) throw new Error("Choose a PNG, JPG, WebP, or GIF image.");
-        imagePath = `${appUser.id}/${crypto.randomUUID()}.${extension}`;
-        const { error: uploadError } = await appSupabase.storage.from("portfolio-images").upload(imagePath, file, {
-          contentType: file.type, upsert: false,
+        const compressedImage = await window.skillmateServiceUtils.compressImageFile(file, {
+          maxDimension: 1600, quality: 0.84, maxInputBytes: 5_000_000, maxOutputBytes: 1_000_000,
+        });
+        imagePath = `${appUser.id}/${crypto.randomUUID()}.webp`;
+        const { error: uploadError } = await appSupabase.storage.from("portfolio-images").upload(imagePath, compressedImage, {
+          contentType: compressedImage.type, upsert: false,
         });
         if (uploadError) throw uploadError;
       }
@@ -4639,6 +5100,7 @@ document.addEventListener("keydown", (event) => {
 
 document.querySelector("#group-service").addEventListener("change", updateGroupPrice);
 renderServiceCategories();
+startDashboardLoading();
 bootstrapStudentApp().catch((error) => {
   console.error("Could not initialize the Skillmate student dashboard.", error);
   if (error?.message === "SESSION_CHECK_TIMEOUT") {
@@ -4646,6 +5108,8 @@ bootstrapStudentApp().catch((error) => {
     return;
   }
   const status = document.querySelector("#app-auth-status");
+  finishDashboardLoading();
+  status.hidden = false;
   status.replaceChildren(document.createTextNode("We couldn’t load your account right now. Please try again in a moment."));
   const loginLink = document.createElement("a");
   loginLink.href = "login.html";

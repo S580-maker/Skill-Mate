@@ -8,16 +8,47 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet" />
-    <link rel="preload" href="user.css?v=24" as="style" />
-    <link rel="stylesheet" href="user.css?v=24" />
-    <link rel="stylesheet" href="app-refresh.css?v=3" />
+    <link rel="preload" href="user.css?v=28" as="style" />
+    <link rel="stylesheet" href="user.css?v=28" />
+    <link rel="stylesheet" href="app-refresh.css?v=6" />
     <script src="theme.js?v=2"></script>
   </head>
   <body class="app-auth-pending">
-    <div class="auth-screen" id="app-auth-status" role="status" aria-live="polite">
-      <span class="splash-brand" aria-hidden="true"><span class="brand-mark"><img src="skillmate-mark.svg?v=3" alt="" /></span><strong>skillmate<span>.</span></strong></span>
-      <span class="auth-screen-label">Checking your session</span>
-      <span class="splash-skeleton" aria-hidden="true"><i></i><i></i><i></i></span>
+    <div class="auth-screen" id="app-auth-status" role="status" aria-live="polite" hidden>
+      <section class="dashboard-loading-skeleton" id="dashboard-loading-skeleton" aria-label="Loading your dashboard">
+        <aside class="dashboard-skeleton-sidebar" aria-hidden="true">
+          <div class="dashboard-skeleton-brand"><span class="brand-mark"><img src="skillmate-mark.svg?v=3" alt="" /></span><strong>skillmate<span>.</span></strong></div>
+          <i class="skeleton dashboard-skeleton-campus"></i>
+          <div class="dashboard-skeleton-nav"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div>
+          <i class="skeleton dashboard-skeleton-profile"></i>
+        </aside>
+        <div class="dashboard-skeleton-content">
+          <header class="dashboard-skeleton-top">
+            <i class="skeleton dashboard-skeleton-crumb"></i>
+            <i class="skeleton dashboard-skeleton-avatar"></i>
+          </header>
+          <main class="dashboard-skeleton-main" aria-hidden="true">
+            <div class="dashboard-skeleton-intro">
+              <i class="skeleton dashboard-skeleton-eyebrow"></i>
+              <i class="skeleton dashboard-skeleton-title"></i>
+              <i class="skeleton dashboard-skeleton-subtitle"></i>
+              <i class="skeleton dashboard-skeleton-search"></i>
+            </div>
+            <div class="dashboard-skeleton-categories"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div>
+            <div class="dashboard-skeleton-section"><i class="skeleton dashboard-skeleton-section-title"></i><i class="skeleton dashboard-skeleton-section-meta"></i></div>
+            <div class="dashboard-skeleton-cards">
+              <article class="dashboard-skeleton-card"><i class="skeleton dashboard-skeleton-cover"></i><div><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div></article>
+              <article class="dashboard-skeleton-card"><i class="skeleton dashboard-skeleton-cover"></i><div><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div></article>
+            </div>
+          </main>
+        </div>
+        <nav class="dashboard-skeleton-mobile-nav" aria-hidden="true"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></nav>
+      </section>
+      <section class="dashboard-loading-progress" id="dashboard-loading-progress" hidden>
+        <strong id="dashboard-loading-label">Getting your dashboard ready…</strong>
+        <progress id="dashboard-loading-bar" max="100" value="10" aria-label="Dashboard loading progress"></progress>
+        <span><span id="dashboard-loading-elapsed">10 seconds elapsed</span><span id="dashboard-loading-remaining">Estimated time remaining: calculating…</span></span>
+      </section>
     </div>
     <div class="app-shell" id="app-shell">
       <aside class="sidebar" id="sidebar">
@@ -215,8 +246,47 @@
         <button id="notifications-more" class="button button-outline" type="button" hidden>Load more</button>
       </div>
     </dialog>
-    <dialog class="app-modal" id="booking-modal" aria-labelledby="booking-title"><form method="dialog" class="modal-frame" id="booking-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">REVIEW BEFORE YOU REQUEST</p><h2 id="booking-title">Confirm booking details</h2><p class="modal-description" id="booking-description"></p><input type="hidden" id="booking-provider-id" /><input type="hidden" id="booking-negotiation-id" /><label>Service<select id="booking-service" required></select></label><section class="booking-agreement-review" id="booking-agreement-review" hidden><div><span>PROVIDER</span><strong id="booking-provider-summary"></strong></div><div><span>AGREED SCOPE</span><p id="booking-scope-summary"></p></div><div class="booking-agreement-prices"><span>Original listing <strong id="booking-original-price"></strong></span><span>Final agreed price <strong id="booking-agreed-price"></strong></span></div></section><div class="form-row"><label>Preferred date<input id="booking-date" type="date" required /></label><label>Preferred time<input id="booking-time" type="time" value="10:00" required aria-describedby="booking-availability-note" /></label></div><p class="booking-availability-note" id="booking-availability-note">Your preferred time is a request, not a reservation. The provider must confirm it.</p><label>Where or how should the service happen? <span class="label-hint">(optional)</span><input id="booking-location" maxlength="500" placeholder="Online, campus area, or another agreed arrangement" /></label><label>Additional instructions <span class="label-hint">(optional)</span><textarea id="booking-note" rows="3" maxlength="1000" placeholder="Anything else the provider should know?"></textarea></label><div class="booking-summary" aria-live="polite"><span id="booking-price-label">Listed price</span><strong id="booking-price"></strong><p id="booking-price-detail"></p></div><label class="booking-confirm-check" id="booking-confirm-label" hidden><input id="booking-confirm-details" type="checkbox" /><span>I’ve reviewed the service scope, price, date and arrangement. I understand this is a request and the provider still needs to confirm.</span></label><p class="booking-payment-note" id="booking-payment-note">No payment is taken by Skillmate.</p><button class="button button-primary modal-submit" id="booking-submit" type="submit">Submit Booking Request</button></form></dialog>
-    <dialog class="app-modal" id="price-offer-modal" aria-labelledby="price-offer-title"><form class="modal-frame" id="price-offer-form" novalidate><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">PRICE NEGOTIATION</p><h2 id="price-offer-title">Make a price offer</h2><p class="modal-description" id="price-offer-description"></p><input type="hidden" id="price-offer-provider-id" /><input type="hidden" id="price-offer-service-id" /><input type="hidden" id="price-offer-negotiation-id" /><input type="hidden" id="price-offer-response-id" /><input type="hidden" id="price-offer-action" /><input type="hidden" id="price-offer-conversation-id" /><label>Price (GH₵)<input id="price-offer-amount" type="number" min="0.01" max="99999999.99" step="0.01" required /></label><label>Message <span class="label-hint">(optional)</span><textarea id="price-offer-message" rows="3" maxlength="500" placeholder="Add a note about your proposal."></textarea></label><p class="settings-feedback" id="price-offer-feedback" role="status" aria-live="polite" hidden></p><button class="button button-primary modal-submit" type="submit">Send offer</button></form></dialog>
+    <dialog class="app-modal booking-modal" id="booking-modal" aria-labelledby="booking-title">
+      <form method="dialog" class="modal-frame booking-form" id="booking-form">
+        <header class="booking-header">
+          <div><p class="eyebrow">BOOKING REQUEST</p><h2 id="booking-title">Request this service</h2></div>
+          <button class="modal-close" type="button" data-close aria-label="Close booking">×</button>
+        </header>
+        <p class="booking-context" id="booking-description"></p>
+        <input type="hidden" id="booking-provider-id" />
+        <input type="hidden" id="booking-negotiation-id" />
+        <section class="booking-service-summary" aria-live="polite">
+          <div class="booking-service-copy"><span class="booking-field-kicker">SERVICE</span><strong id="booking-summary-service"></strong><small id="booking-provider-name"></small></div>
+          <div class="booking-price-copy"><span id="booking-price-label">Listed price</span><strong id="booking-price"></strong><span id="booking-negotiable-badge" class="booking-price-type">Negotiable</span></div>
+        </section>
+        <label id="booking-service-switch" class="booking-service-switch" hidden>Switch service<select id="booking-service" required></select></label>
+        <section class="booking-agreement-review" id="booking-agreement-review" hidden>
+          <div><span>PROVIDER</span><strong id="booking-provider-summary"></strong></div>
+          <div><span>AGREED SCOPE</span><p id="booking-scope-summary"></p></div>
+          <div class="booking-agreement-prices"><span>Original listing <strong id="booking-original-price"></strong></span><span>Agreed price <strong id="booking-agreed-price"></strong></span></div>
+        </section>
+        <section class="booking-input-section" aria-label="Appointment details">
+          <div class="booking-date-time form-row">
+            <label>Preferred date<input id="booking-date" type="date" required aria-describedby="booking-availability-note" /></label>
+            <label>Preferred time<input id="booking-time" type="time" value="10:00" required aria-describedby="booking-availability-note" /></label>
+          </div>
+          <label class="booking-location-label">Location<select id="booking-location-type" required aria-controls="booking-location-details"></select></label>
+          <label id="booking-location-details" class="booking-location-details" hidden>Location details<input id="booking-location" maxlength="493" placeholder="Building, area or meeting point" /></label>
+        </section>
+        <details class="booking-instructions" id="booking-instructions">
+          <summary>Add instructions <span>(optional)</span></summary>
+          <label for="booking-note">Anything the provider should know?</label>
+          <textarea id="booking-note" rows="2" maxlength="1000" placeholder="Share a helpful detail"></textarea>
+        </details>
+        <label class="booking-confirm-check" id="booking-confirm-label" hidden><input id="booking-confirm-details" type="checkbox" /><span>I’ve reviewed the agreed service scope and price.</span></label>
+        <div id="booking-negotiation-option" class="booking-negotiation-option" hidden><button id="booking-negotiate" class="booking-inline-link" type="button">Prefer a different price? <span>Negotiate in chat →</span></button></div>
+        <footer class="booking-submit-footer">
+          <p class="booking-availability-note" id="booking-availability-note">The provider must confirm your requested appointment.</p>
+          <button class="button button-primary modal-submit" id="booking-submit" type="submit">Send Booking Request</button>
+        </footer>
+      </form>
+    </dialog>
+    <dialog class="app-modal" id="price-offer-modal" aria-labelledby="price-offer-title"><form class="modal-frame" id="price-offer-form" novalidate><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">PRICE NEGOTIATION</p><h2 id="price-offer-title">Make a price offer</h2><p class="modal-description" id="price-offer-description"></p><section class="price-offer-service-summary" id="price-offer-service-summary" aria-label="Selected service" hidden><strong id="price-offer-service-name"></strong><span>Listed price <strong id="price-offer-listed-price"></strong></span></section><input type="hidden" id="price-offer-provider-id" /><input type="hidden" id="price-offer-service-id" /><input type="hidden" id="price-offer-negotiation-id" /><input type="hidden" id="price-offer-response-id" /><input type="hidden" id="price-offer-action" /><input type="hidden" id="price-offer-conversation-id" /><label>Proposed price (GH₵)<input id="price-offer-amount" type="number" min="0.01" max="99999999.99" step="0.01" required /></label><label>Message <span class="label-hint">(optional)</span><textarea id="price-offer-message" rows="3" maxlength="500" placeholder="Add a note about your proposal."></textarea></label><p class="settings-feedback" id="price-offer-feedback" role="status" aria-live="polite" hidden></p><button class="button button-primary modal-submit" id="price-offer-submit" type="submit">Send offer</button></form></dialog>
     <dialog class="app-modal" id="appointment-proposal-modal" aria-labelledby="appointment-proposal-title"><form class="modal-frame" id="appointment-proposal-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">BOOKING SCHEDULE</p><h2 id="appointment-proposal-title">Suggest another time</h2><p class="modal-description">The customer must approve this time. The booking stays unconfirmed until they respond.</p><input type="hidden" id="appointment-proposal-booking-id" /><div class="form-row"><label>Suggested date<input id="appointment-proposal-date" type="date" required /></label><label>Suggested time<input id="appointment-proposal-time" type="time" required /></label></div><p class="settings-feedback" id="appointment-proposal-feedback" role="status" aria-live="polite" hidden></p><button class="button button-primary modal-submit" type="submit">Send time suggestion</button></form></dialog>
     <dialog class="app-modal" id="groups-modal" aria-labelledby="groups-title"><div class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close groups">×</button><p class="eyebrow">BETTER TOGETHER</p><h2 id="groups-title">Book with friends</h2><p class="modal-description">Join a group for this provider or suggest a group of your own. Confirm the price together before booking.</p><div class="group-grid" id="group-grid"></div><button class="button button-primary" type="button" data-open="group-modal">Start a group</button></div></dialog>
     <dialog class="app-modal" id="group-modal"><form method="dialog" class="modal-frame" id="group-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">MAKE IT A GROUP BOOKING</p><h2>Book as a group</h2><p class="modal-description">Choose a service, invite classmates, and suggest what each person should pay.</p><label>Choose a service<select id="group-service" required></select></label><div class="form-row"><label>Group size<select id="group-capacity"><option value="3">Up to 3 students</option><option value="4" selected>Up to 4 students</option><option value="5">Up to 5 students</option><option value="6">Up to 6 students</option><option value="8">Up to 8 students</option></select></label><label>Preferred date<input id="group-date" type="date" required /></label></div><label>Suggested price per person (GH₵)<input id="group-price" type="number" min="1" step="1" required /></label><label>Invite message <span class="label-hint">(optional)</span><input id="group-message" maxlength="100" placeholder="Need your laptop cleaned? Join our group." /></label><button class="button button-primary modal-submit" type="submit">Post group booking</button><small class="modal-footnote">Your price is a suggestion. Confirm the final price and appointment details with the provider.</small></form></dialog>
@@ -244,8 +314,8 @@
             <fieldset class="service-negotiation">
               <legend>Pricing &amp; negotiation</legend>
               <label class="service-negotiation-choice"><input id="service-negotiation-mode-fixed" name="service-negotiation-mode" type="radio" value="fixed" required /><span><strong>Fixed Price</strong><small>This is the final price for the listed service. No price discussion or proposal actions appear in chat.</small></span></label>
-              <label class="service-negotiation-choice"><input id="service-negotiation-mode-negotiation" name="service-negotiation-mode" type="radio" value="negotiation" required /><span><strong>Negotiation</strong><small>Discuss the price in chat or make formal offers. The agreed service stays as listed.</small></span></label>
-              <label class="service-negotiation-choice"><input id="service-negotiation-mode-hybrid" name="service-negotiation-mode" type="radio" value="hybrid" required /><span><strong>Hybrid Negotiation</strong><small>Negotiate both price and service scope. Use the offer note to describe agreed changes.</small></span></label>
+              <label class="service-negotiation-choice"><input id="service-negotiation-mode-negotiation" name="service-negotiation-mode" type="radio" value="negotiation" required /><span><strong>Negotiable</strong><small>Discuss the price in chat or make formal offers. The agreed service stays as listed.</small></span></label>
+              <label class="service-negotiation-choice"><input id="service-negotiation-mode-hybrid" name="service-negotiation-mode" type="radio" value="hybrid" required /><span><strong>Negotiable · price &amp; scope</strong><small>Negotiate both price and service scope. Use the offer note to describe agreed changes.</small></span></label>
               <small id="service-negotiation-mode-error" class="service-field-error" hidden></small>
               <div id="service-minimum-price-field" class="service-field" hidden><label for="service-minimum-price">Minimum acceptable price (GH₵)</label><input id="service-minimum-price" type="number" inputmode="decimal" min="0.01" max="99999999.99" step="0.01" placeholder="30.00" aria-describedby="service-minimum-price-hint service-minimum-price-error" /><small id="service-minimum-price-hint" class="service-helper">Private. Offers below this amount cannot be accepted.</small><small id="service-minimum-price-error" class="service-field-error" hidden></small></div>
             </fieldset>
@@ -277,7 +347,14 @@
     <dialog class="app-modal" id="report-modal"><form method="dialog" class="modal-frame" id="report-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">HELP KEEP SKILLMATE SAFE</p><h2>Report a concern</h2><p class="modal-description" id="report-description">Tell us what happened. The safety team will review your report.</p><input type="hidden" id="report-provider-id" /><label>Student you’re reporting<select id="report-target"><option value="">Choose a student</option><option value="daniel">Daniel Owusu</option><option value="akosua">Akosua Appiah</option><option value="nana">Nana Adu</option><option value="michael">Michael Frimpong</option><option value="efua">Efua Boateng</option><option value="kojo">Kojo Asare</option></select></label><label>What’s the issue?<select id="report-reason"><option>Suspicious profile or fraud</option><option>Harassment or inappropriate messages</option><option>Booking or payment disagreement</option><option>Unsafe or poor conduct</option><option>Other safety concern</option></select></label><label>Details<textarea id="report-details" rows="3" required maxlength="400" placeholder="Share only the details needed to understand the concern."></textarea></label><label class="check-label"><input id="report-block" type="checkbox" /> Block this student too</label><button class="button button-danger modal-submit" type="submit"><span aria-hidden="true">&#9888;</span> Submit report</button></form></dialog>
     <dialog class="app-modal" id="blocked-modal"><form method="dialog" class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">YOUR SAFETY CONTROLS</p><h2>Blocked students</h2><p class="modal-description">Blocked students are removed from your marketplace and message list on this device.</p><div class="blocked-list" id="blocked-list"></div></form></dialog>
     <dialog class="app-modal" id="review-modal"><form method="dialog" class="modal-frame" id="review-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">HELP STUDENTS CHOOSE WELL</p><h2>Leave a review</h2><p class="modal-description" id="review-description"></p><input type="hidden" id="review-booking-id" /><label>Your rating<select id="review-rating"><option value="5">★★★★★ — Great</option><option value="4">★★★★☆ — Good</option><option value="3">★★★☆☆ — Okay</option><option value="2">★★☆☆☆ — Not great</option><option value="1">★☆☆☆☆ — Poor</option></select></label><label>Share your experience<textarea id="review-text" rows="3" required maxlength="300" placeholder="What should another student know?"></textarea></label><button class="button button-primary modal-submit" type="submit">Post review</button></form></dialog>
-    <div class="loading-indicator" id="loading-indicator" role="status" aria-live="polite" hidden><span class="loading-spinner" aria-hidden="true"></span><span id="loading-label">Working on it…</span></div>
+    <div class="loading-indicator" id="loading-indicator" role="status" aria-live="polite" hidden>
+      <span class="loading-spinner" aria-hidden="true"></span>
+      <span id="loading-label">Working on it…</span>
+      <span class="loading-long-status" id="loading-long-status" hidden>
+        <progress id="loading-progress" max="100" value="10" aria-label="Action progress"></progress>
+        <span><span id="loading-elapsed">10 seconds elapsed</span><span id="loading-remaining">Estimated time remaining: calculating…</span></span>
+      </span>
+    </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script defer src="supabase-config.js"></script>
@@ -287,7 +364,7 @@
     <script defer src="service-form-utils.js?v=2"></script>
     <script defer src="marketplace-utils.js?v=2"></script>
     <script defer src="push-notification-platform.js?v=1"></script>
-    <script defer src="user.js?v=33"></script>
+    <script defer src="user.js?v=39"></script>
     <script defer src="service-form.js?v=3"></script>
     <script defer src="notifications.js?v=1"></script>
   </body>

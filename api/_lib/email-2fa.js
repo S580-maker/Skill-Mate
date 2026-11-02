@@ -171,9 +171,10 @@ function respondError(response, status, message) {
 
 async function deleteExpiredChallenges() {
   const before = encodeURIComponent(new Date().toISOString());
-  await supabaseRequest(`/rest/v1/auth_login_challenges?expires_at=lt.${before}`, {
+  const { response } = await supabaseRequest(`/rest/v1/auth_login_challenges?expires_at=lt.${before}`, {
     method: "DELETE",
   }, true);
+  if (!response.ok) throw new Error("Could not clean up expired email verification challenges.");
 }
 
 async function findRecentChallenge(email) {

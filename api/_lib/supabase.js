@@ -1,3 +1,7 @@
+const otpSessionLifetimeMs = 30 * 24 * 60 * 60 * 1000;
+const expiredOtpSessionCleanupIntervalMs = 6 * 60 * 60 * 1000;
+let lastExpiredOtpSessionCleanupAt = 0;
+
 function getSupabaseConfig() {
   const rawUrl = process.env.SUPABASE_URL?.trim();
   const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
@@ -73,6 +77,7 @@ async function isOtpVerifiedSession(accessToken, userId) {
     select: "session_id",
     session_id: `eq.${sessionId}`,
     user_id: `eq.${userId}`,
+    expires_at: `gt.${new Date().toISOString()}`,
     limit: "1",
   });
   const response = await fetch(`${config.url}/rest/v1/verified_auth_sessions?${query}`, {
@@ -82,6 +87,22 @@ async function isOtpVerifiedSession(accessToken, userId) {
   if (!response.ok) throw new Error(`OTP session lookup returned HTTP ${response.status}.`);
   const rows = await response.json();
   return rows.length > 0;
+}
+
+async function cleanupExpiredOtpSessions(config, serviceRoleKey) {
+  if (Date.now() - lastExpiredOtpSessionCleanupAt < expiredOtpSessionCleanupIntervalMs) return;
+  const query = new URLSearchParams({ expires_at: `lt.${new Date().toISOString()}` });
+  const response = await fetch(`${config.url}/rest/v1/verified_auth_sessions?${query}`, {
+    method: "DELETE",
+    headers: {
+      apikey: serviceRoleKey,
+      authorization: `Bearer ${serviceRoleKey}`,
+      Prefer: "return=minimal",
+    },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Could not clean up expired verified sessions (HTTP ${response.status}).`);
+  lastExpiredOtpSessionCleanupAt = Date.now();
 }
 
 async function recordOtpVerifiedSession(accessToken) {
@@ -98,13 +119,47 @@ async function recordOtpVerifiedSession(accessToken) {
       apikey: serviceRoleKey,
       authorization: `Bearer ${serviceRoleKey}`,
       "content-type": "application/json",
-      Prefer: "resolution=ignore-duplicates,return=minimal",
+      Prefer: "resolution=merge-duplicates,return=minimal",
     },
-    body: JSON.stringify({ session_id: sessionId, user_id: user.id }),
+    body: JSON.stringify({
+      session_id: sessionId,
+      user_id: user.id,
+      expires_at: new Date(Date.now() + otpSessionLifetimeMs).toISOString(),
+    }),
     signal: AbortSignal.timeout(8000),
   });
   if (!response.ok) throw new Error(`Could not record the verified OTP session (HTTP ${response.status}).`);
+  await cleanupExpiredOtpSessions(config, serviceRoleKey);
   return user;
+}
+
+async function extendOtpVerifiedSession(accessToken, userId) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!serviceRoleKey) throw new Error("OTP session verification is not configured on this server.");
+  const sessionId = getSupabaseSessionId(accessToken);
+  if (!sessionId) return false;
+  const config = getSupabaseConfig();
+  const now = new Date().toISOString();
+  const query = new URLSearchParams({
+    session_id: `eq.${sessionId}`,
+    user_id: `eq.${userId}`,
+    expires_at: `gt.${now}`,
+  });
+  const response = await fetch(`${config.url}/rest/v1/verified_auth_sessions?${query}`, {
+    method: "PATCH",
+    headers: {
+      apikey: serviceRoleKey,
+      authorization: `Bearer ${serviceRoleKey}`,
+      "content-type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify({ expires_at: new Date(Date.now() + otpSessionLifetimeMs).toISOString() }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Could not extend the verified sign-in session (HTTP ${response.status}).`);
+  const updatedSessions = await response.json();
+  await cleanupExpiredOtpSessions(config, serviceRoleKey);
+  return updatedSessions.length > 0;
 }
 
 async function getUserRole(userId, accessToken) {
@@ -171,6 +226,7 @@ module.exports = {
   getSupabaseUser,
   getUserRole,
   isOtpVerifiedSession,
+  extendOtpVerifiedSession,
   recordOtpVerifiedSession,
   setSessionCookie,
 };

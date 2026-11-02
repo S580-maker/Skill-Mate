@@ -66,18 +66,26 @@
           button.className = "button button-outline button-small";
           button.textContent = "Mark as read";
           button.setAttribute("aria-label", `Mark as read: ${item.title}`);
-          button.addEventListener("click", async () => {
-            button.disabled = true;
-            try {
-              const { error } = await appSupabase.from("notifications")
-                .update({ read_at: new Date().toISOString() }).eq("id", item.id);
-              if (error) throw error;
-              button.replaceWith(document.createTextNode("Read"));
-              status.textContent = "Notification marked as read.";
-            } catch {
-              button.disabled = false;
-              status.textContent = "Could not mark this notification as read. Please try again.";
-            }
+          button.addEventListener("click", () => {
+            const previousReadAt = item.read_at;
+            const readAt = new Date().toISOString();
+            item.read_at = readAt;
+            const readLabel = document.createTextNode("Read");
+            button.replaceWith(readLabel);
+            status.textContent = "Marking notification as read…";
+            void (async () => {
+              try {
+                const { error } = await appSupabase.from("notifications")
+                  .update({ read_at: readAt }).eq("id", item.id);
+                if (error) throw error;
+                status.textContent = "Notification marked as read.";
+              } catch (error) {
+                console.error("Could not mark the Skillmate notification as read.", error);
+                item.read_at = previousReadAt;
+                readLabel.replaceWith(button);
+                status.textContent = "Could not mark this notification as read. Please try again.";
+              }
+            })();
           });
           row.append(button);
         } else {

@@ -67,7 +67,42 @@ test("pricing modes are simplified, legacy modes migrate safely and fixed servic
   assert.match(userScript, /negotiationMode !== "fixed"/);
   assert.match(userScript, /service\.negotiationMode === "fixed" \? "Fixed Price"/);
   assert.match(userScript, /service\.negotiationMode !== "fixed" \? `<span class="detail-negotiation-actions">/);
-  assert.match(userScript, /if \(!isProvider && \["negotiation", "hybrid"\]\.includes\(service\.negotiationMode\)\)/);
-  assert.match(userScript, /action\.textContent = "Propose a price"/);
+  assert.match(userScript, /serviceMap\.set\(service\.id, service\)/);
+  assert.match(userScript, /propose\.textContent = "Propose Price"/);
+  assert.match(userScript, /function createChatPriceOfferCard/);
   assert.match(consolidatedModesMigration, /Fixed Price does not use a minimum price/);
+});
+
+test("fixed services reject direct negotiation writes and preserve prior negotiation history", () => {
+  const createNegotiation = consolidatedModesMigration.slice(
+    consolidatedModesMigration.indexOf("create or replace function public.create_price_negotiation"),
+    consolidatedModesMigration.indexOf("create or replace function public.decide_price_offer"),
+  );
+  const decideOffer = consolidatedModesMigration.slice(
+    consolidatedModesMigration.indexOf("create or replace function public.decide_price_offer"),
+  );
+  const saveListing = consolidatedModesMigration.slice(
+    consolidatedModesMigration.indexOf("create or replace function public.save_service_listing"),
+    consolidatedModesMigration.indexOf("create or replace function public.create_price_negotiation"),
+  );
+  assert.match(createNegotiation, /v_service\.negotiation_mode = 'fixed'/);
+  assert.match(decideOffer, /v_service\.negotiation_mode = 'fixed'/);
+  assert.match(fixedModeMigration, /create trigger reject_fixed_price_negotiation\s+before insert or update on public\.price_negotiations/);
+  assert.match(fixedModeMigration, /create trigger reject_fixed_price_offer\s+before insert or update on public\.price_offers/);
+  assert.match(migration, /revoke all on public\.price_negotiations from public, anon, authenticated/);
+  assert.match(migration, /revoke all on public\.price_offers from public, anon, authenticated/);
+  assert.match(migration, /revoke insert, update on public\.services from authenticated/);
+  assert.match(migration, /grant update \(is_active\) on public\.services to authenticated/);
+  assert.doesNotMatch(saveListing, /delete from public\.price_negotiations|delete from public\.price_offers/);
+  assert.match(saveListing, /where id = p_service_id and provider_id = auth\.uid\(\)/);
+});
+
+test("chat bar shows booking for fixed services and negotiation only for negotiable services", () => {
+  assert.match(userScript, /if \(service\.active\s+&& \(service\.providerId === appUser\?\.id \|\| service\.providerId === chat\.providerId\)\)/);
+  assert.match(userScript, /selectedService\.negotiationMode === "fixed"\s+\? `Fixed price · \$\{currency\(selectedService\.price\)\}`/);
+  assert.match(userScript, /selectedService\.negotiationMode === "fixed"\) \{\s+if \(selectedService\.providerId !== appUser\?\.id/);
+  assert.match(userScript, /book\.textContent = "Continue to Booking"/);
+  assert.match(userScript, /if \(selectedService\.negotiationMode !== "fixed" && negotiation\?\.state === "agreed"\)/);
+  assert.match(index, /<strong>Negotiable<\/strong>/);
+  assert.match(userScript, /selector\.dataset\.chatServiceSelect = ""/);
 });

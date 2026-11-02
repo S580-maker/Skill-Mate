@@ -242,7 +242,10 @@ test("Google sign-in requires email verification before returning a Supabase ses
         token_type: "bearer",
       },
     });
-    assert.deepEqual(recordedVerifiedSession, { session_id: sessionId, user_id: userId });
+    assert.equal(recordedVerifiedSession.session_id, sessionId);
+    assert.equal(recordedVerifiedSession.user_id, userId);
+    assert.ok(Date.parse(recordedVerifiedSession.expires_at) > Date.now() + 29 * 24 * 60 * 60 * 1000);
+    assert.ok(Date.parse(recordedVerifiedSession.expires_at) < Date.now() + 31 * 24 * 60 * 60 * 1000);
   } finally {
     global.fetch = originalFetch;
     nodemailer.createTransport = originalTransport;

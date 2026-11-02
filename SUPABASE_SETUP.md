@@ -59,6 +59,16 @@ Then apply `supabase/migrations/20261105100000_fixed_price_negotiation_mode.sql`
 
 If an existing project reports `infinite recursion detected in policy for relation "messages"` after applying the messaging migration, apply `supabase/migrations/20261026_fix_message_rls_recursion.sql` once. It moves conversation membership, block, and reply checks into narrowly scoped security-definer functions so message policies do not recursively query the protected messages table.
 
+### Performance and security rollout
+
+For existing projects, review the actual database schema and remote migration ledger before applying `supabase/migrations/20261102160000_performance_security.sql`. It removes permanent message deletion, stops copying message text into notification bodies, adds notification reference columns when needed, and gives verified OTP sessions a 30-day expiry. This repository's remote migration history is incomplete: do not run `supabase db push`, replay `schema.sql`, or mark historical migrations applied until the remote schema and ledger have been reconciled. Apply the reviewed SQL migration before deploying the matching server code, which reads and updates `expires_at`. The migration is not applied automatically by this app.
+
+Chat Realtime is scoped to the currently open conversation; a 30-second polling fallback runs only while that conversation's channel is disconnected. Dashboard collections are fetched in ordered pages of 100 to avoid PostgREST response caps. Profile, onboarding, support-screenshot and portfolio uploads are resized/re-encoded to WebP in the browser; the configured source limit is 5 MB, and portfolio output is capped at 1 MB.
+
+Rate limits use per-process memory by default. For counters shared across server instances, create an Upstash Redis database and set both `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in every server environment. HTTPS is required. Never add these values to browser configuration. HTTP request metrics are logged by the Express server; Vercel serverless functions and Supabase database/storage usage need their respective hosting and Supabase dashboards and are not measured by this middleware.
+
+Run `npm run test:load` only against a local Skillmate server. It sends a bounded set of requests to the local static login page; it is a smoke/load check, not a capacity claim for database, storage, Realtime, or 1,000 concurrent users. Do not target production Supabase with synthetic load without an approved test plan.
+
 ## 3. Install and run Skillmate
 
 Install dependencies and start the Express server:

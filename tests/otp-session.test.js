@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   getSupabaseSessionId,
   isOtpVerifiedSession,
+  extendOtpVerifiedSession,
   recordOtpVerifiedSession,
 } = require("../api/_lib/supabase");
 const sessionHandler = require("../api/_lib/routes/session");
@@ -54,6 +55,7 @@ test("verified OTP session lookup is bound to the exact user and auth session", 
   assert.equal(await isOtpVerifiedSession(token({ session_id: sessionId }), userId), true);
   assert.match(requestUrl, new RegExp(`session_id=eq\\.${sessionId}`));
   assert.match(requestUrl, new RegExp(`user_id=eq\\.${userId}`));
+  assert.match(requestUrl, /expires_at=gt\./);
   assert.equal(requestHeaders.apikey, "server-only-service-key");
   assert.equal(await isOtpVerifiedSession(token({ session_id: "invalid" }), userId), false);
 });
@@ -66,19 +68,42 @@ test("OTP completion records only a valid Supabase auth session", async () => {
     if (url.endsWith("/auth/v1/user")) {
       return { ok: true, status: 200, json: async () => ({ id: userId }) };
     }
-    return { ok: true, status: 201 };
+    return { ok: true, status: 201, json: async () => [] };
   };
 
   const user = await recordOtpVerifiedSession(token({ session_id: sessionId }));
 
   assert.equal(user.id, userId);
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
   assert.match(requests[1].url, /verified_auth_sessions\?on_conflict=session_id$/);
-  assert.deepEqual(JSON.parse(requests[1].options.body), {
+  const recorded = JSON.parse(requests[1].options.body);
+  assert.deepEqual(Object.keys(recorded).sort(), ["expires_at", "session_id", "user_id"]);
+  assert.equal(Date.parse(recorded.expires_at) > Date.now() + 29 * 24 * 60 * 60 * 1000, true);
+  assert.equal(Date.parse(recorded.expires_at) < Date.now() + 31 * 24 * 60 * 60 * 1000, true);
+  assert.deepEqual({ session_id: recorded.session_id, user_id: recorded.user_id }, {
     session_id: sessionId,
     user_id: userId,
   });
   assert.equal(requests[1].options.headers.apikey, "server-only-service-key");
+  assert.equal(requests[2].options.method, "DELETE");
+});
+
+test("OTP-verified session renewal extends only a non-expired matching user session", async () => {
+  configureSupabase();
+  const requests = [];
+  global.fetch = async (url, options) => {
+    requests.push({ url, options });
+    return {
+      ok: true,
+      json: async () => options.method === "PATCH" ? [{ session_id: sessionId }] : [],
+    };
+  };
+  assert.equal(await extendOtpVerifiedSession(token({ session_id: sessionId }), userId), true);
+  assert.match(requests[0].url, new RegExp(`session_id=eq\\.${sessionId}`));
+  assert.match(requests[0].url, new RegExp(`user_id=eq\\.${userId}`));
+  assert.match(requests[0].url, /expires_at=gt\./);
+  const expiresAt = JSON.parse(requests[0].options.body).expires_at;
+  assert.equal(Date.parse(expiresAt) > Date.now() + 29 * 24 * 60 * 60 * 1000, true);
 });
 
 test("session endpoint requires OTP proof before issuing its server cookie", async () => {
@@ -113,11 +138,14 @@ test("session endpoint requires OTP proof before issuing its server cookie", asy
 test("OTP-verified persistent sessions continue to receive the server cookie", async () => {
   configureSupabase();
   const accessToken = token({ session_id: sessionId });
-  global.fetch = async (url) => {
+  global.fetch = async (url, options) => {
     if (url.endsWith("/auth/v1/user")) {
       return { ok: true, status: 200, json: async () => ({ id: userId }) };
     }
-    return { ok: true, json: async () => [{ session_id: sessionId }] };
+    return {
+      ok: true,
+      json: async () => options.method === "PATCH" ? [{ session_id: sessionId }] : [{ session_id: sessionId }],
+    };
   };
   const result = {
     statusCode: 0,

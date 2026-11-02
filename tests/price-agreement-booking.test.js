@@ -9,6 +9,7 @@ const migration = fs.readFileSync(
   "utf8",
 );
 const userScript = fs.readFileSync(path.join(root, "user.js"), "utf8");
+const userStyle = fs.readFileSync(path.join(root, "user.css"), "utf8");
 const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const notifications = fs.readFileSync(path.join(root, "notifications.js"), "utf8");
 
@@ -64,26 +65,33 @@ test("agreed booking UI requires customer confirmation and exposes time approval
   assert.match(userScript, /skillmate:open-booking/);
 });
 
-test("existing chats expose service-specific negotiation actions and agreed booking links", () => {
-  assert.match(userScript, /chatServices = connectedServices\.filter/);
-  assert.match(userScript, /action\.dataset\.chatPriceAction = "discuss"/);
-  assert.match(userScript, /offer\.dataset\.chatPriceAction = "offer"/);
-  assert.match(userScript, /textContent = "Propose a price"/);
+test("existing chats expose the compact service bar and agreed booking link", () => {
+  assert.match(userScript, /const chatServices = \[\.\.\.serviceMap\.values\(\)\]/);
+  assert.match(userScript, /actions\.className = "chat-negotiation-actions"/);
+  assert.match(userScript, /propose\.dataset\.chatPricePropose = ""/);
+  assert.match(userScript, /propose\.textContent = "Propose Price"/);
+  assert.match(userScript, /selector\.dataset\.chatServiceSelect = ""/);
   assert.match(userScript, /action === "counter" \|\| action === "proposal" \|\| action === "initial"/);
+  assert.match(userScript, /function createChatPriceOfferCard/);
   assert.match(userScript, /data-negotiation-chat="\$\{escapeHTML\(booking\.priceNegotiationId\)\}"/);
   assert.match(userScript, /function handleNegotiationChatAction/);
   assert.match(index, /id="price-offer-conversation-id"/);
+  assert.match(index, /id="price-offer-service-summary"/);
+  assert.match(index, /id="price-offer-submit"/);
   assert.match(userScript, /conversationId: chat\.id/);
   assert.match(userScript, /let conversationId = activeConversationId/);
   assert.match(userScript, /error\.userMessage = error\.message\.trim\(\)\.slice\(0, 240\)/);
+  assert.match(userStyle, /@media \(max-width: 680px\) \{\s+\.chat-negotiations \{ display: grid;/);
+  assert.match(userStyle, /\.chat-proposal-card \{[^}]*line-height: 1\.3;/);
 });
 
-test("price-only proposals hide notes while Hybrid proposals can describe scope changes", () => {
-  assert.match(userScript, /messageLabel\.hidden = action === "proposal" && service\?\.negotiationMode !== "hybrid"/);
-  assert.match(userScript, /action === "proposal" && service\?\.negotiationMode !== "hybrid"\s+\? "" : document\.querySelector\("#price-offer-message"\)\.value\.trim\(\)/);
+test("chat proposal sheet includes a message without changing legacy price-only behavior", () => {
+  assert.match(userScript, /messageLabel\.hidden = action === "proposal" && service\?\.negotiationMode !== "hybrid" && !chatProposal/);
+  assert.match(userScript, /action === "proposal" && service\?\.negotiationMode !== "hybrid" && !isChatProposal\s+\? "" : document\.querySelector\("#price-offer-message"\)\.value\.trim\(\)/);
+  assert.match(userScript, /modal\.classList\.toggle\("chat-price-sheet", chatProposal\)/);
 });
 
 test("counteroffer action is available in both formal negotiation modes", () => {
   assert.match(userScript, /const availableActions = \[\["accept", "Accept"\], \["reject", "Reject"\]\]/);
-  assert.match(userScript, /if \(\["negotiation", "hybrid"\]\.includes\(mode\)\) availableActions\.push\(\["counter", "Counter"\]\)/);
+  assert.match(userScript, /if \(\["negotiation", "hybrid"\]\.includes\(service\?\.negotiationMode\)\) availableActions\.push\(\["counter", "Counter"\]\)/);
 });

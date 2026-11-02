@@ -1,5 +1,6 @@
 const {
   clearSessionCookie,
+  extendOtpVerifiedSession,
   getBearerToken,
   getSupabaseUser,
   isOtpVerifiedSession,
@@ -27,6 +28,13 @@ module.exports = async function session(request, response) {
       return response.status(401).json({ error: "Your sign-in session has expired. Please sign in again." });
     }
     if (!await isOtpVerifiedSession(accessToken, user.id)) {
+      clearSessionCookie(response);
+      return response.status(403).json({
+        code: "OTP_VERIFICATION_REQUIRED",
+        error: "Verify your email to continue.",
+      });
+    }
+    if (!await extendOtpVerifiedSession(accessToken, user.id)) {
       clearSessionCookie(response);
       return response.status(403).json({
         code: "OTP_VERIFICATION_REQUIRED",

@@ -148,7 +148,7 @@
       byId("review-price").textContent = currency(draft.price);
       byId("review-symbol").textContent = getCategoryIcon(draft.category);
       const tags = [utils.deliveryLabels[draft.deliveryMethod], draft.estimatedDelivery, draft.groups && "Groups welcome"].filter(Boolean);
-      tags.push({ fixed: "Fixed Price", negotiation: "Negotiation", hybrid: "Hybrid Negotiation" }[draft.negotiationMode]);
+      tags.push({ fixed: "Fixed Price", negotiation: "Negotiable", hybrid: "Negotiable · price & scope" }[draft.negotiationMode]);
       byId("review-tags").replaceChildren(...tags.map(text => {
         const tag = document.createElement("span"); tag.textContent = text; return tag;
       }));

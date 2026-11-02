@@ -175,11 +175,13 @@ async function saveOnboarding(skip = false) {
     let avatarUrl = existingAvatarUrl;
     const file = skip ? null : onboardingPhoto.files[0];
     if (file) {
-      const extension = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" })[file.type];
-      const imagePath = `${currentUser.id}/avatars/${crypto.randomUUID()}.${extension}`;
-      const { error: uploadError } = await onboardingClient.storage.from("portfolio-images").upload(imagePath, file, {
+      const compressedPhoto = await window.skillmateServiceUtils.compressImageFile(file, {
+        maxDimension: 1200, quality: 0.82,
+      });
+      const imagePath = `${currentUser.id}/avatars/${crypto.randomUUID()}.webp`;
+      const { error: uploadError } = await onboardingClient.storage.from("portfolio-images").upload(imagePath, compressedPhoto, {
         cacheControl: "3600",
-        contentType: file.type,
+        contentType: compressedPhoto.type,
         upsert: false,
       });
       if (uploadError) throw uploadError;

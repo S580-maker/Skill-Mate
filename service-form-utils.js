@@ -48,14 +48,46 @@
     if (mode === "controlled" || mode === "chat") return "negotiation";
     return ["fixed", "negotiation", "hybrid"].includes(mode) ? mode : "negotiation";
   }
-  function validateImageHeader(file, bytes) {
-    if (!file.size || file.size > MAX_IMAGE_BYTES) throw new Error("Choose an image up to 5 MB.");
+  function validateImageHeader(file, bytes, maxBytes = MAX_IMAGE_BYTES) {
+    if (!file.size || file.size > maxBytes) throw new Error(`Choose an image up to ${(maxBytes / 1_000_000).toFixed(0)} MB.`);
     const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
     const png = [137,80,78,71,13,10,26,10].every((value, i) => bytes[i] === value);
     const webp = String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
     if (!(file.type === "image/jpeg" && jpeg || file.type === "image/png" && png || file.type === "image/webp" && webp)) {
       throw new Error("Choose a valid JPG, PNG or WebP image. SVG and GIF files are not supported.");
     }
+  }
+  async function compressImageFile(file, {
+    maxDimension = 1600, quality = 0.84,
+    maxInputBytes = MAX_IMAGE_BYTES, maxOutputBytes = MAX_IMAGE_BYTES,
+  } = {}) {
+    if (typeof createImageBitmap !== "function" || typeof document === "undefined") {
+      throw new Error("Image compression is not supported by this browser. Try a current version of Chrome, Firefox or Safari.");
+    }
+    if (!file || file.size > maxInputBytes) throw new Error(`Choose an image smaller than ${(maxInputBytes / 1_000_000).toFixed(0)} MB.`);
+    validateImageHeader(file, new Uint8Array(await file.slice(0, 12).arrayBuffer()), maxInputBytes);
+    const bitmap = await createImageBitmap(file);
+    let output;
+    try {
+      if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 40_000_000) {
+        throw new Error("Choose an image with no more than 40 megapixels.");
+      }
+      const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("This image could not be prepared. Try another image.");
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      output = await new Promise(resolve => canvas.toBlob(resolve, "image/webp", quality));
+    } finally {
+      bitmap.close();
+    }
+    if (!output || output.type !== "image/webp" || output.size > maxOutputBytes) {
+      throw new Error("This image could not be compressed to a supported size. Try a smaller image.");
+    }
+    const name = `${file.name.replace(/\.[^.]+$/, "") || "image"}.webp`;
+    return new File([output], name, { type: "image/webp", lastModified: file.lastModified });
   }
   function metadata(row) {
     return { coverImagePath: row.cover_image_path || null, deliveryMethod: row.delivery_method || "",
@@ -69,7 +101,7 @@
       estimated_delivery: draft.estimatedDelivery || null, price_type: "fixed" });
     return result;
   }
-  const api = { MAX_IMAGE_BYTES, deliveryLabels, example, validate, validateImageHeader, normalizeNegotiationMode, metadata, payload };
+  const api = { MAX_IMAGE_BYTES, deliveryLabels, example, validate, validateImageHeader, compressImageFile, normalizeNegotiationMode, metadata, payload };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.skillmateServiceUtils = api;
 })(globalThis);

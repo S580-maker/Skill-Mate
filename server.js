@@ -5,9 +5,9 @@ const { randomUUID } = require("node:crypto");
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
-const { rateLimit } = require("express-rate-limit");
 const { isOtpVerifiedSession } = require("./api/_lib/supabase");
-const { apiRateLimit, authRateLimit } = require("./api/_lib/rate-limit");
+const { apiRateLimit, authRateLimit, createRateLimit } = require("./api/_lib/rate-limit");
+const { requestMetrics } = require("./api/_lib/http-metrics");
 
 const app = express();
 const projectRoot = __dirname;
@@ -24,6 +24,7 @@ app.set("trust proxy", process.env.TRUST_PROXY === "1");
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(express.json({ limit: "16kb" }));
 app.use(cookieParser());
+app.use(requestMetrics);
 app.use("/api", apiRateLimit);
 app.use("/api/auth", authRateLimit);
 
@@ -135,7 +136,7 @@ app.get("/api/push-config", (request, response) => {
   const { handlePushConfig } = require("./api/_lib/push");
   return handlePushConfig(request, response);
 });
-app.all("/api/push-subscriptions", rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+app.all("/api/push-subscriptions", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }, "push-subscriptions"), (request, response) => {
   const { handlePushSubscriptions } = require("./api/_lib/push");
   return handlePushSubscriptions(request, response);
 });
@@ -144,19 +145,19 @@ app.post("/api/push-dispatch", (request, response) => {
   return handlePushDispatch(request, response);
 });
 
-app.post("/api/auth/sign-in", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+app.post("/api/auth/sign-in", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }, "sign-in"), (request, response) => {
   const { signIn } = require("./api/_lib/email-2fa");
   return signIn(request, response);
 });
-app.post("/api/auth/google-2fa", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+app.post("/api/auth/google-2fa", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }, "google-2fa"), (request, response) => {
   const { googleSignIn } = require("./api/_lib/email-2fa");
   return googleSignIn(request, response);
 });
-app.post("/api/auth/session-otp", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+app.post("/api/auth/session-otp", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }, "session-otp"), (request, response) => {
   const { sessionSignIn } = require("./api/_lib/email-2fa");
   return sessionSignIn(request, response);
 });
-app.post("/api/auth/sign-up", rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+app.post("/api/auth/sign-up", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: "draft-7", legacyHeaders: false }, "sign-up"), (request, response) => {
   const { signUp } = require("./api/_lib/email-2fa");
   return signUp(request, response);
 });
@@ -164,15 +165,15 @@ app.delete("/api/auth/sign-in", (request, response) => {
   const { signIn } = require("./api/_lib/email-2fa");
   return signIn(request, response);
 });
-app.post("/api/auth/verify", rateLimit({ windowMs: 15 * 60 * 1000, limit: 15, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+app.post("/api/auth/verify", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 15, standardHeaders: "draft-7", legacyHeaders: false }, "verify"), (request, response) => {
   const { verify } = require("./api/_lib/email-2fa");
   return verify(request, response);
 });
-app.post("/api/auth/resend", rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+app.post("/api/auth/resend", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: "draft-7", legacyHeaders: false }, "resend"), (request, response) => {
   const { resend } = require("./api/_lib/email-2fa");
   return resend(request, response);
 });
-app.all("/api/auth/password-recovery", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }), (request, response) => {
+app.all("/api/auth/password-recovery", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }, "password-recovery"), (request, response) => {
   const { requestPasswordRecovery, updateRecoveredPassword } = require("./api/_lib/email-2fa");
   if (request.method === "POST") return requestPasswordRecovery(request, response);
   if (request.method === "PUT") return updateRecoveredPassword(request, response);
@@ -182,7 +183,7 @@ app.all("/api/auth/password-recovery", rateLimit({ windowMs: 15 * 60 * 1000, lim
 
 app.post(
   "/api/session",
-  rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }),
+  createRateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }, "account-delete"),
   async (request, response) => {
     const accessToken = getBearerToken(request);
     if (!accessToken) return response.status(401).json({ error: "A valid Supabase sign-in session is required." });

@@ -192,6 +192,8 @@ create table public.notifications (
   title text not null check (char_length(title) between 2 and 120),
   body text not null default '' check (char_length(body) <= 500),
   target_path text,
+  conversation_id uuid references public.conversations(id) on delete set null,
+  booking_id uuid references public.bookings(id) on delete set null,
   read_at timestamptz,
   created_at timestamptz not null default now()
 );
@@ -347,8 +349,9 @@ security definer
 set search_path = ''
 as $$
 begin
-  insert into public.notifications (user_id, kind, title, body, target_path)
-  select member.user_id, 'message', 'New message', left(new.body, 160), 'messages'
+  insert into public.notifications (user_id, kind, title, body, target_path, conversation_id)
+  select member.user_id, 'message', 'New message', 'Open Skillmate to read your new message.',
+    'messages', new.conversation_id
   from public.conversation_members member
   join public.profiles recipient on recipient.id = member.user_id and recipient.notify_messages
   where member.conversation_id = new.conversation_id
@@ -360,6 +363,29 @@ $$;
 create trigger message_created_notification
 after insert on public.messages
 for each row execute function public.notify_message_recipient();
+
+create function public.prevent_chat_evidence_deletion()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if tg_table_name = 'messages'
+    or exists (select 1 from public.messages where conversation_id = old.id) then
+    raise exception 'Chat evidence cannot be permanently deleted.';
+  end if;
+  return old;
+end;
+$$;
+
+create trigger preserve_chat_message_evidence
+before delete on public.messages
+for each row execute function public.prevent_chat_evidence_deletion();
+
+create trigger preserve_chat_conversation_evidence
+before delete on public.conversations
+for each row execute function public.prevent_chat_evidence_deletion();
 
 create index services_active_category_idx on public.services(category, created_at desc) where is_active;
 create index services_provider_idx on public.services(provider_id, created_at desc);
@@ -1200,12 +1226,6 @@ with check (
   sender_id <> (select auth.uid())
   and public.can_access_conversation(conversation_id)
 );
-create policy "Message senders delete their own messages"
-on public.messages for delete to authenticated
-using (
-  sender_id = (select auth.uid())
-  and public.can_access_conversation(conversation_id)
-);
 create policy "Conversation members access private realtime chat channels"
 on realtime.messages for all to authenticated
 using ((select public.can_access_chat_realtime_topic()))
@@ -1307,7 +1327,7 @@ revoke all on public.messages from anon, public;
 revoke update on public.messages from authenticated;
 revoke update (id, conversation_id, sender_id, body, created_at, read_at, delivered_at, reply_to)
   on public.messages from authenticated;
-grant select, insert, delete on public.messages to authenticated;
+grant select, insert on public.messages to authenticated;
 grant update (read_at, delivered_at) on public.messages to authenticated;
 grant select, insert, delete on public.reviews to authenticated;
 grant select, insert, update, delete on public.portfolio_items to authenticated;
@@ -1669,12 +1689,14 @@ grant execute on function public.save_student_profile(text, text, text, text, te
 create table public.verified_auth_sessions (
   session_id uuid primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
-  verified_at timestamptz not null default now()
+  verified_at timestamptz not null default now(),
+  expires_at timestamptz not null default (now() + interval '30 days')
 );
 
 alter table public.verified_auth_sessions enable row level security;
 revoke all on table public.verified_auth_sessions from public, anon, authenticated;
-grant select, insert on table public.verified_auth_sessions to service_role;
+grant select, insert, update, delete on table public.verified_auth_sessions to service_role;
+create index verified_auth_sessions_expiry_idx on public.verified_auth_sessions (expires_at);
 
 create function public.is_verified_session()
 returns boolean
@@ -1695,6 +1717,7 @@ begin
     from public.verified_auth_sessions verified
     where verified.session_id = v_session_id::uuid
       and verified.user_id = auth.uid()
+      and verified.expires_at > now()
   );
 end;
 $$;

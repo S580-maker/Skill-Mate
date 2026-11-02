@@ -56,6 +56,49 @@ test("image validation rejects oversized, spoofed and unsupported files", () => 
   assert.throws(() => utils.validateImageHeader({ type: "image/jpeg", size: 0 }, jpg));
 });
 
+test("image compression permits a source up to 5 MB while enforcing the smaller output limit", async () => {
+  class MockFile {
+    constructor(parts, name, options) {
+      this.name = name;
+      this.type = options.type;
+      this.size = parts[0].size;
+      this.lastModified = options.lastModified;
+    }
+  }
+  const context = {
+    Uint8Array,
+    File: MockFile,
+    document: {
+      createElement() {
+        return {
+          getContext: () => ({ drawImage() {} }),
+          toBlob(callback) { callback({ type: "image/webp", size: 500_000 }); },
+        };
+      },
+    },
+    async createImageBitmap() {
+      return { width: 2000, height: 1000, close() {} };
+    },
+  };
+  vm.runInNewContext(read("service-form-utils.js"), context);
+  const input = {
+    name: "portfolio.jpg", type: "image/jpeg", size: 4_000_000, lastModified: 1,
+    slice() { return { arrayBuffer: async () => new Uint8Array([255, 216, 255]).buffer }; },
+  };
+  const compressed = await context.skillmateServiceUtils.compressImageFile(input, {
+    maxInputBytes: 5_000_000, maxOutputBytes: 1_000_000,
+  });
+  assert.equal(compressed.type, "image/webp");
+  assert.equal(compressed.size, 500_000);
+  assert.equal(compressed.name, "portfolio.webp");
+  await assert.rejects(context.skillmateServiceUtils.compressImageFile(input, {
+    maxInputBytes: 5_000_000, maxOutputBytes: 400_000,
+  }), /could not be compressed/);
+  await assert.rejects(context.skillmateServiceUtils.compressImageFile({
+    ...input, size: 5_000_001,
+  }), /smaller than 5 MB/);
+});
+
 function element(id = "") {
   return {
     id, value: "", checked: false, hidden: false, disabled: false, isConnected: true,
@@ -194,6 +237,26 @@ test("Fixed Price listings save without a private minimum", async () => {
   await f.get("form").fire("submit");
   assert.equal(f.rpcCalls[0].args.p_mode, "fixed");
   assert.equal(f.rpcCalls[0].args.p_minimum_price, null);
+});
+
+test("pricing type is saved independently for each service", async () => {
+  const f = fixture();
+  await f.prepare({ id: "fixed-service", negotiationMode: "fixed" });
+  f.fill();
+  f.get("negotiation-mode-fixed").checked = true;
+  f.get("negotiation-mode-negotiation").checked = false;
+  await f.get("form").fire("submit");
+  await f.get("form").fire("submit");
+
+  await f.prepare({ id: "negotiable-service", negotiationMode: "negotiation" });
+  f.fill();
+  await f.get("form").fire("submit");
+  await f.get("form").fire("submit");
+
+  assert.deepEqual(f.rpcCalls.map(({ args }) => [args.p_service_id, args.p_mode]), [
+    ["fixed-service", "fixed"],
+    ["negotiable-service", "negotiation"],
+  ]);
 });
 
 test("cancelled edits reset when Add a service opens, including ID and optional fields", async () => {

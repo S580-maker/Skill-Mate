@@ -21,7 +21,12 @@ module.exports = async function health(request, response) {
       const result = await fetch(`${config.url}${path}`, {
         headers: { apikey: config.anonKey }, signal: AbortSignal.timeout(5000),
       });
-      return result.ok ? "ok" : "unavailable";
+      if (result.ok) return "ok";
+      if (path.startsWith("/rest/v1/") && result.status === 401) {
+        const body = await result.json();
+        if (body.code === "42501" && body.message === "permission denied for schema public") return "ok";
+      }
+      return "unavailable";
     } catch { return "unavailable"; }
   };
   const [auth, database] = await Promise.all([
