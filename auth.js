@@ -12,6 +12,29 @@ let googleOtpStarted = false;
 let sessionOtpStarted = false;
 let sessionCheckStarted = false;
 let otpCountdownTimer = null;
+const googleOtpCallbackParam = "skillmate-google-otp";
+
+if (new URLSearchParams(window.location.search).get(googleOtpCallbackParam) === "1") {
+  window.sessionStorage.setItem("skillmate-google-otp-pending", "1");
+}
+
+function clearGoogleOtpCallbackParams() {
+  const callbackUrl = new URL(window.location.href);
+  for (const param of [googleOtpCallbackParam, "code", "error", "error_description", "error_code"]) {
+    callbackUrl.searchParams.delete(param);
+  }
+  window.history.replaceState(window.history.state, "", callbackUrl);
+}
+
+function reportMissingGoogleSession() {
+  if (
+    googleOtpStarted ||
+    window.sessionStorage.getItem("skillmate-google-otp-pending") !== "1"
+  ) return;
+  window.sessionStorage.removeItem("skillmate-google-otp-pending");
+  clearGoogleOtpCallbackParams();
+  authMessage.textContent = "Google sign-in returned without an authenticated session. Please try again.";
+}
 
 async function redirectForSession(session) {
   if (!session || authMode === "recovery") return;
@@ -110,12 +133,14 @@ async function startGoogleOtp(session) {
     if (!response.ok) throw new Error(result.error || "Could not start Google verification.");
     window.sessionStorage.removeItem("skillmate-google-otp-pending");
     window.sessionStorage.setItem("skillmate-google-otp-active", "1");
+    clearGoogleOtpCallbackParams();
     authMessage.textContent = "";
     showOtpChallenge(result.email);
   } catch (error) {
     console.error("Skillmate Google email verification failed.", error);
     window.sessionStorage.removeItem("skillmate-google-otp-pending");
     window.sessionStorage.removeItem("skillmate-google-otp-active");
+    clearGoogleOtpCallbackParams();
     sessionOtpStarted = false;
     await authClient.auth.signOut({ scope: "local" }).catch((signOutError) => {
       console.error("Could not clear the unverified Google session.", signOutError);
@@ -563,6 +588,7 @@ async function signInWithGoogle(button) {
   try {
     window.sessionStorage.setItem("skillmate-google-otp-pending", "1");
     const callbackUrl = new URL("login.html", window.location.href);
+    callbackUrl.searchParams.set(googleOtpCallbackParam, "1");
     if (new URLSearchParams(window.location.search).get("next") === "admin") {
       callbackUrl.searchParams.set("next", "admin");
     }
@@ -594,8 +620,18 @@ loadGhanaianUniversities();
 const requestedAuthMode = new URLSearchParams(window.location.search).get("mode");
 setAuthMode(["signup", "recovery"].includes(requestedAuthMode) ? requestedAuthMode : "signin");
 if (authClient) {
-  window.skillmateRestoreSession().then(redirectForSession).catch((error) => {
+  window.skillmateRestoreSession().then(async session => {
+    if (!session) {
+      reportMissingGoogleSession();
+      return;
+    }
+    await redirectForSession(session);
+  }).catch((error) => {
     console.error("Could not restore the Skillmate sign-in session.", error);
+    if (window.sessionStorage.getItem("skillmate-google-otp-pending") === "1") {
+      reportMissingGoogleSession();
+      return;
+    }
     authMessage.textContent = "Could not check your sign-in session. Reload the page and try again.";
   });
 }

@@ -228,6 +228,7 @@ async function main() {
     await evaluate('document.querySelector("#auth-consent").checked=true;document.querySelector("#google-signin").click()');
     assert.equal(await evaluate('window.__authCalls[0].provider'), "google");
     assert.equal(await evaluate('new URL(window.__authCalls[0].options.redirectTo).pathname.endsWith("/login.html")'), true);
+    assert.equal(await evaluate('new URL(window.__authCalls[0].options.redirectTo).searchParams.get("skillmate-google-otp")'), "1", "OAuth callback preserves the Google verification flow");
     await evaluate('redirectForSession({access_token:"google-access",refresh_token:"google-refresh",expires_in:3600})');
     await wait(100);
     assert.equal(await evaluate('window.__googleOtpCalls.length'), 1);
@@ -244,6 +245,13 @@ async function main() {
     assert.equal(await evaluate('sessionStorage.getItem("skillmate-google-otp-active")'), null);
     await wait(600);
     assert.equal(await evaluate('location.pathname.endsWith("/index.html")'), true, "Verified Google user enters the app");
+  };
+  const verifyMissingGoogleSessionFeedback = async () => {
+    await navigate("login.html?skillmate-google-otp=1");
+    await wait(50);
+    assert.equal(await evaluate('document.querySelector("#auth-message").textContent'), "Google sign-in returned without an authenticated session. Please try again.");
+    assert.equal(await evaluate('sessionStorage.getItem("skillmate-google-otp-pending")'), null);
+    assert.equal(await evaluate('new URL(location.href).searchParams.has("skillmate-google-otp")'), false);
   };
   await call("Page.enable"); await call("Runtime.enable"); await call("Network.enable");
   await call("Page.bringToFront");
@@ -263,6 +271,7 @@ async function main() {
   if (process.argv.includes("--google-only")) {
     await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await verifyGoogleOtpFlow();
+    await verifyMissingGoogleSessionFeedback();
     console.log("PASS Google sign-in: OAuth, six-digit verification and preserved-session app entry");
     return;
   }
