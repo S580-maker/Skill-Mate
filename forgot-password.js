@@ -259,6 +259,11 @@ newPasswordForm.addEventListener("submit", async (event) => {
     confirmNewPassword.focus();
     return;
   }
+  if (new TextEncoder().encode(newPassword.value).length > 72) {
+    newPasswordMessage.textContent = "Choose a password with no more than 72 bytes.";
+    newPassword.focus();
+    return;
+  }
 
   passwordSubmitting = true;
   newPasswordSubmit.disabled = true;

@@ -23,14 +23,14 @@ function createResponse() {
 
 test("Vercel API router dispatches known nested routes from the rewrite parameter", async () => {
   const response = createResponse();
-  await apiRouter({ method: "GET", query: { path: "auth/sign-in" } }, response);
+  await apiRouter({ method: "GET", ip: "127.0.0.1", query: { path: "auth/sign-in" } }, response);
   assert.equal(response.statusCode, 405);
   assert.deepEqual(response.body, { error: "Method not allowed." });
 });
 
 test("Vercel API router returns 404 for unknown routes", async () => {
   const response = createResponse();
-  await apiRouter({ method: "GET", query: { path: "unknown" } }, response);
+  await apiRouter({ method: "GET", ip: "127.0.0.1", query: { path: "unknown" } }, response);
   assert.equal(response.statusCode, 404);
   assert.deepEqual(response.body, { error: "Not found." });
 });

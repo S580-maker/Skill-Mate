@@ -6,9 +6,9 @@
     <title>Set a new password | Skillmate</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="user.css?v=5" />
-    <link rel="stylesheet" href="auth.css?v=3" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="user.css?v=24" />
+    <link rel="stylesheet" href="auth.css?v=5" />
     <script src="theme.js?v=2"></script>
   </head>
   <body>
@@ -29,7 +29,7 @@
           <h2>Set a new password</h2>
           <p class="auth-intro">Choose a password with at least 8 characters.</p>
           <form id="reset-form">
-            <label for="new-password">New password<span class="auth-password-input"><input id="new-password" type="password" autocomplete="new-password" required minlength="8" placeholder="At least 8 characters" /><button class="auth-password-toggle" id="password-visibility" type="button" aria-label="Show password" aria-pressed="false">Show</button></span><small id="password-hint" class="password-hint" aria-live="polite">Use at least 8 characters (0/8).</small></label>
+            <label for="new-password">New password<span class="auth-password-input"><input id="new-password" type="password" autocomplete="new-password" required minlength="8" maxlength="72" placeholder="At least 8 characters" /><button class="auth-password-toggle" id="password-visibility" type="button" aria-label="Show password" aria-pressed="false">Show</button></span><small id="password-hint" class="password-hint" aria-live="polite">Use at least 8 characters.</small></label>
             <button class="button button-primary auth-submit" id="reset-submit" type="submit"><span class="auth-submit-spinner" aria-hidden="true" hidden></span><span id="reset-submit-label">Save new password</span></button>
             <p class="auth-message" id="reset-message" role="status" aria-live="polite"></p>
           </form>

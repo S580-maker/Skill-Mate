@@ -1,9 +1,12 @@
 :root {
-  font-family: "Poppins", sans-serif;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--dark);
   background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  line-height: 1.5;
+  font-optical-sizing: auto;
+  font-kerning: normal;
   --main: #2563EB;
   --accent: #F59E0B;
   --dark: #0F172A;
@@ -72,7 +75,7 @@ body.sidebar-open { overflow: hidden; }
 .brand-mark { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border: 1px solid #ffffff35; border-radius: 11px; color: var(--on-dark); background: linear-gradient(145deg, #4f83ff, #2151c5); box-shadow: 0 4px 12px #0b2f8255, inset 0 1px #ffffff45; }
 .brand-mark svg { width: 25px; }
 .brand-mark img { display: block; width: 27px; height: 27px; }
-.brand-name { color: var(--on-dark); font-family: Poppins, sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -.8px; }
+.brand-name { color: var(--on-dark); font-family: "Inter", sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -.8px; }
 .brand-name > span { color: var(--on-dark-muted); }
 .workspace-switcher { display: flex; align-items: center; gap: 10px; margin: 34px 0 29px; padding: 11px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--nav-bg); }
 .workspace-avatar { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 9px; color: var(--on-dark-muted); background: var(--nav-bg); font-weight: 700; }
@@ -138,8 +141,8 @@ body.sidebar-open { overflow: hidden; }
 .eyebrow { margin: 0 0 8px; color: var(--dark); font-size: 12px; font-weight: 700; letter-spacing: 1.25px; }
 .demo-pill { display: inline-flex; margin-left: 5px; padding: 3px 5px; vertical-align: 1px; border-radius: 4px; color: var(--main); background: var(--bg); font-size: 12px; letter-spacing: .65px; }
 h1, h2, p { margin-top: 0; }
-h1 { margin: 0; color: var(--dark); font-family: Poppins, sans-serif; font-size: 25px; font-weight: 700; letter-spacing: -.8px; }
-h1 span { color: var(--main); font-family: "Poppins", sans-serif; font-size: 17px; vertical-align: 3px; }
+h1 { margin: 0; color: var(--dark); font-family: "Inter", sans-serif; font-size: 25px; font-weight: 700; letter-spacing: -.8px; }
+h1 span { color: var(--main); font-family: "Inter", sans-serif; font-size: 17px; vertical-align: 3px; }
 .welcome-copy { margin: 6px 0 0; color: var(--dark); font-size: 12px; }
 .button { display: inline-flex; height: 38px; align-items: center; justify-content: center; gap: 8px; padding: 0 14px; border: 0; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: transform .15s, background .15s; }
 .button:active { transform: translateY(1px); }
@@ -157,7 +160,7 @@ h1 span { color: var(--main); font-family: "Poppins", sans-serif; font-size: 17p
 .icon-violet { color: var(--violet); background: color-mix(in srgb, var(--violet) 10%, var(--surface)); }
 .icon-teal { color: var(--teal); background: color-mix(in srgb, var(--teal) 10%, var(--surface)); }
 .icon-amber { color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--surface)); }
-.stat-value { position: relative; z-index: 1; margin-top: 5px; color: var(--dark); font-family: Poppins, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -.7px; }
+.stat-value { position: relative; z-index: 1; margin-top: 5px; color: var(--dark); font-family: "Inter", sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -.7px; }
 .stat-foot { position: relative; z-index: 1; display: flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--muted); font-size: 12px; }
 .trend { font-size: 12px; font-weight: 700; }
 .trend.positive { color: var(--main); }
@@ -168,7 +171,7 @@ h1 span { color: var(--main); font-family: "Poppins", sans-serif; font-size: 17p
 .content-grid { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(275px, 1fr); gap: 15px; margin-bottom: 15px; }
 .panel { padding: 17px 18px; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.panel-heading h2, .safety-heading h2 { margin: 0; color: var(--dark); font-family: Poppins, sans-serif; font-size: 13px; font-weight: 700; letter-spacing: -.2px; }
+.panel-heading h2, .safety-heading h2 { margin: 0; color: var(--dark); font-family: "Inter", sans-serif; font-size: 13px; font-weight: 700; letter-spacing: -.2px; }
 .panel-heading p, .safety-heading p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 .select-wrap { position: relative; display: flex; align-items: center; }
 .select-wrap select { height: 30px; appearance: none; padding: 0 26px 0 9px; border: 1px solid var(--border); border-radius: 6px; outline: 0; color: var(--dark); background: var(--surface); font-size: 12px; cursor: pointer; }
@@ -259,7 +262,7 @@ td { padding: 10px 11px; border-top: 1px solid var(--border); color: var(--dark)
 .safety-shield { display: grid; width: 31px; height: 31px; place-items: center; border-radius: 9px; color: var(--main); background: var(--bg); }
 .safety-shield svg { width: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; }
 .trust-score { display: flex; align-items: baseline; justify-content: space-between; margin-top: 17px; }
-.trust-score > span:first-child strong { color: var(--dark); font-family: Poppins, sans-serif; font-size: 27px; font-weight: 700; }
+.trust-score > span:first-child strong { color: var(--dark); font-family: "Inter", sans-serif; font-size: 27px; font-weight: 700; }
 .trust-score > span:first-child small { color: var(--muted); font-size: 12px; }
 .score-label { color: var(--dark); font-size: 12px; }
 .trust-progress { height: 6px; margin-top: 7px; overflow: hidden; border-radius: 10px; background: var(--bg); }
@@ -506,7 +509,7 @@ button, a, input, select, textarea, .panel, .stat-card, .button, .theme-toggle {
 .verification-dialog form { position: relative; display: grid; gap: 12px; }
 .verification-dialog .modal-close { position: absolute; top: 0; right: 0; width: 34px; height: 34px; border: 0; border-radius: 7px; color: var(--dark); background: var(--bg); font-size: 22px; cursor: pointer; }
 .verification-dialog .eyebrow { margin: 0; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 1px; }
-.verification-dialog h2 { margin: 0; color: var(--dark); font-family: Poppins,sans-serif; font-size: 20px; }
+.verification-dialog h2 { margin: 0; color: var(--dark); font-family: "Inter",sans-serif; font-size: 20px; }
 .verification-review-student, .verification-review-status { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .verification-review-image { width: 100%; max-height: min(58vh,540px); border: 1px solid var(--border); border-radius: 9px; background: var(--bg); object-fit: contain; }
 .verification-review-actions { display: flex; justify-content: flex-end; gap: 9px; }

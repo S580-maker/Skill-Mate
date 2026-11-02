@@ -7,8 +7,9 @@ const {
   getSupabaseUser,
   getUserRole,
 } = require("./_lib/supabase");
+const { adminRateLimit, runRateLimited } = require("./_lib/rate-limit");
 
-module.exports = async function admin(request, response) {
+async function handleAdmin(request, response) {
   if (request.method !== "GET") {
     response.setHeader("Allow", "GET");
     return response.status(405).send("Method not allowed.");
@@ -38,4 +39,8 @@ module.exports = async function admin(request, response) {
     console.error("Could not verify administrator access.", error);
     return response.status(503).send("Administrator access could not be verified. Please reload shortly.");
   }
+}
+
+module.exports = function admin(request, response) {
+  return runRateLimited(request, response, adminRateLimit, () => handleAdmin(request, response));
 };

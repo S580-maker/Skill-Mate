@@ -59,7 +59,7 @@
     }
   }
   function clearErrors() {
-    for (const id of ["title", "category", "description", "delivery", "price", "price-type", "estimate", "cover", "negotiation-mode", "minimum-price"]) setError(id);
+    for (const id of ["title", "category", "description", "delivery", "price", "estimate", "cover", "negotiation-mode", "minimum-price"]) setError(id);
     showFeedback("");
   }
   function applyAvailability() {
@@ -68,7 +68,7 @@
   }
   function updateNegotiationFields() {
     const mode = form.querySelector('[name="service-negotiation-mode"]:checked')?.value || "";
-    const needsMinimum = mode === "controlled" || mode === "hybrid";
+    const needsMinimum = mode === "negotiation" || mode === "hybrid";
     byId("minimum-price-field").hidden = !needsMinimum;
     byId("minimum-price").required = needsMinimum;
   }
@@ -125,9 +125,12 @@
     byId("title").placeholder = `e.g. ${title}`;
     byId("description").placeholder = description;
     byId("description-count").textContent = `${byId("description").value.length.toLocaleString()} / 2,000`;
-    byId("price-hint").textContent = byId("price-type").value === "starting"
-      ? "Show the minimum price. Agree the full scope and final price with the student before confirming a booking."
-      : "The price covers the scope described above.";
+    const mode = form.querySelector('[name="service-negotiation-mode"]:checked')?.value || "fixed";
+    byId("price-hint").textContent = mode === "fixed"
+      ? "This is the final price for the scope described above."
+      : mode === "negotiation"
+        ? "Discuss price in chat or make a formal offer. Your minimum stays private; the listed service scope stays the same."
+        : "Negotiate price and service scope. Your minimum stays private; use the offer note to record agreed changes.";
   }
   function setReview(value, focus = true) {
     reviewing = value;
@@ -142,10 +145,10 @@
       byId("review-name").textContent = draft.title;
       byId("review-category").textContent = draft.category;
       byId("review-description").textContent = draft.description;
-      byId("review-price").textContent = `${draft.priceType === "starting" ? "From " : ""}${currency(draft.price)}`;
+      byId("review-price").textContent = currency(draft.price);
       byId("review-symbol").textContent = getCategoryIcon(draft.category);
       const tags = [utils.deliveryLabels[draft.deliveryMethod], draft.estimatedDelivery, draft.groups && "Groups welcome"].filter(Boolean);
-      tags.push({ controlled: "Controlled negotiation", chat: "Chat-based negotiation", hybrid: "Hybrid negotiation" }[draft.negotiationMode]);
+      tags.push({ fixed: "Fixed Price", negotiation: "Negotiation", hybrid: "Hybrid Negotiation" }[draft.negotiationMode]);
       byId("review-tags").replaceChildren(...tags.map(text => {
         const tag = document.createElement("span"); tag.textContent = text; return tag;
       }));
@@ -162,7 +165,6 @@
       description: byId("description").value.trim(), price: byId("price").value,
       groups: byId("group").checked,
       deliveryMethod: extended ? byId("delivery").value : existing?.deliveryMethod || "",
-      priceType: extended ? byId("price-type").value : existing?.priceType || "fixed",
       estimatedDelivery: extended ? byId("estimate").value.trim() : existing?.estimatedDelivery || "",
       negotiationMode: form.querySelector('[name="service-negotiation-mode"]:checked')?.value || "",
       minimumPrice: byId("minimum-price").value,
@@ -200,12 +202,11 @@
     byId("category").value = service?.category || serviceCategories[0];
     byId("description").value = service?.description || "";
     byId("price").value = service?.price ?? "";
-    const mode = service?.negotiationMode || service?.negotiation_mode || "chat";
+    const mode = utils.normalizeNegotiationMode(service?.negotiationMode || service?.negotiation_mode);
     const selectedMode = form.querySelector(`[name="service-negotiation-mode"][value="${mode}"]`);
     if (selectedMode) selectedMode.checked = true;
     byId("minimum-price").value = "";
     byId("delivery").value = service?.deliveryMethod || "";
-    byId("price-type").value = service?.priceType || "fixed";
     byId("estimate").value = service?.estimatedDelivery || "";
     byId("group").checked = Boolean(service?.groups);
     byId("options").open = true;
@@ -240,6 +241,7 @@
       setError("negotiation-mode");
       setError("minimum-price");
       updateNegotiationFields();
+      updateHints();
     });
   });
   byId("category").addEventListener("change", updateHints);
@@ -344,7 +346,7 @@
           p_estimated_delivery: payload.estimated_delivery || null,
           p_price_type: payload.price_type || "fixed",
           p_mode: draft.negotiationMode,
-          p_minimum_price: ["controlled", "hybrid"].includes(draft.negotiationMode) ? Number(draft.minimumPrice) : null,
+          p_minimum_price: ["negotiation", "hybrid"].includes(draft.negotiationMode) ? Number(draft.minimumPrice) : null,
         });
         const data = Array.isArray(result) ? result[0] : result;
         if (error || !data) throw new Error("We couldn't save your service and negotiation settings. Check your connection and try again. Your details are still here.");

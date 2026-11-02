@@ -975,7 +975,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
         <h3>${escapeHTML(provider.service)}</h3><p class="provider-description">${escapeHTML(provider.description)}</p>
         <div class="provider-card-person"><button class="provider-profile-trigger" type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="View ${escapeHTML(provider.name)}’s provider profile">${providerAvatarMarkup(provider)}</button><span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? '<i class="verified-dot">✓</i> Campus verified · ' : ""}${escapeHTML(provider.campus)}</small></span></div>
         ${serviceDetailLabel(provider) ? `<p class="service-delivery-label">${escapeHTML(serviceDetailLabel(provider))}</p>` : ""}
-        <div class="provider-card-footer"><span class="price"><small>${provider.priceType === "starting" ? "Starting at" : "Listed price"}</small>${currency(provider.price)}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">Request booking</button></span>`}</div>
+        <div class="provider-card-footer"><span class="price"><small>Price</small>${currency(provider.price)}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">Request booking</button></span>`}</div>
       </div>
     </article>`).join("") : `<div class="empty-card"><span aria-hidden="true">⌕</span><strong>${targetId === "saved-grid" ? "Your shortlist starts here" : "No services found"}</strong><small>${targetId === "saved-grid" ? "Tap the heart on a service to save its provider for later." : "Try another skill or browse all categories."}</small><button class="button button-outline" type="button" ${targetId === "saved-grid" ? 'data-page-link="home"' : 'data-clear-search'}>Explore services</button></div>`;
 }
@@ -1266,6 +1266,7 @@ function createChatMessageRow(message, grouped) {
 function createPriceNegotiationPanel(chat) {
   const negotiations = priceNegotiations.filter(item => item.conversationId === chat.id);
   const chatServices = connectedServices.filter(service => service.active
+    && service.negotiationMode !== "fixed"
     && (service.providerId === appUser?.id || service.providerId === chat.providerId));
   if (!negotiations.length && !chatServices.length) return null;
   const section = document.createElement("section");
@@ -1289,7 +1290,7 @@ function createPriceNegotiationPanel(chat) {
       const title = document.createElement("strong");
       title.textContent = service.title;
       const mode = document.createElement("small");
-      mode.textContent = `${service.negotiationMode === "controlled" ? "Controlled" : service.negotiationMode === "hybrid" ? "Hybrid" : "Chat-based"} · ${currency(service.price)} listed`;
+      mode.textContent = `${service.negotiationMode === "hybrid" ? "Hybrid · price + scope" : service.negotiationMode === "fixed" ? "Fixed Price" : "Negotiation · price only"} · ${currency(service.price)} listed`;
       copy.append(title, mode);
       row.append(copy);
       const isProvider = service.providerId === appUser?.id;
@@ -1298,21 +1299,24 @@ function createPriceNegotiationPanel(chat) {
       action.className = "button button-small button-primary";
       action.dataset.chatPriceStart = service.id;
       action.dataset.providerId = service.providerId;
-      if (service.negotiationMode === "controlled") {
-        if (isProvider) continue;
-        action.dataset.chatPriceAction = "offer";
-        action.textContent = "Make an offer";
-      } else if (isProvider) {
+      if (isProvider) {
         action.dataset.chatPriceAction = "proposal";
         action.textContent = "Propose a price";
-      } else if (service.negotiationMode === "hybrid") {
-        action.dataset.chatPriceAction = "offer";
-        action.textContent = "Make an offer";
       } else {
         action.dataset.chatPriceAction = "discuss";
         action.textContent = "Discuss price";
       }
       row.append(action);
+      if (!isProvider && ["negotiation", "hybrid"].includes(service.negotiationMode)) {
+        const offer = document.createElement("button");
+        offer.type = "button";
+        offer.className = "button button-small button-outline";
+        offer.dataset.chatPriceStart = service.id;
+        offer.dataset.providerId = service.providerId;
+        offer.dataset.chatPriceAction = "offer";
+        offer.textContent = "Make an offer";
+        row.append(offer);
+      }
       starter.append(row);
     }
     if (starter.children.length) section.append(starter);
@@ -1344,12 +1348,13 @@ function createPriceNegotiationPanel(chat) {
         copy.append(note);
       }
       item.append(copy);
-      if (offer.status === "pending" && offer.proposerId !== appUser?.id && negotiation.state === "open") {
+      if (service?.negotiationMode !== "fixed"
+        && offer.status === "pending" && offer.proposerId !== appUser?.id && negotiation.state === "open") {
         const actions = document.createElement("span");
         actions.className = "chat-offer-actions";
         const mode = service?.negotiationMode || "chat";
         const availableActions = [["accept", "Accept"], ["reject", "Reject"]];
-        if (["controlled", "hybrid"].includes(mode)) availableActions.push(["counter", "Counter"]);
+        if (["negotiation", "hybrid"].includes(mode)) availableActions.push(["counter", "Counter"]);
         for (const [action, label] of availableActions) {
           const button = document.createElement("button");
           button.type = "button";
@@ -1397,7 +1402,7 @@ function createPriceNegotiationPanel(chat) {
     } else {
       const hasPending = negotiation.offers.some(item => item.status === "pending");
       const mode = service?.negotiationMode || "chat";
-      if (!hasPending && appUser?.id === negotiation.providerId && ["chat", "hybrid"].includes(mode)) {
+      if (!hasPending && appUser?.id === negotiation.providerId && ["negotiation", "hybrid"].includes(mode)) {
         const proposal = document.createElement("button");
         proposal.type = "button";
         proposal.className = "button button-small button-outline";
@@ -1407,7 +1412,7 @@ function createPriceNegotiationPanel(chat) {
         proposal.dataset.providerId = negotiation.providerId;
         proposal.textContent = "Send formal price proposal";
         card.append(proposal);
-      } else if (!hasPending && appUser?.id === negotiation.customerId && ["controlled", "hybrid"].includes(mode)) {
+      } else if (!hasPending && appUser?.id === negotiation.customerId && ["negotiation", "hybrid"].includes(mode)) {
         const offer = document.createElement("button");
         offer.type = "button";
         offer.className = "button button-small button-primary";
@@ -1417,10 +1422,10 @@ function createPriceNegotiationPanel(chat) {
         offer.dataset.providerId = negotiation.providerId;
         offer.textContent = "Make an offer";
         card.append(offer);
-      } else if (!hasPending && appUser?.id === negotiation.customerId && mode === "chat") {
+      } else if (!hasPending && appUser?.id === negotiation.customerId && mode === "negotiation") {
         const prompt = document.createElement("small");
         prompt.className = "chat-booking-next-step";
-        prompt.textContent = "Discuss the price in the message box; the provider can send a formal proposal here.";
+        prompt.textContent = "Discuss the price in chat or make a formal offer. The listed service scope stays the same.";
         card.append(prompt);
       }
     }
@@ -1628,7 +1633,7 @@ function serviceCoverUrl(service) {
   return !appSupabase && /^data:image\/(png|webp|jpeg);base64,/.test(service.coverImage || "") ? service.coverImage : "";
 }
 function servicePriceLabel(service) {
-  return `${service.priceType === "starting" ? "From " : ""}${currency(service.price)}`;
+  return currency(service.price);
 }
 function serviceDetailLabel(service) {
   return [window.skillmateServiceUtils.deliveryLabels[service.deliveryMethod], service.estimatedDelivery].filter(Boolean).join(" · ");
@@ -1903,11 +1908,11 @@ async function loadSupabaseState() {
   connectedServices = (directory.data || []).map((row) => ({
     id: row.service_id, providerId: row.provider_id, title: row.service_title, category: row.category,
     description: row.service_description, price: Number(row.price), groups: row.accepts_groups,
-    active: true, currency: row.currency, negotiationMode: row.negotiation_mode || "chat", ...window.skillmateServiceUtils.metadata(row),
+    active: true, currency: row.currency, negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(row.negotiation_mode), ...window.skillmateServiceUtils.metadata(row),
   })).concat((ownServices.data || []).filter((service) => !(directory.data || []).some((row) => row.service_id === service.id)).map((service) => ({
     id: service.id, providerId: service.provider_id, title: service.title, category: service.category,
     description: service.description, price: Number(service.price), groups: service.accepts_groups,
-    active: service.is_active, currency: service.currency, negotiationMode: service.negotiation_mode || "chat", ...window.skillmateServiceUtils.metadata(service),
+    active: service.is_active, currency: service.currency, negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(service.negotiation_mode), ...window.skillmateServiceUtils.metadata(service),
   })));
   const providerMap = new Map();
   for (const row of directory.data || []) {
@@ -1918,7 +1923,7 @@ async function loadSupabaseState() {
       rating: 0, reviews: 0, bookings: Number(row.completed_bookings) || 0, color: "blue", verified: row.campus_verified,
       available: "Message to ask", groups: row.accepts_groups, portfolio: [], ...window.skillmateServiceUtils.metadata(row),
       skills: row.skills || [], cvPath: row.cv_path || "", cvName: row.cv_name || "",
-      negotiationMode: row.negotiation_mode || "chat",
+      negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(row.negotiation_mode),
     });
   }
   const ownActiveService = (ownServices.data || []).find((service) => service.is_active);
@@ -1930,7 +1935,7 @@ async function loadSupabaseState() {
       description: ownActiveService.description, price: Number(ownActiveService.price),
       currency: ownActiveService.currency, rating: 0, reviews: 0, bookings: 0,
       color: "blue", verified: profile.campus_verified, available: "Message to ask",
-      groups: ownActiveService.accepts_groups, portfolio: [], negotiationMode: ownActiveService.negotiation_mode || "chat", ...window.skillmateServiceUtils.metadata(ownActiveService),
+      groups: ownActiveService.accepts_groups, portfolio: [], negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(ownActiveService.negotiation_mode), ...window.skillmateServiceUtils.metadata(ownActiveService),
       skills: profile.skills || [], cvPath: profile.cv_path || "", cvName: profile.cv_name || "",
     });
   }
@@ -1990,7 +1995,7 @@ async function loadSupabaseState() {
   state.services = (ownServices.data || []).map((service) => ({
     id: service.id, title: service.title, category: service.category, price: Number(service.price),
     description: service.description, groups: service.accepts_groups, active: service.is_active,
-    negotiationMode: service.negotiation_mode || "chat", ...window.skillmateServiceUtils.metadata(service),
+    negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(service.negotiation_mode), ...window.skillmateServiceUtils.metadata(service),
   }));
   state.portfolio = (ownPortfolio.data || []).map((item) => ({
     id: item.id, title: item.title, description: item.description,
@@ -2541,10 +2546,12 @@ function updateBookingSummary() {
     document.querySelector("#booking-original-price").textContent = currency(negotiation.listedPrice);
     document.querySelector("#booking-agreed-price").textContent = currency(negotiation.agreedPrice);
   } else {
-    document.querySelector("#booking-price-label").textContent = service.priceType === "starting" ? "Starting price" : "Listed price";
+    document.querySelector("#booking-price-label").textContent = "Price";
     document.querySelector("#booking-price").textContent = currency(service.price);
     document.querySelector("#booking-price-detail").textContent =
-      [serviceDetailLabel(service), service.priceType === "starting" ? "The final price depends on the work agreed with your provider." : "For the scope described in this listing."].filter(Boolean).join(" · ");
+      [serviceDetailLabel(service), service.negotiationMode === "fixed"
+        ? "Final price for the scope described in this listing."
+        : "Agree the final price with your provider before booking."].filter(Boolean).join(" · ");
   }
 }
 document.querySelector("#booking-service").addEventListener("change", updateBookingSummary);
@@ -2564,9 +2571,17 @@ function openPriceOfferForm({ providerId, serviceId, action = "initial", negotia
   document.querySelector("#price-offer-action").value = action;
   document.querySelector("#price-offer-conversation-id").value = conversationId;
   document.querySelector("#price-offer-amount").value = amount;
+  const service = connectedServices.find(item => item.id === serviceId);
   const messageLabel = document.querySelector("#price-offer-message").closest("label");
-  messageLabel.hidden = action === "proposal";
+  messageLabel.hidden = action === "proposal" && service?.negotiationMode !== "hybrid";
+  const messageHint = messageLabel.querySelector(".label-hint");
+  if (messageHint) messageHint.textContent = service?.negotiationMode === "hybrid"
+    ? "(optional · describe scope changes)"
+    : "(optional · price only; listed scope stays the same)";
   document.querySelector("#price-offer-message").value = "";
+  document.querySelector("#price-offer-message").placeholder = service?.negotiationMode === "hybrid"
+    ? "Describe any agreed changes to the service scope."
+    : "Add a note about your price offer.";
   document.querySelector("#price-offer-title").textContent = action === "counter" ? "Send a counteroffer" : action === "proposal" ? "Send a formal price proposal" : "Make a price offer";
   document.querySelector("#price-offer-description").textContent = description
     || (action === "counter" ? "The other person must explicitly accept or reject your counteroffer." : "A price is only final after the other person explicitly accepts it.");
@@ -2624,7 +2639,9 @@ document.querySelector("#price-offer-form").addEventListener("submit", event => 
   const negotiationId = document.querySelector("#price-offer-negotiation-id").value;
   const offerId = document.querySelector("#price-offer-response-id").value;
   const activeConversationId = document.querySelector("#price-offer-conversation-id").value;
-  const message = action === "proposal" ? "" : document.querySelector("#price-offer-message").value.trim();
+  const service = connectedServices.find(item => item.id === serviceId);
+  const message = action === "proposal" && service?.negotiationMode !== "hybrid"
+    ? "" : document.querySelector("#price-offer-message").value.trim();
   const feedback = document.querySelector("#price-offer-feedback");
   runAction(async () => {
     let conversationId = activeConversationId
@@ -2695,7 +2712,7 @@ async function openProviderProfile(providerId, serviceId) {
       <p class="showcase-bio">${escapeHTML(provider.bio || provider.description || "A student sharing their skills with the campus community.")}</p>
       <div class="showcase-stats"><div><strong>${escapeHTML(rating.rating)}</strong><span>${rating.count} ${rating.count === 1 ? "review" : "reviews"}</span></div><i></i><div><strong>${Number(provider.bookings) || 0}</strong><span>completed works</span></div><i></i><div><strong>${services.length}</strong><span>${services.length === 1 ? "service" : "services"}</span></div></div>
     </header>
-    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>01</span><h3>Services</h3></div>${services.map((service) => `<div class="detail-service"><span><strong>${escapeHTML(service.title)}</strong><small>${escapeHTML(service.category)} · ${servicePriceLabel(service)}</small><small>${escapeHTML(serviceDetailLabel(service))}</small>${service.providerId !== appUser?.id ? `<small>${service.negotiationMode === "controlled" ? "Controlled Negotiation" : service.negotiationMode === "hybrid" ? "Hybrid Negotiation" : "Chat-Based Negotiation"}</small><span class="detail-negotiation-actions">${service.negotiationMode !== "chat" ? `<button class="button button-small button-outline" type="button" data-negotiation-action="offer" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Make an offer</button>` : ""}${service.negotiationMode !== "controlled" ? `<button class="button button-small button-outline" type="button" data-negotiation-action="discuss" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">${service.negotiationMode === "hybrid" ? "Chat with provider" : "Discuss price"}</button>` : ""}</span>` : ""}</span>${service.groups ? '<span class="detail-group-tag">Group bookings welcome</span>' : ""}</div>`).join("")}</section>
+    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>01</span><h3>Services</h3></div>${services.map((service) => `<div class="detail-service"><span><strong>${escapeHTML(service.title)}</strong><small>${escapeHTML(service.category)} · ${servicePriceLabel(service)}</small><small>${escapeHTML(serviceDetailLabel(service))}</small>${service.providerId !== appUser?.id ? `<small>${service.negotiationMode === "fixed" ? "Fixed Price" : service.negotiationMode === "hybrid" ? "Hybrid · price + scope" : "Negotiation · price only"}</small>${service.negotiationMode !== "fixed" ? `<span class="detail-negotiation-actions"><button class="button button-small button-outline" type="button" data-negotiation-action="offer" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Make an offer</button><button class="button button-small button-outline" type="button" data-negotiation-action="discuss" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Discuss price</button></span>` : ""}` : ""}</span>${service.groups ? '<span class="detail-group-tag">Group bookings welcome</span>' : ""}</div>`).join("")}</section>
     <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>02</span><h3>Education &amp; skills</h3></div><p class="showcase-education"><strong>${escapeHTML(provider.course || "Student")}</strong><span>${escapeHTML(provider.campus)}</span></p><div class="showcase-skills">${skills.length ? skills.map(skill => `<span>${escapeHTML(skill)}</span>`).join("") : '<span>Skills and specialities shared through listed services</span>'}</div>${cvUrl ? `<a class="showcase-cv-link" href="${escapeHTML(cvUrl)}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">↗</span><span><strong>View professional CV</strong><small>${escapeHTML(provider.cvName || "PDF document")} · Secure link expires in 15 minutes</small></span></a>` : ""}</section>
     <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>03</span><h3>Selected work</h3></div><div class="showcase-work-grid">${portfolioMarkup || '<p class="detail-empty">No work samples added yet. Ask the provider about their experience.</p>'}</div></section>
     <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>04</span><h3>Student reviews</h3><span class="showcase-review-score">${rating.count ? `★ ${escapeHTML(rating.rating)}` : "NEW"}</span></div><div class="showcase-review-list">${reviewMarkup || '<p class="detail-empty">No reviews yet. Completed work can be reviewed by the customer.</p>'}</div></section>
@@ -3999,8 +4016,8 @@ document.querySelector("#password-change-form").addEventListener("submit", (even
   const feedback = document.querySelector("#password-change-feedback");
   const password = document.querySelector("#settings-new-password").value;
   const confirmation = document.querySelector("#settings-confirm-password").value;
-  if (password.length < 8 || password.length > 72) {
-    setSettingsFeedback(feedback, "Choose a password between 8 and 72 characters.", "error");
+  if ([...password].length < 8 || new TextEncoder().encode(password).length > 72) {
+    setSettingsFeedback(feedback, "Choose a password with at least 8 characters and no more than 72 bytes.", "error");
     return;
   }
   if (password !== confirmation) {

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
+const { TextEncoder } = require("node:util");
 const source = fs.readFileSync(path.join(__dirname, "..", "auth.js"), "utf8");
 
 function fixture() {
@@ -20,6 +21,7 @@ function fixture() {
     return nodes.get(selector);
   };
   const context = {
+    TextEncoder,
     document: { body: { dataset: {} }, querySelector: get, getElementById: id => get(`#${id}`) },
     authForm: get("#auth-form"), authMessage: get("#auth-message"),
     passwordInput: get("#auth-password"), confirmPasswordInput: get("#auth-confirm-password"),

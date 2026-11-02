@@ -34,16 +34,19 @@
     }
     if (draft.description.length < 10 || draft.description.length > 2000) errors.description = "Use between 10 and 2,000 characters to describe your service.";
     if (extended && !deliveryLabels[draft.deliveryMethod]) errors.delivery = "Choose how you will deliver your service.";
-    if (extended && !["fixed", "starting"].includes(draft.priceType)) errors["price-type"] = "Choose fixed price or starting price.";
     if (extended && draft.estimatedDelivery.length > 80) errors.estimate = "Keep your delivery estimate to 80 characters or fewer.";
-    if (!["controlled", "chat", "hybrid"].includes(draft.negotiationMode)) errors["negotiation-mode"] = "Choose how customers can negotiate your price.";
-    if (["controlled", "hybrid"].includes(draft.negotiationMode)
+    if (!["fixed", "negotiation", "hybrid"].includes(draft.negotiationMode)) errors["negotiation-mode"] = "Choose a pricing and negotiation option.";
+    if (["negotiation", "hybrid"].includes(draft.negotiationMode)
       && (!/^\d+(?:\.\d{1,2})?$/.test(String(draft.minimumPrice))
         || Number(draft.minimumPrice) <= 0
         || Number(draft.minimumPrice) > Number(draft.price))) {
       errors["minimum-price"] = "Enter a minimum price above GH₵ 0 and no higher than your listed price.";
     }
     return errors;
+  }
+  function normalizeNegotiationMode(mode) {
+    if (mode === "controlled" || mode === "chat") return "negotiation";
+    return ["fixed", "negotiation", "hybrid"].includes(mode) ? mode : "negotiation";
   }
   function validateImageHeader(file, bytes) {
     if (!file.size || file.size > MAX_IMAGE_BYTES) throw new Error("Choose an image up to 5 MB.");
@@ -56,17 +59,17 @@
   }
   function metadata(row) {
     return { coverImagePath: row.cover_image_path || null, deliveryMethod: row.delivery_method || "",
-      estimatedDelivery: row.estimated_delivery || "", priceType: row.price_type || "fixed",
-      negotiationMode: row.negotiation_mode || "chat" };
+      estimatedDelivery: row.estimated_delivery || "", priceType: "fixed",
+      negotiationMode: normalizeNegotiationMode(row.negotiation_mode) };
   }
   function payload(draft, userId, coverPath, extended) {
     const result = { provider_id: userId, title: draft.title, category: draft.category,
       price: Number(draft.price), description: draft.description, accepts_groups: draft.groups };
     if (extended) Object.assign(result, { cover_image_path: coverPath || null, delivery_method: draft.deliveryMethod,
-      estimated_delivery: draft.estimatedDelivery || null, price_type: draft.priceType });
+      estimated_delivery: draft.estimatedDelivery || null, price_type: "fixed" });
     return result;
   }
-  const api = { MAX_IMAGE_BYTES, deliveryLabels, example, validate, validateImageHeader, metadata, payload };
+  const api = { MAX_IMAGE_BYTES, deliveryLabels, example, validate, validateImageHeader, normalizeNegotiationMode, metadata, payload };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.skillmateServiceUtils = api;
 })(globalThis);

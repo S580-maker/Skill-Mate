@@ -26,13 +26,24 @@ function getOtpSecret() {
   return secret;
 }
 
+function deriveSecretKey(purpose) {
+  const key = crypto.hkdfSync(
+    "sha256",
+    Buffer.from(getOtpSecret(), "utf8"),
+    Buffer.from("Skillmate auth key derivation v1"),
+    Buffer.from(`skillmate:${purpose}:v1`),
+    32,
+  );
+  return Buffer.from(key);
+}
+
 function hashValue(value) {
-  return crypto.createHmac("sha256", getOtpSecret()).update(value).digest("hex");
+  return crypto.createHmac("sha256", deriveSecretKey("otp-code-hash")).update(value).digest("hex");
 }
 
 function encryptSession(session) {
   const iv = crypto.randomBytes(12);
-  const key = crypto.createHash("sha256").update(getOtpSecret()).digest();
+  const key = deriveSecretKey("challenge-encryption");
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([cipher.update(JSON.stringify(session)), cipher.final()]);
   return {
@@ -45,7 +56,7 @@ function encryptSession(session) {
 
 function decryptSession(envelope) {
   if (envelope?.v !== 1) throw new Error("The pending sign-in session is invalid.");
-  const key = crypto.createHash("sha256").update(getOtpSecret()).digest();
+  const key = deriveSecretKey("challenge-encryption");
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(envelope.iv, "base64url"));
   decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
   const decrypted = Buffer.concat([
@@ -298,8 +309,8 @@ async function updateRecoveredPassword(request, response) {
   const token = getCookie(request, passwordRecoveryCookie);
   const password = String(request.body?.password || "");
   if (!token) return respondError(response, 410, "Your verification expired. Request a new password reset code.");
-  if (password.length < 8 || password.length > 1024) {
-    return respondError(response, 400, "Choose a password with at least 8 characters.");
+  if ([...password].length < 8 || Buffer.byteLength(password, "utf8") > 72) {
+    return respondError(response, 400, "Choose a password with at least 8 characters and no more than 72 bytes.");
   }
 
   try {
@@ -356,7 +367,7 @@ async function signIn(request, response) {
 
   const email = String(request.body?.email || "").trim().toLowerCase();
   const password = String(request.body?.password || "");
-  if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 1 || password.length > 1024) {
+  if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 1 || Buffer.byteLength(password, "utf8") > 72) {
     return respondError(response, 400, "Enter a valid email address and password.");
   }
 
@@ -496,9 +507,9 @@ async function signUp(request, response) {
   const password = String(request.body?.password || "");
   const fullName = String(request.body?.fullName || "").trim();
   const university = String(request.body?.university || "").trim();
-  if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 8 || password.length > 1024
+  if (!/^\S+@\S+\.\S+$/.test(email) || [...password].length < 8 || Buffer.byteLength(password, "utf8") > 72
     || fullName.length < 2 || fullName.length > 80 || university.length < 2 || university.length > 120) {
-    return respondError(response, 400, "Enter a valid email, password, name, and university.");
+    return respondError(response, 400, "Enter a valid email, a password with at least 8 characters and no more than 72 bytes, name, and university.");
   }
 
   try {

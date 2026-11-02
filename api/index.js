@@ -14,15 +14,25 @@ const routes = {
   "auth/sign-up": require("./_lib/routes/auth/sign-up"),
   "auth/verify": require("./_lib/routes/auth/verify"),
 };
+const { apiRateLimit, authRateLimit, runRateLimited } = require("./_lib/rate-limit");
 
-module.exports = async function apiRouter(request, response) {
-  const routeParam = request.query?.path;
-  const route = Array.isArray(routeParam)
-    ? routeParam.join("/")
-    : typeof routeParam === "string"
-      ? routeParam
-      : new URL(request.url, "http://localhost").pathname.replace(/^\/api\/?/, "");
+async function dispatchApiRequest(request, response, route) {
   const handler = routes[route];
   if (!handler) return response.status(404).json({ error: "Not found." });
   return handler(request, response);
+}
+
+module.exports = function apiRouter(request, response) {
+  return runRateLimited(request, response, apiRateLimit, () => {
+    const routeParam = request.query?.path;
+    const route = Array.isArray(routeParam)
+      ? routeParam.join("/")
+      : typeof routeParam === "string"
+        ? routeParam
+        : new URL(request.url, "http://localhost").pathname.replace(/^\/api\/?/, "");
+    if (route.startsWith("auth/")) {
+      return runRateLimited(request, response, authRateLimit, () => dispatchApiRequest(request, response, route));
+    }
+    return dispatchApiRequest(request, response, route);
+  });
 };

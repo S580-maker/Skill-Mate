@@ -7,9 +7,9 @@
     <title>Skillmate | Student marketplace</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet" />
-    <link rel="preload" href="user.css?v=23" as="style" />
-    <link rel="stylesheet" href="user.css?v=23" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet" />
+    <link rel="preload" href="user.css?v=24" as="style" />
+    <link rel="stylesheet" href="user.css?v=24" />
     <link rel="stylesheet" href="app-refresh.css?v=3" />
     <script src="theme.js?v=2"></script>
   </head>
@@ -138,7 +138,7 @@
             </form>
             <form class="settings-form" id="password-change-form">
               <section class="panel settings-section">
-                <div class="panel-heading"><div><h2>Change password</h2><p>Use at least 8 characters for your new password.</p></div></div>
+                <div class="panel-heading"><div><h2>Change password</h2><p>Use at least 8 characters; password input is limited to 72 bytes.</p></div></div>
                 <label>New password<input id="settings-new-password" type="password" minlength="8" maxlength="72" autocomplete="new-password" required /></label>
                 <label>Confirm new password<input id="settings-confirm-password" type="password" minlength="8" maxlength="72" autocomplete="new-password" required /></label>
                 <p class="settings-feedback" id="password-change-feedback" role="status" aria-live="polite" hidden></p>
@@ -239,18 +239,15 @@
             <div class="service-field"><label for="service-category">Category</label><select id="service-category" required aria-describedby="service-category-error"></select><small id="service-category-error" class="service-field-error" hidden></small></div>
             <div class="service-field"><div class="service-label-row"><label for="service-description">What will students get?</label><span id="service-description-count">0 / 2,000</span></div><textarea id="service-description" rows="4" required minlength="10" maxlength="2000" aria-describedby="service-description-hint service-description-count service-description-error"></textarea><small class="service-helper" id="service-description-hint"><em>A little detail builds trust. Include the scope, deliverables and any extras.</em></small><small id="service-description-error" class="service-field-error" hidden></small></div>
             <div class="service-field"><label for="service-delivery">Delivery method</label><select id="service-delivery" data-service-extended aria-describedby="service-delivery-error"><option value="">Choose how you work</option><option value="online">Online</option><option value="in_person">In person</option><option value="both">Both</option></select><small id="service-delivery-error" class="service-field-error" hidden></small></div>
-            <div class="service-form-row">
-              <div class="service-field"><label for="service-price-type">Pricing</label><select id="service-price-type" data-service-extended aria-describedby="service-price-hint service-price-type-error"><option value="fixed">Fixed price</option><option value="starting">Starting price</option></select><small id="service-price-type-error" class="service-field-error" hidden></small></div>
-              <div class="service-field"><label for="service-price">Price (GH₵)</label><input id="service-price" type="number" inputmode="decimal" min="0.01" max="99999999.99" step="0.01" required placeholder="50.00" aria-describedby="service-price-hint service-price-error" /><small id="service-price-error" class="service-field-error" hidden></small></div>
-            </div>
+            <div class="service-field"><label for="service-price">Listed price (GH₵)</label><input id="service-price" type="number" inputmode="decimal" min="0.01" max="99999999.99" step="0.01" required placeholder="50.00" aria-describedby="service-price-hint service-price-error" /><small id="service-price-error" class="service-field-error" hidden></small></div>
             <small class="service-helper" id="service-price-hint">The price covers the scope described above.</small>
             <fieldset class="service-negotiation">
-              <legend>How would you like customers to negotiate your price?</legend>
-              <label class="service-negotiation-choice"><input id="service-negotiation-mode-controlled" name="service-negotiation-mode" type="radio" value="controlled" required /><span><strong>Controlled Negotiation</strong><small>Customers can make offers on your listed price. You can accept, reject or send a counteroffer.</small></span></label>
-              <label class="service-negotiation-choice"><input id="service-negotiation-mode-chat" name="service-negotiation-mode" type="radio" value="chat" required /><span><strong>Chat-Based Negotiation</strong><small>Customers can discuss your service price with you directly through Skillmate messages.</small></span></label>
-              <label class="service-negotiation-choice"><input id="service-negotiation-mode-hybrid" name="service-negotiation-mode" type="radio" value="hybrid" required /><span><strong>Hybrid Negotiation</strong><small>Customers can submit formal price offers and also discuss the price with you through messages.</small></span></label>
+              <legend>Pricing &amp; negotiation</legend>
+              <label class="service-negotiation-choice"><input id="service-negotiation-mode-fixed" name="service-negotiation-mode" type="radio" value="fixed" required /><span><strong>Fixed Price</strong><small>This is the final price for the listed service. No price discussion or proposal actions appear in chat.</small></span></label>
+              <label class="service-negotiation-choice"><input id="service-negotiation-mode-negotiation" name="service-negotiation-mode" type="radio" value="negotiation" required /><span><strong>Negotiation</strong><small>Discuss the price in chat or make formal offers. The agreed service stays as listed.</small></span></label>
+              <label class="service-negotiation-choice"><input id="service-negotiation-mode-hybrid" name="service-negotiation-mode" type="radio" value="hybrid" required /><span><strong>Hybrid Negotiation</strong><small>Negotiate both price and service scope. Use the offer note to describe agreed changes.</small></span></label>
               <small id="service-negotiation-mode-error" class="service-field-error" hidden></small>
-              <div id="service-minimum-price-field" class="service-field" hidden><label for="service-minimum-price">Minimum acceptable price (GH₵)</label><input id="service-minimum-price" type="number" inputmode="decimal" min="0.01" max="99999999.99" step="0.01" placeholder="30.00" aria-describedby="service-minimum-price-hint service-minimum-price-error" /><small id="service-minimum-price-hint" class="service-helper">This amount is private and will never be shown to customers.</small><small id="service-minimum-price-error" class="service-field-error" hidden></small></div>
+              <div id="service-minimum-price-field" class="service-field" hidden><label for="service-minimum-price">Minimum acceptable price (GH₵)</label><input id="service-minimum-price" type="number" inputmode="decimal" min="0.01" max="99999999.99" step="0.01" placeholder="30.00" aria-describedby="service-minimum-price-hint service-minimum-price-error" /><small id="service-minimum-price-hint" class="service-helper">Private. Offers below this amount cannot be accepted.</small><small id="service-minimum-price-error" class="service-field-error" hidden></small></div>
             </fieldset>
             <details class="service-options" id="service-options">
               <summary>Show your work <span>Add a photo, delivery estimate &amp; group options</span></summary>

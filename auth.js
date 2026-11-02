@@ -624,6 +624,11 @@ authForm.addEventListener("submit", async (event) => {
     confirmPasswordInput.focus();
     return;
   }
+  if (new TextEncoder().encode(password).length > 72) {
+    authMessage.textContent = "Choose a password with no more than 72 bytes.";
+    passwordInput.focus();
+    return;
+  }
   submit.disabled = true;
   authSubmitting = true;
   submit.setAttribute("aria-busy", "true");

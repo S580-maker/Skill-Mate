@@ -6,9 +6,9 @@
     <title>Sign in | Skillmate</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500;1,600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="user.css?v=14" />
-    <link rel="stylesheet" href="auth.css?v=4" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="user.css?v=24" />
+    <link rel="stylesheet" href="auth.css?v=5" />
     <link rel="stylesheet" href="auth-access.css?v=4" />
     <script src="theme.js?v=2"></script>
   </head>
@@ -44,7 +44,7 @@
             <label id="name-field" hidden>Your name<input id="auth-name" autocomplete="name" maxlength="80" placeholder="e.g. Alex Morgan" /></label>
             <label id="university-field" hidden>Your university<input id="auth-university" autocomplete="organization" list="ghana-university-options" maxlength="120" placeholder="Start typing your university" /><datalist id="ghana-university-options"></datalist><small class="auth-field-note" id="university-directory-status">Choose a suggestion or type your university name.</small></label>
             <label id="email-field">Email address<input id="auth-email" aria-describedby="auth-message" type="email" autocomplete="email" required placeholder="you@university.edu" /></label>
-            <label id="password-field"><span id="password-label">Password</span><span class="auth-password-input"><input id="auth-password" type="password" autocomplete="current-password" required minlength="8" aria-describedby="password-hint" placeholder="Enter your password" /><button class="auth-password-toggle" id="password-visibility" type="button" aria-label="Show password" aria-pressed="false">Show</button></span><small class="password-hint" id="password-hint" aria-live="polite" hidden>Use at least 8 characters.</small></label>
+            <label id="password-field"><span id="password-label">Password</span><span class="auth-password-input"><input id="auth-password" type="password" autocomplete="current-password" required minlength="8" maxlength="72" aria-describedby="password-hint" placeholder="Enter your password" /><button class="auth-password-toggle" id="password-visibility" type="button" aria-label="Show password" aria-pressed="false">Show</button></span><small class="password-hint" id="password-hint" aria-live="polite" hidden>Use at least 8 characters.</small></label>
             <label id="confirm-password-field" hidden>Confirm password<span class="auth-password-input"><input id="auth-confirm-password" aria-describedby="auth-message" type="password" autocomplete="new-password" minlength="8" placeholder="Enter your password again" disabled /><button class="auth-password-toggle" id="confirm-password-visibility" type="button" aria-label="Show confirm password" aria-pressed="false">Show</button></span></label>
             <label class="auth-consent" id="consent-field"><input id="auth-consent" type="checkbox" required /><span>I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>. <small>Needed for a new account or to continue with Google.</small></span></label>
             <a class="auth-text-button" id="forgot-password-link" href="forgot-password.html">Forgot password?</a>

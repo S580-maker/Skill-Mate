@@ -67,7 +67,7 @@ test("agreed booking UI requires customer confirmation and exposes time approval
 test("existing chats expose service-specific negotiation actions and agreed booking links", () => {
   assert.match(userScript, /chatServices = connectedServices\.filter/);
   assert.match(userScript, /action\.dataset\.chatPriceAction = "discuss"/);
-  assert.match(userScript, /action\.dataset\.chatPriceAction = "offer"/);
+  assert.match(userScript, /offer\.dataset\.chatPriceAction = "offer"/);
   assert.match(userScript, /textContent = "Propose a price"/);
   assert.match(userScript, /action === "counter" \|\| action === "proposal" \|\| action === "initial"/);
   assert.match(userScript, /data-negotiation-chat="\$\{escapeHTML\(booking\.priceNegotiationId\)\}"/);
@@ -78,12 +78,12 @@ test("existing chats expose service-specific negotiation actions and agreed book
   assert.match(userScript, /error\.userMessage = error\.message\.trim\(\)\.slice\(0, 240\)/);
 });
 
-test("formal price proposals hide the optional message field", () => {
-  assert.match(userScript, /messageLabel\.hidden = action === "proposal"/);
-  assert.match(userScript, /action === "proposal" \? "" : document\.querySelector\("#price-offer-message"\)\.value\.trim\(\)/);
+test("price-only proposals hide notes while Hybrid proposals can describe scope changes", () => {
+  assert.match(userScript, /messageLabel\.hidden = action === "proposal" && service\?\.negotiationMode !== "hybrid"/);
+  assert.match(userScript, /action === "proposal" && service\?\.negotiationMode !== "hybrid"\s+\? "" : document\.querySelector\("#price-offer-message"\)\.value\.trim\(\)/);
 });
 
-test("counteroffer action is limited to Controlled and Hybrid listing modes", () => {
+test("counteroffer action is available in both formal negotiation modes", () => {
   assert.match(userScript, /const availableActions = \[\["accept", "Accept"\], \["reject", "Reject"\]\]/);
-  assert.match(userScript, /if \(\["controlled", "hybrid"\]\.includes\(mode\)\) availableActions\.push\(\["counter", "Counter"\]\)/);
+  assert.match(userScript, /if \(\["negotiation", "hybrid"\]\.includes\(mode\)\) availableActions\.push\(\["counter", "Counter"\]\)/);
 });

@@ -6,8 +6,8 @@ const vm = require("node:vm");
 const utils = require("../service-form-utils");
 const read = file => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 const valid = () => ({ title: "Campus posters", category: "Design", description: "A poster with two revisions included.",
-  price: "35.50", deliveryMethod: "online", priceType: "fixed", estimatedDelivery: "2 days", groups: false,
-  negotiationMode: "chat", minimumPrice: "" });
+  price: "35.50", deliveryMethod: "online", estimatedDelivery: "2 days", groups: false,
+  negotiationMode: "negotiation", minimumPrice: "20.00" });
 
 test("service validation accepts decimal prices and rejects invalid prices, categories and incomplete details", () => {
   assert.deepEqual(utils.validate(valid(), ["Design"], true), {});
@@ -20,20 +20,26 @@ test("service validation accepts decimal prices and rejects invalid prices, cate
 
 test("service negotiation mode is required and private minimums must be valid", () => {
   assert.ok(utils.validate({ ...valid(), negotiationMode: "" }, ["Design"], true)["negotiation-mode"]);
+  assert.deepEqual(utils.validate({ ...valid(), negotiationMode: "fixed" }, ["Design"], true), {});
+  assert.deepEqual(utils.validate({ ...valid(), negotiationMode: "negotiation", minimumPrice: "12.50" }, ["Design"], true), {});
   for (const minimumPrice of ["", "0", "35.51", "1.001", "-1"]) {
-    assert.ok(utils.validate({ ...valid(), negotiationMode: "controlled", minimumPrice }, ["Design"], true)["minimum-price"]);
+    assert.ok(utils.validate({ ...valid(), negotiationMode: "hybrid", minimumPrice }, ["Design"], true)["minimum-price"]);
   }
   assert.deepEqual(utils.validate({ ...valid(), negotiationMode: "hybrid", minimumPrice: "12.50" }, ["Design"], true), {});
+  assert.equal(utils.normalizeNegotiationMode("controlled"), "negotiation");
+  assert.equal(utils.normalizeNegotiationMode("chat"), "negotiation");
+  assert.equal(utils.normalizeNegotiationMode("fixed"), "fixed");
+  assert.equal(utils.metadata({ price_type: "starting" }).priceType, "fixed");
 });
 
 test("legacy service payloads contain only existing columns; migrated payloads preserve every new field", () => {
   const base = utils.payload(valid(), "owner", "owner/image.webp", false);
   assert.deepEqual(Object.keys(base).sort(), ["provider_id", "title", "category", "price", "description", "accepts_groups"].sort());
-  const full = utils.payload({ ...valid(), priceType: "starting" }, "owner", "owner/image.webp", true);
+  const full = utils.payload(valid(), "owner", "owner/image.webp", true);
   assert.equal(full.cover_image_path, "owner/image.webp");
   assert.equal(full.delivery_method, "online");
   assert.equal(full.estimated_delivery, "2 days");
-  assert.equal(full.price_type, "starting");
+  assert.equal(full.price_type, "fixed");
   assert.equal(full.price, 35.5);
 });
 
@@ -77,7 +83,8 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
   const opener = element("opener");
   let saveFails = failSave;
   const form = get("form");
-  const negotiationModes = ["controlled", "chat", "hybrid"].map(value => {
+  const negotiationModeValues = ["fixed", "negotiation", "hybrid"];
+  const negotiationModes = negotiationModeValues.map(value => {
     const radio = element(`service-negotiation-mode-${value}`);
     radio.value = value;
     nodes.set(radio.id, radio);
@@ -85,11 +92,11 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
   });
   form.reset = () => {
     for (const node of nodes.values()) { node.value = ""; node.checked = false; }
-    negotiationModes.forEach((radio, index) => { radio.value = ["controlled", "chat", "hybrid"][index]; });
+    negotiationModes.forEach((radio, index) => { radio.value = negotiationModeValues[index]; });
   };
   form.querySelectorAll = selector => selector === '[name="service-negotiation-mode"]'
     ? negotiationModes
-    : ["cover", "cover-remove", "delivery", "price-type", "estimate"].map(get);
+    : ["cover", "cover-remove", "delivery", "estimate"].map(get);
   form.querySelector = selector => {
     if (selector === '[name="service-negotiation-mode"]:checked') return negotiationModes.find(input => input.checked) || null;
     const value = /\[value="([^"]+)"\]/.exec(selector)?.[1];
@@ -155,9 +162,9 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
       await new Promise(resolve => setImmediate(resolve));
     },
     fill() {
-      negotiationModes.forEach((radio, index) => { radio.value = ["controlled", "chat", "hybrid"][index]; });
+      negotiationModes.forEach((radio, index) => { radio.value = negotiationModeValues[index]; });
       negotiationModes[1].checked = true;
-      for (const [name, value] of Object.entries({ title: "Campus posters", category: "Design", description: "A poster with two revisions included.", price: "35.50", delivery: "online", "price-type": "starting", estimate: "2 days" })) get(name).value = value;
+      for (const [name, value] of Object.entries({ title: "Campus posters", category: "Design", description: "A poster with two revisions included.", price: "35.50", delivery: "online", estimate: "2 days", "minimum-price": "20.00" })) get(name).value = value;
     },
   };
 }
@@ -167,21 +174,31 @@ test("publishing requires preview first and writes all new details only on confi
   await f.get("form").fire("submit");
   assert.equal(f.writes.length, 0);
   assert.equal(f.get("review").hidden, false);
-  assert.equal(f.get("review-price").textContent, "From GH₵ 35.50");
+  assert.equal(f.get("review-price").textContent, "GH₵ 35.50");
   await f.get("form").fire("submit");
   assert.equal(f.writes.length, 1);
-  assert.equal(f.writes[0].payload.price_type, "starting");
+  assert.equal(f.writes[0].payload.price_type, "fixed");
   assert.equal(f.writes[0].payload.delivery_method, "online");
   assert.equal(f.rpcCalls[0].name, "save_service_listing");
-  assert.equal(f.rpcCalls[0].args.p_mode, "chat");
-  assert.equal(f.rpcCalls[0].args.p_minimum_price, null);
+  assert.equal(f.rpcCalls[0].args.p_mode, "negotiation");
+  assert.equal(f.rpcCalls[0].args.p_minimum_price, 20);
   assert.equal(f.get("modal").open, false);
   assert.equal(f.opener.focused, true);
 });
 
+test("Fixed Price listings save without a private minimum", async () => {
+  const f = fixture(); await f.prepare(); f.fill();
+  f.get("negotiation-mode-fixed").checked = true;
+  f.get("negotiation-mode-negotiation").checked = false;
+  await f.get("form").fire("submit");
+  await f.get("form").fire("submit");
+  assert.equal(f.rpcCalls[0].args.p_mode, "fixed");
+  assert.equal(f.rpcCalls[0].args.p_minimum_price, null);
+});
+
 test("cancelled edits reset when Add a service opens, including ID and optional fields", async () => {
   const f = fixture();
-  await f.prepare({ id: "existing-id", title: "Old listing", category: "Design", price: 50, description: "Existing description", groups: true, priceType: "starting", estimatedDelivery: "3 days" });
+  await f.prepare({ id: "existing-id", title: "Old listing", category: "Design", price: 50, description: "Existing description", groups: true, estimatedDelivery: "3 days" });
   assert.equal(f.get("id").value, "existing-id");
   f.get("modal").close();
   await f.prepare();
@@ -189,7 +206,6 @@ test("cancelled edits reset when Add a service opens, including ID and optional 
   assert.equal(f.get("title").value, "");
   assert.equal(f.get("estimate").value, "");
   assert.equal(f.get("group").checked, false);
-  assert.equal(f.get("price-type").value, "fixed");
 });
 
 test("editing a listing restores its negotiation mode and private minimum", async () => {
@@ -260,4 +276,7 @@ test("service editor markup has unique IDs and resolves field error and label re
   for (const match of modal.matchAll(/(?:aria-describedby|aria-labelledby|for)="([^"]+)"/g)) {
     for (const id of match[1].split(" ")) assert.ok(allIds.includes(id), `Missing reference ${id}`);
   }
+  assert.match(modal, /Pricing &amp; negotiation/);
+  assert.doesNotMatch(modal, /service-price-type|Starting price|Controlled Negotiation/);
+  assert.deepEqual([...modal.matchAll(/name="service-negotiation-mode" type="radio" value="([^"]+)"/g)].map(match => match[1]), ["fixed", "negotiation", "hybrid"]);
 });

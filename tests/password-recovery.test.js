@@ -19,6 +19,7 @@ process.env.SMTP_FROM = "Skillmate <mailer@example.test>";
 const {
   googleSignIn,
   requestPasswordRecovery,
+  signUp,
   updateRecoveredPassword,
   verify,
 } = require("../api/_lib/email-2fa");
@@ -38,7 +39,13 @@ function responseStub() {
 
 function envelope(value) {
   const iv = crypto.randomBytes(12);
-  const key = crypto.createHash("sha256").update(otpSecret).digest();
+  const key = Buffer.from(crypto.hkdfSync(
+    "sha256",
+    Buffer.from(otpSecret, "utf8"),
+    Buffer.from("Skillmate auth key derivation v1"),
+    Buffer.from("skillmate:challenge-encryption:v1"),
+    32,
+  ));
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([cipher.update(JSON.stringify(value)), cipher.final()]);
   return {
@@ -48,6 +55,114 @@ function envelope(value) {
     data: encrypted.toString("base64url"),
   };
 }
+
+test("signup stores a pending password only inside authenticated encrypted challenge data", async () => {
+  const requests = [];
+  const password = "correct horse battery staple";
+  const userId = "223e4567-e89b-42d3-a456-426614174000";
+  const sessionId = "123e4567-e89b-42d3-a456-426614174000";
+  const accessToken = `header.${Buffer.from(JSON.stringify({ session_id: sessionId })).toString("base64url")}.signature`;
+  let emailMessage;
+  let storedChallenge;
+  nodemailer.createTransport = () => ({
+    async sendMail(message) { emailMessage = message; },
+  });
+  global.fetch = async (url, options = {}) => {
+    const parsedUrl = new URL(url);
+    requests.push({ url: String(url), options });
+    if (parsedUrl.pathname.endsWith("/rest/v1/auth_login_challenges") && options.method === "POST") {
+      storedChallenge = JSON.parse(options.body);
+      return { ok: true, status: 201, json: async () => ({}) };
+    }
+    if (parsedUrl.pathname.endsWith("/rest/v1/auth_login_challenges")) {
+      return { ok: true, status: 200, json: async () => [] };
+    }
+    if (parsedUrl.pathname.endsWith("/rest/v1/rpc/consume_email_login_challenge")) {
+      return { ok: true, status: 200, json: async () => ({ status: "verified", session: storedChallenge.session_data }) };
+    }
+    if (parsedUrl.pathname.endsWith("/auth/v1/admin/users")) {
+      return { ok: true, status: 200, json: async () => ({ id: userId }) };
+    }
+    if (parsedUrl.pathname.endsWith("/auth/v1/token")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          access_token: accessToken,
+          refresh_token: "verified-signup-refresh-token",
+          user: { id: userId, email: "student@example.test" },
+        }),
+      };
+    }
+    if (parsedUrl.pathname.endsWith("/auth/v1/user")) {
+      return { ok: true, status: 200, json: async () => ({ id: userId }) };
+    }
+    return { ok: true, status: 201, json: async () => ({}) };
+  };
+
+  try {
+    const startResponse = responseStub();
+    await signUp({
+      method: "POST",
+      body: {
+        email: "student@example.test",
+        password,
+        fullName: "Test Student",
+        university: "University of Ghana",
+      },
+    }, startResponse);
+
+    assert.equal(startResponse.statusCode, 200);
+    assert.ok(storedChallenge.session_data.data);
+    assert.doesNotMatch(JSON.stringify(storedChallenge.session_data), new RegExp(password));
+    assert.equal(requests.some(({ url }) => url.includes("/auth/v1/admin/users")), false);
+
+    const challengeToken = decodeURIComponent(startResponse.headers["set-cookie"]
+      .find((cookie) => cookie.startsWith("skillmate_login_challenge="))
+      .split(";")[0].split("=")[1]);
+    const verifyResponse = responseStub();
+    const code = emailMessage.text.match(/code is (\d{6})\./)?.[1];
+    await verify({
+      method: "POST",
+      cookies: { skillmate_login_challenge: challengeToken },
+      body: { code },
+    }, verifyResponse);
+
+    assert.equal(verifyResponse.statusCode, 200);
+    const createUserRequest = requests.find(({ url }) => url.includes("/auth/v1/admin/users"));
+    assert.equal(JSON.parse(createUserRequest.options.body).password, password);
+  } finally {
+    global.fetch = originalFetch;
+    nodemailer.createTransport = originalTransport;
+  }
+});
+
+test("signup and password recovery reject passwords over bcrypt's 72-byte limit", async () => {
+  const oversizedPassword = `password${"é".repeat(33)}`;
+  assert.ok(Buffer.byteLength(oversizedPassword, "utf8") > 72);
+
+  const signupResponse = responseStub();
+  await signUp({
+    method: "POST",
+    body: {
+      email: "student@example.test",
+      password: oversizedPassword,
+      fullName: "Test Student",
+      university: "University of Ghana",
+    },
+  }, signupResponse);
+  assert.equal(signupResponse.statusCode, 400);
+  assert.match(signupResponse.body.error, /72 bytes/);
+
+  const recoveryResponse = responseStub();
+  await updateRecoveredPassword({
+    method: "PUT",
+    cookies: { skillmate_password_recovery: "recovery-token" },
+    body: { password: oversizedPassword },
+  }, recoveryResponse);
+  assert.equal(recoveryResponse.statusCode, 400);
+  assert.match(recoveryResponse.body.error, /72 bytes/);
+});
 
 test("Google sign-in requires email verification before returning a Supabase session", async () => {
   let emailMessage;

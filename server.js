@@ -7,6 +7,7 @@ const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const { rateLimit } = require("express-rate-limit");
 const { isOtpVerifiedSession } = require("./api/_lib/supabase");
+const { apiRateLimit, authRateLimit } = require("./api/_lib/rate-limit");
 
 const app = express();
 const projectRoot = __dirname;
@@ -23,6 +24,8 @@ app.set("trust proxy", process.env.TRUST_PROXY === "1");
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(express.json({ limit: "16kb" }));
 app.use(cookieParser());
+app.use("/api", apiRateLimit);
+app.use("/api/auth", authRateLimit);
 
 function getSupabaseConfig() {
   const rawUrl = process.env.SUPABASE_URL?.trim();

@@ -68,6 +68,11 @@ resetForm.addEventListener("submit", async (event) => {
     resetMessage.textContent = "This reset link is invalid or expired. Request a new password reset link.";
     return;
   }
+  if ([...newPassword.value].length < 8 || new TextEncoder().encode(newPassword.value).length > 72) {
+    resetMessage.textContent = "Choose a password with at least 8 characters and no more than 72 bytes.";
+    newPassword.focus();
+    return;
+  }
   resetSubmit.disabled = true;
   resetSubmit.setAttribute("aria-busy", "true");
   resetSubmit.querySelector(".auth-submit-spinner").hidden = false;
