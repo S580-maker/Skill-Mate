@@ -1347,7 +1347,10 @@ function createPriceNegotiationPanel(chat) {
       if (offer.status === "pending" && offer.proposerId !== appUser?.id && negotiation.state === "open") {
         const actions = document.createElement("span");
         actions.className = "chat-offer-actions";
-        for (const [action, label] of [["accept", "Accept"], ["reject", "Reject"], ["counter", "Counter"]]) {
+        const mode = service?.negotiationMode || "chat";
+        const availableActions = [["accept", "Accept"], ["reject", "Reject"]];
+        if (["controlled", "hybrid"].includes(mode)) availableActions.push(["counter", "Counter"]);
+        for (const [action, label] of availableActions) {
           const button = document.createElement("button");
           button.type = "button";
           button.className = action === "accept" ? "button button-small button-primary" : "button button-small button-outline";

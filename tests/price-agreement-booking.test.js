@@ -82,3 +82,8 @@ test("formal price proposals hide the optional message field", () => {
   assert.match(userScript, /messageLabel\.hidden = action === "proposal"/);
   assert.match(userScript, /action === "proposal" \? "" : document\.querySelector\("#price-offer-message"\)\.value\.trim\(\)/);
 });
+
+test("counteroffer action is limited to Controlled and Hybrid listing modes", () => {
+  assert.match(userScript, /const availableActions = \[\["accept", "Accept"\], \["reject", "Reject"\]\]/);
+  assert.match(userScript, /if \(\["controlled", "hybrid"\]\.includes\(mode\)\) availableActions\.push\(\["counter", "Counter"\]\)/);
+});
