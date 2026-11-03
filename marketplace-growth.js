@@ -3,6 +3,7 @@
   const utils = window.skillmateGrowthUtils;
   const $ = selector => document.querySelector(selector);
   const filters = $("#marketplace-filters");
+  const filtersToggle = $("#marketplace-filter-trigger");
   const ownId = () => appUser?.id || ownProviderId();
   const demoKey = "skillmate-marketplace-growth-v1";
   let schedules = [];
@@ -50,7 +51,10 @@
     submit.disabled = true;
     feedback(feedbackId, "Saving…");
     try { await work(); }
-    catch (error) { feedback(feedbackId, error.message || "Could not save. Your details are still here; please try again.", true); }
+    catch (error) {
+      feedback(feedbackId, error.message || "Could not save. Your details are still here; please try again.", true);
+      if (feedbackId === "#availability-feedback") $("#availability-summary-status").textContent = "Not saved";
+    }
     finally { delete form.dataset.saving; submit.disabled = false; }
   }
   async function rpc(name, args) {
@@ -63,15 +67,37 @@
   }
   function populateHours() {
     const schedule = schedules.find(item => item.provider_id === ownId());
+    $("#availability-summary-status").textContent = schedule
+      ? schedule.is_published ? "Published" : "Saved privately"
+      : schedulesAvailable ? "Optional" : "Unavailable";
     $("#availability-timezone").value = schedule?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Accra";
     $("#availability-duration").value = String(schedule?.slot_minutes || 60);
     $("#availability-enabled").checked = Boolean(schedule?.is_published);
     $("#availability-days-off").value = (schedule?.blocked_dates || []).join(", ");
     $("#availability-week").innerHTML = dayNames.map((name, index) => {
       const hours = schedule?.weekly_hours.find(item => item.day === index);
-      return `<div class="availability-row" data-hours-day="${index}"><label><input type="checkbox" ${hours ? "checked" : ""} />${name}</label><label class="sr-only" for="hours-start-${index}">${name} start</label><input id="hours-start-${index}" aria-label="${name} start" type="time" value="${escapeHTML(hours?.start || "09:00")}" required /><label class="sr-only" for="hours-end-${index}">${name} end</label><input id="hours-end-${index}" aria-label="${name} end" type="time" value="${escapeHTML(hours?.end || "17:00")}" required /></div>`;
+      return `<div class="availability-row" data-hours-day="${index}"><label class="availability-day-toggle"><input type="checkbox" aria-label="${name}" ${hours ? "checked" : ""} /><span aria-hidden="true">${name.slice(0, 3)}</span></label><div class="availability-time-range"><input id="hours-start-${index}" aria-label="${name} start" type="time" value="${escapeHTML(hours?.start || "09:00")}" /><span aria-hidden="true">to</span><input id="hours-end-${index}" aria-label="${name} end" type="time" value="${escapeHTML(hours?.end || "17:00")}" /></div></div>`;
     }).join("");
+    syncAvailabilityRows();
   }
+  function syncAvailabilityRows() {
+    document.querySelectorAll("[data-hours-day]").forEach(row => {
+      const enabled = row.querySelector('[type="checkbox"]').checked;
+      const range = row.querySelector(".availability-time-range");
+      range.hidden = !enabled;
+      range.querySelectorAll("input").forEach(input => {
+        input.disabled = !enabled;
+        input.required = enabled;
+      });
+    });
+  }
+  $("#availability-week").addEventListener("change", syncAvailabilityRows);
+  $("#availability-form").addEventListener("input", () => {
+    $("#availability-summary-status").textContent = "Unsaved changes";
+  });
+  $("#availability-form").addEventListener("change", () => {
+    $("#availability-summary-status").textContent = "Unsaved changes";
+  });
   function reviewKey() { return `${ownId()}:${pendingCustomerReviews().map(item => item.id).sort().join(",")}`; }
   const growth = window.skillmateGrowth = {
     matches(provider) { return utils.matchesFilters(provider, readFilters(), Boolean(scheduleFor(provider.id))); },
@@ -113,13 +139,6 @@
       const stats = utils.metrics(state.bookings.filter(isOwnBooking));
       $("#growth-metrics").innerHTML = [[stats.requests,"Requests received"],[stats.confirmed,"Confirmed or finished"],[stats.completed,"Completed jobs"],[stats.repeatCustomers,"Repeat customers"]]
         .map(([value, label]) => `<article><strong>${value}</strong><span>${label}</span></article>`).join("");
-      const now = Date.now();
-      const nudges = state.bookings.filter(booking => {
-        const time = Date.parse(booking.scheduledAt || `${booking.date}T12:00:00`);
-        return (booking.status === "Pending" && isOwnBooking(booking))
-          || (booking.status === "Confirmed" && time > now && time - now <= 86400000);
-      }).slice(0, 3);
-      $("#booking-nudges").innerHTML = nudges.map(booking => `<div class="booking-nudge"><span><strong>${booking.status === "Pending" ? "Your reply is needed" : "Coming up within 24 hours"}</strong><br />${escapeHTML(booking.service)} · ${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be agreed")}</span><button class="subtle-button" data-focus-booking="${escapeHTML(booking.id)}" type="button">View booking</button></div>`).join("");
     },
     async refreshSlots() {
       const token = ++slotRequest;
@@ -200,6 +219,14 @@
     }).join("") : '<div class="empty-card"><strong>No requests here yet</strong><small>Need help? Post a clear task with your deadline and budget so students know how to help.</small><button class="button button-primary" type="button" data-new-request>Post a request</button></div>';
     if (appSupabase && requests.length === boardLimit) $("#request-board-grid").insertAdjacentHTML("beforeend", '<button class="button button-outline" type="button" data-more-requests>Load more requests</button>');
   }
+  filtersToggle.addEventListener("click", () => {
+    const expanded = filtersToggle.getAttribute("aria-expanded") === "true";
+    filters.hidden = expanded;
+    filtersToggle.setAttribute("aria-expanded", String(!expanded));
+    filtersToggle.setAttribute("aria-label", `${expanded ? "Show" : "Hide"} service filters`);
+    filtersToggle.title = `${expanded ? "Show" : "Hide"} service filters`;
+    filtersToggle.classList.toggle("is-active", !expanded);
+  });
   filters.addEventListener("submit", event => event.preventDefault());
   filters.addEventListener("input", () => { renderMarketplace(); renderSearchSuggestions(); });
   filters.addEventListener("change", () => renderMarketplace());
@@ -225,6 +252,7 @@
       schedules = schedules.filter(item => item.provider_id !== schedule.provider_id).concat(schedule);
       saveDemo(); renderMarketplace();
       feedback("#availability-feedback", schedule.is_published ? "Your hours are published. Existing appointments keep their agreed time and length." : "Your hours are saved privately. Students can request a preferred time.");
+      $("#availability-summary-status").textContent = schedule.is_published ? "Published" : "Saved privately";
     });
   });
   $("#booking-date").addEventListener("change", growth.refreshSlots);
@@ -277,7 +305,7 @@
     });
   });
   document.addEventListener("click", async event => {
-    const button = event.target.closest("[data-dismiss-reviews], [data-rebook], [data-new-request], [data-close-request], [data-reply-request], [data-report-request], [data-request-chat], [data-focus-booking], [data-more-requests]");
+    const button = event.target.closest("[data-dismiss-reviews], [data-rebook], [data-new-request], [data-close-request], [data-reply-request], [data-report-request], [data-request-chat], [data-more-requests]");
     if (!button) return;
     if (button.hasAttribute("data-dismiss-reviews")) { reviewDismissal = reviewKey(); growth.render(); }
     else if (button.hasAttribute("data-new-request")) openPost();
@@ -289,14 +317,6 @@
       if (!service) { showToast("This service is no longer listed. Browse another service from the provider.", "error"); return; }
       openBooking(booking.providerId, service.id); // A fresh request uses today's listing and price, never the old agreement.
       $("#booking-description").textContent = "Book this service again. Check the current price, choose a new date and confirm the details.";
-    } else if (button.dataset.focusBooking) {
-      const booking = state.bookings.find(item => item.id === button.dataset.focusBooking);
-      if (!booking) return;
-      bookingDirection = isOwnBooking(booking) ? "received" : "made";
-      activeBookingFilter = "all";
-      document.querySelectorAll('[data-booking-direction]').forEach(item => { const active = item.dataset.bookingDirection === bookingDirection; item.classList.toggle("active", active); item.setAttribute("aria-pressed", String(active)); });
-      renderBookingList("user-booking-list", bookingsForActiveFilter());
-      [...document.querySelectorAll('[data-booking-card-id]')].find(item => item.dataset.bookingCardId === booking.id)?.scrollIntoView({ block: "center", behavior: "smooth" });
     } else if (button.dataset.replyRequest) {
       $("#request-reply-form").reset(); $("#request-reply-id").value = button.dataset.replyRequest; feedback("#request-reply-feedback", ""); openModal("request-reply-modal");
     } else if (button.dataset.reportRequest) {

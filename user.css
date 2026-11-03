@@ -616,7 +616,6 @@ img[loading="lazy"] { background-color: var(--main-soft); }
 .listing-copy p { margin: 5px 0 0; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .listing-price { flex: 0 0 auto; color: var(--dark); font-family: "Poppins",sans-serif; font-size: 12px; }
 .listing-actions { display: flex; align-items: center; gap: 5px; }
-.appointment-heading { margin-top: 25px; }
 .portfolio-panel { margin-top: 17px; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .portfolio-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }

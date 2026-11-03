@@ -173,27 +173,45 @@ test("profile authorization errors are preserved", async () => {
   assert.equal(selections.length, 1);
 });
 
-function profileSaveFixture({ campus = "Original campus", settingsReady = false, rpcReady = false } = {}) {
+function profileSaveFixture({
+  campus = "Original campus", settingsReady = false, rpcReady = false,
+  photo = null, avatarUrl = "", failAvatarRemoval = false,
+} = {}) {
   const elements = {
     "#settings-full-name": { value: "Updated name" },
     "#settings-university": { value: campus },
     "#settings-bio": { value: "Updated bio" },
     "#settings-phone": { value: "" },
-    "#settings-avatar-file": { files: [] },
+    "#settings-avatar-file": { files: photo ? [photo] : [], value: "" },
     "#settings-cv-current": { textContent: "" },
     "#settings-cv-file": { files: [], value: "" },
     "#settings-cv-remove": { checked: false },
     "#settings-cv-remove-row": { hidden: true },
-    "#account-profile-feedback": {},
+    "#account-profile-feedback": { dataset: {} },
     "#profile-name": {}, "#profile-bio": {},
   };
   const writes = [];
+  const storageCalls = [];
+  const compressionOptions = [];
   let submit;
   let pending;
-  const state = { profile: { university: "Original campus", verified: true } };
+  const feedback = elements["#account-profile-feedback"];
+  const state = { profile: { university: "Original campus", verified: true, avatarUrl } };
   const context = vm.createContext({
     state, accountSettingsColumnsAvailable: settingsReady,
+    pendingAvatarPreviewUrl: "",
     appUser: { id: "test-user" },
+    crypto: { randomUUID: () => "new-avatar-id" },
+    URL: { revokeObjectURL() {} },
+    window: {
+      SKILLMATE_SUPABASE_CONFIG: { url: "https://supabase.test" },
+      skillmateServiceUtils: {
+        async compressImageFile(_file, options) {
+          compressionOptions.push(options);
+          return { type: "image/webp", size: 50_000 };
+        },
+      },
+    },
     document: { querySelector(selector) {
       if (selector === "#account-profile-form") return { addEventListener(_event, handler) { submit = handler; } };
       assert(elements[selector], selector); return elements[selector];
@@ -204,19 +222,46 @@ function profileSaveFixture({ campus = "Original campus", settingsReady = false,
         if (!rpcReady) return { error: { code: "PGRST202" } };
         writes.push(args); return { error: null };
       },
+      storage: {
+        from(table) {
+          assert.equal(table, "profile-avatars");
+          return {
+            async upload(path, file, options) {
+              storageCalls.push({ operation: "upload", path, size: file.size, options });
+              return { error: null };
+            },
+            getPublicUrl(path) { return { data: { publicUrl: `https://supabase.test/storage/v1/object/public/profile-avatars/${path}` } }; },
+            async remove(paths) {
+              storageCalls.push({ operation: "remove", paths });
+              return { error: failAvatarRemoval ? { message: "permission denied" } : null };
+            },
+          };
+        },
+      },
       from(table) {
-        assert.equal(table, "profiles");
-        return { update(value) { writes.push(value); return { eq: async () => ({ error: null }) }; } };
+        if (table === "profiles") {
+          return { update(value) { writes.push(value); return { eq: async () => ({ error: null }) }; } };
+        }
+        throw new Error(`Unexpected table: ${table}`);
       },
     },
     runAction(action) { pending = action(); return pending; },
-    setSettingsFeedback() {}, renderAll() {}, loadAccountSettings() {}, showToast() {},
+    setSettingsFeedback(element, message, kind) {
+      element.textContent = message;
+      element.dataset.state = kind;
+    }, renderAll() {}, loadAccountSettings() {}, showToast() {},
     loadAccountProfile: async () => ({ data: { campus_verified: false }, error: null }),
   });
+  const cleanupStart = userSource.indexOf("async function removeUnusedAvatar");
+  const cleanupEnd = userSource.indexOf("let pendingAvatarPreviewUrl", cleanupStart);
   const marker = 'document.querySelector("#account-profile-form").addEventListener';
   const end = 'document.querySelector("#password-change-form").addEventListener';
-  vm.runInContext(userSource.slice(userSource.indexOf(marker), userSource.indexOf(end)), context);
-  return { state, writes, async save() {
+  vm.runInContext(
+    userSource.slice(cleanupStart, cleanupEnd)
+      + userSource.slice(userSource.indexOf(marker), userSource.indexOf(end)),
+    context,
+  );
+  return { state, writes, storageCalls, compressionOptions, feedback, async save() {
     submit({ preventDefault() {}, currentTarget: { querySelector() { return {}; } } });
     await pending;
   } };
@@ -246,4 +291,86 @@ test("campus edits use the profile RPC and refresh verification state", async ()
   assert.equal(writes[0].p_university, "New campus");
   assert.equal(state.profile.verified, false);
   assert.equal(state.profile.university, "New campus");
+});
+
+test("profile photo uploads are compact and replace the old stored photo", async () => {
+  const previousAvatarUrl = "https://supabase.test/storage/v1/object/public/profile-avatars/test-user/old.webp";
+  const { save, storageCalls, compressionOptions } = profileSaveFixture({
+    rpcReady: true,
+    photo: { type: "image/png", size: 400_000 },
+    avatarUrl: previousAvatarUrl,
+  });
+  await save();
+
+  assert.equal(compressionOptions[0].maxDimension, 512);
+  assert.equal(compressionOptions[0].quality, 0.75);
+  assert.equal(compressionOptions[0].maxOutputBytes, 1_000_000);
+  assert.equal(storageCalls[0].operation, "upload");
+  assert.equal(storageCalls[0].size, 50_000);
+  assert.equal(storageCalls[1].operation, "remove");
+  assert.equal(storageCalls[1].paths.length, 1);
+  assert.equal(storageCalls[1].paths[0], "test-user/old.webp");
+});
+
+test("profile photo cleanup failures are reported after a successful replacement", async () => {
+  const previousAvatarUrl = "https://supabase.test/storage/v1/object/public/profile-avatars/test-user/old.webp";
+  const { save, feedback } = profileSaveFixture({
+    rpcReady: true,
+    photo: { type: "image/png", size: 400_000 },
+    avatarUrl: previousAvatarUrl,
+    failAvatarRemoval: true,
+  });
+  await save();
+
+  assert.match(feedback.textContent, /old profile photo may still use storage/);
+  assert.equal(feedback.dataset.state, "error");
+});
+
+test("choosing a profile photo previews it and explains that saving uploads it", () => {
+  const fileInput = {
+    files: [{ type: "image/png", size: 1024 }], value: "", handlers: {},
+    addEventListener(name, handler) { this.handlers[name] = handler; },
+  };
+  const preview = {
+    src: "https://example.test/old-avatar.webp",
+    removeAttribute(name) { if (name === "src") delete this.src; },
+  };
+  const feedback = { dataset: {}, hidden: true };
+  const revoked = [];
+  let created = 0;
+  const context = vm.createContext({
+    state: { profile: { avatarUrl: "https://example.test/old-avatar.webp" } },
+    document: { querySelector(selector) {
+      return {
+        "#settings-avatar-file": fileInput,
+        "#settings-avatar-preview": preview,
+        "#account-profile-feedback": feedback,
+      }[selector];
+    } },
+    URL: {
+      createObjectURL() { created += 1; return `blob:photo-${created}`; },
+      revokeObjectURL(url) { revoked.push(url); },
+    },
+    setSettingsFeedback(element, message, kind) {
+      element.textContent = message;
+      element.dataset.state = kind;
+      element.hidden = !message;
+    },
+  });
+  const start = userSource.indexOf("let pendingAvatarPreviewUrl =");
+  const end = userSource.indexOf('document.querySelector("#account-profile-form").addEventListener', start);
+  vm.runInContext(userSource.slice(start, end), context);
+  const handler = fileInput.handlers.change;
+  handler({ currentTarget: fileInput });
+
+  assert.equal(preview.src, "blob:photo-1");
+  assert.equal(feedback.textContent, "Photo selected. Select Save profile to upload it.");
+  assert.equal(feedback.dataset.state, "loading");
+
+  fileInput.files = [{ type: "image/gif", size: 1024 }];
+  handler({ currentTarget: fileInput });
+  assert.deepEqual(revoked, ["blob:photo-1"]);
+  assert.equal(preview.src, "https://example.test/old-avatar.webp");
+  assert.equal(fileInput.value, "");
+  assert.equal(feedback.dataset.state, "error");
 });

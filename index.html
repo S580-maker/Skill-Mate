@@ -8,10 +8,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet" />
-    <link rel="preload" href="user.css?v=28" as="style" />
-    <link rel="stylesheet" href="user.css?v=28" />
-    <link rel="stylesheet" href="app-refresh.css?v=7" />
-    <link rel="stylesheet" href="marketplace-growth.css?v=1" />
+    <link rel="preload" href="user.css?v=29" as="style" />
+    <link rel="stylesheet" href="user.css?v=29" />
+    <link rel="stylesheet" href="app-refresh.css?v=13" />
+    <link rel="stylesheet" href="marketplace-growth.css?v=11" />
     <script src="theme.js?v=2"></script>
   </head>
   <body class="app-auth-pending">
@@ -99,9 +99,14 @@
                 <div class="search-suggestions" id="search-suggestions" role="group" aria-label="Search suggestions" hidden></div>
               </div>
             </div>
-            <div class="category-strip" id="category-strip" aria-label="Filter by service category">
+            <div class="marketplace-category-controls">
+              <button class="marketplace-filter-trigger" id="marketplace-filter-trigger" type="button" aria-label="Show service filters" title="Show service filters" aria-expanded="false" aria-controls="marketplace-filters">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10m-7 5h4" /><circle cx="8" cy="7" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="12" cy="17" r="1.5" /></svg>
+              </button>
+              <div class="category-strip" id="category-strip" aria-label="Filter by service category">
+              </div>
             </div>
-            <form class="marketplace-tools" id="marketplace-filters" aria-label="Filter services">
+            <form class="marketplace-tools" id="marketplace-filters" aria-label="Filter services" hidden>
               <label>Min price (GH&#8373;)<input name="min" type="number" min="0" step="1" placeholder="Any" /></label>
               <label>Max price (GH&#8373;)<input name="max" type="number" min="0" step="1" placeholder="Any" /></label>
               <label>Delivery<select name="delivery"><option value="">Any delivery</option><option value="online">Online</option><option value="in_person">In person</option></select></label>
@@ -126,7 +131,6 @@
             <div class="view-heading"><div><p class="eyebrow">YOUR SKILLMATE ACTIVITY</p><h1>My bookings</h1><p>Every appointment, request and group booking in one place.</p></div><button class="button button-primary" type="button" data-page-link="home">Find a service</button></div>
             <div class="booking-directions" role="group" aria-label="Booking direction"><button class="active" type="button" data-booking-direction="made" aria-pressed="true">Bookings I made</button><button type="button" data-booking-direction="received" aria-pressed="false">Requests I received</button></div>
             <div class="tab-row" id="booking-tabs"><button class="tab-button active" data-booking-filter="all">All <span id="all-booking-count">0</span></button><button class="tab-button" data-booking-filter="upcoming">Upcoming</button><button class="tab-button" data-booking-filter="requests">Requests</button><button class="tab-button" data-booking-filter="completed">Completed</button></div>
-            <div class="booking-nudges" id="booking-nudges" aria-label="Booking reminders"></div>
             <aside class="required-review-reminder" id="required-review-reminder" aria-live="polite" hidden></aside>
             <div class="booking-list" id="user-booking-list"></div>
           </section>
@@ -151,22 +155,30 @@
             <div class="view-heading"><div><p class="eyebrow">YOUR SKILLS, YOUR BUSINESS</p><h1>My services</h1><p>Manage the work you offer to your campus community.</p></div><button class="button button-primary" type="button" data-open="service-modal">＋ Add a service</button></div>
             <div class="provider-summary"><div class="provider-stat"><span>ACTIVE LISTINGS</span><strong id="active-listings-count">0</strong><small>Services visible to students</small></div><div class="provider-stat"><span>ACTIVE REQUESTS</span><strong id="provider-request-count">0</strong><small>Bookings to review</small></div><div class="provider-stat"><span>YOUR RATING</span><strong>—</strong><small>No reviews yet</small></div><div class="provider-stat"><span>THIS MONTH</span><strong id="provider-earnings">GH₵ 0</strong><small>Completed bookings</small></div></div>
             <article class="panel provider-profile-panel"><div class="provider-profile-main"><div class="profile-avatar profile-avatar-large">AM</div><div><span class="verified-pill">✓ Campus verified</span><h2>Alex Morgan</h2><p>Graphic designer &amp; laptop fixer · University of Ghana</p><div class="profile-tags"><span>Graphic design</span><span>Tech help</span><span>Available this week</span></div></div></div><button class="button button-outline" type="button" data-open="profile-modal">Edit profile</button></article>
-            <div id="growth-metrics" class="growth-metrics" aria-label="Your booking results"></div>
-            <section class="panel availability-panel"><h2>Your availability</h2><p class="growth-feedback">Publish your working hours so students can choose a suitable time. You still confirm each request.</p>
-              <form id="availability-form" class="availability-form"><label class="availability-enabled"><input id="availability-enabled" type="checkbox" /> Publish my available hours</label>
-              <div class="availability-settings-row"><label>Time zone<input id="availability-timezone" required maxlength="80" placeholder="Africa/Accra" /><small>All hours below use this time zone.</small></label><label>Appointment length<select id="availability-duration"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60" selected>1 hour</option><option value="90">90 minutes</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label></div>
-              <fieldset class="availability-days"><legend>Weekly hours</legend><div id="availability-week"></div></fieldset>
-              <label>Dates off<input id="availability-days-off" placeholder="2026-12-24, 2026-12-25" /><small>Separate dates with commas. Use YYYY-MM-DD.</small></label><p class="growth-feedback" id="availability-feedback" role="status" aria-live="polite"></p><button class="button button-primary" type="submit">Save availability</button></form>
-            </section>
+            <details class="panel availability-panel" id="availability-settings">
+              <summary class="availability-summary">
+                <span class="availability-heading"><strong>Your availability</strong><small>Optional · Set hours students can request</small></span>
+                <span class="availability-summary-state" id="availability-summary-status">Optional</span>
+              </summary>
+              <form id="availability-form" class="availability-form">
+                <label class="availability-enabled"><input id="availability-enabled" type="checkbox" /><span><strong>Publish available hours</strong><small>Let students choose from your schedule</small></span></label>
+                <fieldset class="availability-days"><legend>Weekly hours</legend><p class="availability-hint">Choose the days you’re available, then set the hours.</p><div id="availability-week"></div></fieldset>
+                <details class="availability-advanced"><summary>Time zone, appointment length &amp; days off</summary>
+                  <div class="availability-settings-row"><label>Time zone<input id="availability-timezone" required maxlength="80" placeholder="Africa/Accra" /><small>All hours use this time zone.</small></label><label>Appointment length<select id="availability-duration"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60" selected>1 hour</option><option value="90">90 minutes</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label></div>
+                  <label class="availability-days-off">Dates off<input id="availability-days-off" placeholder="2026-12-24, 2026-12-25" /><small>Separate dates with commas (YYYY-MM-DD).</small></label>
+                </details>
+                <p class="growth-feedback availability-feedback" id="availability-feedback" role="status" aria-live="polite"></p>
+                <button class="button button-primary" type="submit">Save availability</button>
+              </form>
+            </details>
             <div class="section-heading"><div><h2>Your listings</h2><p>Update your services and availability.</p></div></div>
             <div class="listing-list" id="listing-list"></div>
-            <div class="section-heading appointment-heading"><div><h2>Appointment requests</h2><p>Accept a booking or let a student know you’re unavailable.</p></div><button class="subtle-button" type="button" data-page-link="bookings">Booking history →</button></div>
-            <div class="booking-list" id="provider-booking-list"></div>
             <div class="portfolio-panel panel"><div class="panel-heading"><div><h2>Your portfolio</h2><p>Show students what you can do.</p></div><button class="button button-outline button-small" type="button" data-open="portfolio-modal">＋ Add work</button></div><div class="portfolio-grid" id="portfolio-grid"></div></div>
           </section>
 
           <section class="view" id="view-earnings" data-view="earnings">
             <div class="view-heading"><div><p class="eyebrow">YOUR SIDE HUSTLE</p><h1>Estimated earnings</h1><p>Based on completed jobs. Payments are arranged directly with your customers.</p></div><button class="button button-outline" id="earnings-export" type="button">Export completed jobs</button></div>
+            <div id="growth-metrics" class="growth-metrics" aria-label="Your booking results"></div>
             <div class="earnings-hero"><div><span>COMPLETED WORK · ESTIMATED TOTAL</span><strong id="earnings-total">GH₵ 0</strong><small>This adds up completed booking prices. Skillmate does not collect payments or confirm what you’ve been paid.</small></div><span class="earnings-illustration">GH₵</span></div>
             <div class="section-heading"><div><h2>Completed jobs</h2><p>Listed job values; this is not a payment or payout record.</p></div></div><div class="booking-list" id="earnings-list"></div>
           </section>
@@ -180,7 +192,7 @@
             <form class="settings-form" id="account-profile-form">
               <section class="panel settings-section">
                 <div class="panel-heading"><div><h2>Profile details</h2><p>These details help students recognize you on campus.</p></div></div>
-                <div class="settings-avatar-row"><img id="settings-avatar-preview" class="settings-avatar" alt="" /><label class="button button-outline settings-upload-label" for="settings-avatar-file">Choose profile photo</label><input id="settings-avatar-file" type="file" accept="image/jpeg,image/png,image/webp" /><small>JPG, PNG or WebP, up to 5 MB.</small></div>
+                <div class="settings-avatar-row"><img id="settings-avatar-preview" class="settings-avatar" alt="" /><label class="button button-outline settings-upload-label" for="settings-avatar-file">Choose profile photo</label><input id="settings-avatar-file" type="file" accept="image/jpeg,image/png,image/webp" /><small>Choose a JPG, PNG or WebP up to 5 MB, then select Save profile to upload it.</small></div>
                 <label>Full name<input id="settings-full-name" required minlength="2" maxlength="80" autocomplete="name" /></label>
                 <label>Email address<input id="settings-email" type="email" readonly aria-readonly="true" /></label>
                 <label>Campus or university<input id="settings-university" required minlength="2" maxlength="120" /></label>
@@ -394,9 +406,10 @@
     <script defer src="marketplace-utils.js?v=2"></script>
     <script defer src="push-notification-platform.js?v=1"></script>
     <script defer src="marketplace-growth-utils.js?v=1"></script>
-    <script defer src="user.js?v=40"></script>
-    <script defer src="marketplace-growth.js?v=1"></script>
+    <script defer src="user.js?v=47"></script>
+    <script defer src="marketplace-growth.js?v=6"></script>
     <script defer src="service-form.js?v=3"></script>
     <script defer src="notifications.js?v=1"></script>
+    <script type="module" src="motion.js?v=1"></script>
   </body>
 </html>

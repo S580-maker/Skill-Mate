@@ -121,6 +121,7 @@ let messageMetadataWarningShown = false;
 let realtimeFallbackNoticeShown = false;
 const chatDrafts = new Map();
 const chatNegotiationServiceSelection = new Map();
+const conversationsOpeningNegotiation = new Set();
 const pendingOutgoingMessages = new Map();
 const sendingMessageIds = new Set();
 let typingTimeoutId = null;
@@ -537,7 +538,23 @@ function providerServices(providerId) {
 }
 function showToast(message, kind = "info") {
   const toast = document.querySelector("#toast");
-  toast.textContent = message;
+  if (kind === "success") {
+    const wrapper = document.createElement("span");
+    const mark = document.createElement("span");
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    wrapper.className = "toast-success-message";
+    mark.className = "toast-success-mark";
+    mark.setAttribute("aria-hidden", "true");
+    icon.setAttribute("viewBox", "0 0 24 24");
+    path.setAttribute("d", "m5 12.5 4.5 4.5L19 7");
+    icon.append(path);
+    mark.append(icon);
+    wrapper.append(mark, document.createTextNode(message));
+    toast.replaceChildren(wrapper);
+  } else {
+    toast.textContent = message;
+  }
   toast.dataset.kind = kind;
   toast.classList.add("visible");
   window.clearTimeout(toastTimer);
@@ -973,7 +990,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   if (!target) return;
   if (appSupabase && !dashboardDataLoaded && targetId === "marketplace-grid") {
     target.setAttribute("aria-busy", "true");
-    target.innerHTML = '<div class="marketplace-loading" role="status"><span class="loading-spinner" aria-hidden="true"></span> Finding services on your campus…</div>';
+    target.innerHTML = '<div class="marketplace-loading" role="status" aria-label="Finding services on your campus"><span class="marketplace-skeleton-card" aria-hidden="true"></span><span class="marketplace-skeleton-card" aria-hidden="true"></span></div>';
     return;
   }
   target.removeAttribute("aria-busy");
@@ -998,11 +1015,11 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
       : "";
   }
   target.innerHTML = visible.length ? visible.map((provider) => `
-    <article class="provider-card">
+    <article class="provider-card" data-motion-key="${escapeHTML(provider.id + ":" + (provider.serviceId || provider.id))}">
       <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><div class="listing-cover-button" aria-hidden="true"><span class="cover-fallback"><span aria-hidden="true">${getCategoryIcon(provider.category)}</span><strong>${escapeHTML(provider.category)}</strong><small>Student service</small></span>${listingImage(provider) ? `<img class="service-marketplace-cover" src="${escapeHTML(listingImage(provider))}" alt="" loading="lazy" decoding="async" />` : ""}</div>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-pressed="${state.saved.includes(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
       <div class="provider-card-body">
         <div class="listing-category-row"><p class="service-category">${escapeHTML(provider.category)}</p><span class="rating">${providerReviewSummary(provider).count ? `★ ${providerReviewSummary(provider).rating}<small> (${providerReviewSummary(provider).count})</small>` : "New provider"}</span></div>
-        <h3>${escapeHTML(provider.service)}</h3><p class="provider-scope-label">${escapeHTML(provider.deliveryMethod === "online" ? "Online service" : provider.deliveryMethod === "in_person" ? "In person" : provider.deliveryMethod === "both" ? "Online or in person" : "Ask about delivery")} ? ${escapeHTML(provider.estimatedDelivery || "Agree on delivery time")}</p><p class="provider-description">${escapeHTML(provider.description)}</p>
+        <h3>${escapeHTML(provider.service)}</h3><p class="provider-description">${escapeHTML(provider.description)}</p>
         <div class="provider-card-person"><button class="provider-profile-trigger" type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="View ${escapeHTML(provider.name)}’s provider profile">${providerAvatarMarkup(provider)}</button><span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? '<i class="verified-dot">✓</i> Campus verified · ' : ""}${escapeHTML(provider.campus)}</small></span></div>
         ${serviceDetailLabel(provider) ? `<p class="service-delivery-label">${escapeHTML(serviceDetailLabel(provider))}</p>` : ""}
         <div class="provider-card-footer"><span class="price"><small>Price</small>${currency(provider.price)}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">Request booking</button></span>`}</div>
@@ -1367,7 +1384,8 @@ function createPriceNegotiationPanel(chat) {
   status.className = "chat-negotiation-state";
   const pendingOffer = negotiation?.offers.find(offer => offer.status === "pending");
   const latestOffer = negotiation?.offers[negotiation.offers.length - 1];
-  status.textContent = selectedService.negotiationMode === "fixed" ? "Fixed Price"
+  status.textContent = conversationsOpeningNegotiation.has(chat.id) ? "Opening price discussion…"
+    : selectedService.negotiationMode === "fixed" ? "Fixed Price"
     : negotiation?.state === "agreed"
     ? "Agreed"
     : pendingOffer ? "Proposal pending"
@@ -1614,6 +1632,20 @@ function renderChat(options = {}) {
     if (!empty) {
       empty = document.createElement("div");
       empty.className = "chat-empty-state";
+    }
+    const opening = conversationsOpeningNegotiation.has(chat.id);
+    empty.classList.toggle("chat-opening-state", opening);
+    empty.replaceChildren();
+    if (opening) {
+      empty.setAttribute("role", "status");
+      const spinner = document.createElement("span");
+      spinner.className = "chat-opening-spinner";
+      spinner.setAttribute("aria-hidden", "true");
+      const label = document.createElement("span");
+      label.textContent = "Opening your price discussion…";
+      empty.append(spinner, label);
+    } else {
+      empty.removeAttribute("role");
       empty.textContent = "No messages yet 👋 Say hi!";
     }
     orderedChildren.push(empty);
@@ -1746,7 +1778,6 @@ function renderBookingActivity() {
   reviewReminder.innerHTML = pendingReviews.length
     ? `<span><strong>${pendingReviews.length} completed ${pendingReviews.length === 1 ? "booking needs" : "bookings need"} your review</strong><small>Your feedback helps other students. You can book again at any time.</small></span><button class="button button-primary button-small" type="button" data-review="${escapeHTML(pendingReviews[0].id)}">Write review</button><button class="subtle-button" type="button" data-dismiss-reviews>Not now</button>`
     : "";
-  renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true });
   renderEarnings();
   const completedThisMonth = state.bookings.filter((booking) => isOwnBooking(booking)
     && booking.status === "Completed" && booking.date?.slice(0, 7) === new Date().toISOString().slice(0, 7))
@@ -1774,7 +1805,6 @@ function renderAll() {
   renderMarketplace();
   renderGroups();
   renderBookingList("user-booking-list", bookingsForActiveFilter());
-  renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true });
   renderListings();
   renderPortfolio();
   renderConversations({ preserveChatState: true });
@@ -1919,7 +1949,10 @@ async function refreshPriceNegotiations() {
     offers = result.data || [];
   }
   negotiationBackendAvailable = true;
-  priceNegotiations = rows.map(item => ({
+  priceNegotiations = mapPriceNegotiationRows(rows, offers);
+}
+function mapPriceNegotiationRows(rows, offers) {
+  return rows.map(item => ({
     id: item.id, serviceId: item.service_id, providerId: item.provider_id,
     customerId: item.customer_id, conversationId: item.conversation_id,
     listedPrice: Number(item.listed_price),
@@ -1931,6 +1964,16 @@ async function refreshPriceNegotiations() {
       message: offer.message, status: offer.status, createdAt: offer.created_at,
     })),
   }));
+}
+async function loadConversationPriceNegotiation(negotiationId) {
+  const { data: row, error } = await appSupabase.from("price_negotiations")
+    .select("*").eq("id", negotiationId).single();
+  if (error) throw error;
+  const { data: offers, error: offersError } = await appSupabase.from("price_offers")
+    .select("*").eq("negotiation_id", negotiationId).order("created_at", { ascending: true });
+  if (offersError) throw offersError;
+  const [negotiation] = mapPriceNegotiationRows([row], offers || []);
+  return negotiation;
 }
 async function loadAllRows(createQuery, pageSize = DATA_PAGE_SIZE) {
   const rows = [];
@@ -2692,6 +2735,28 @@ function showPage(page, options = {}) {
   if (page === "profile") page = "profile-settings";
   const view = document.querySelector(`[data-view="${page}"]`);
   if (!view) return;
+  const pageOrder = ["home", "bookings", "messages", "saved", "provider", "earnings", "profile-settings", "help-support"];
+  const currentPage = state.activePage === "profile" ? "profile-settings" : state.activePage;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (options.useViewTransition
+    && !options.skipViewTransition
+    && page !== currentPage
+    && !reducedMotion
+    && typeof document.startViewTransition === "function") {
+    const direction = pageOrder.indexOf(page) < pageOrder.indexOf(currentPage) ? "backward" : "forward";
+    document.documentElement.dataset.pageDirection = direction;
+    const transition = document.startViewTransition(() => showPage(page, { ...options, skipViewTransition: true }));
+    transition.finished.then(() => {
+      if (document.documentElement.dataset.pageDirection === direction) {
+        delete document.documentElement.dataset.pageDirection;
+      }
+    }, () => {
+      if (document.documentElement.dataset.pageDirection === direction) {
+        delete document.documentElement.dataset.pageDirection;
+      }
+    });
+    return;
+  }
   const pageTitles = {
     home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers",
     provider: "My services", earnings: "Estimated earnings", "profile-settings": "Your profile",
@@ -2740,7 +2805,7 @@ function showPage(page, options = {}) {
         .catch((error) => console.error("Could not mark Skillmate messages as read.", error));
     }
   }
-  if (page === "provider") { renderListings(); renderPortfolio(); renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true }); }
+  if (page === "provider") { renderListings(); renderPortfolio(); }
   if (page === "earnings") renderEarnings();
   if (page === "bookings") renderBookingList("user-booking-list", bookingsForActiveFilter());
   window.scrollTo({ top: Number.isFinite(options.restoreScroll) ? Math.max(0, options.restoreScroll) : 0, behavior: "auto" });
@@ -2888,7 +2953,7 @@ function updateBookingSummary() {
 }
 document.querySelector("#booking-service").addEventListener("change", updateBookingSummary);
 document.querySelector("#booking-location-type").addEventListener("change", updateBookingLocationVisibility);
-document.querySelector("#booking-negotiate").addEventListener("click", () => {
+document.querySelector("#booking-negotiate").addEventListener("click", (event) => {
   const providerId = document.querySelector("#booking-provider-id").value;
   const serviceId = document.querySelector("#booking-service").value;
   const service = providerServices(providerId).find(item => item.id === serviceId);
@@ -2903,7 +2968,7 @@ document.querySelector("#booking-negotiate").addEventListener("click", () => {
     locationType: document.querySelector("#booking-location-type").value,
     location: document.querySelector("#booking-location").value,
   });
-  openServiceDiscussion(providerId, serviceId);
+  openServiceDiscussion(providerId, serviceId, event.currentTarget);
 });
 function openPriceOfferForm({ providerId, serviceId, action = "initial", negotiationId = "", offerId = "", conversationId = "", amount = "", description = "", chatProposal = false }) {
   if (!appSupabase) {
@@ -2951,7 +3016,7 @@ function exposePriceActionError(error) {
   }
   return error;
 }
-async function openServiceDiscussion(providerId, serviceId) {
+async function openServiceDiscussion(providerId, serviceId, triggerButton) {
   if (!appSupabase) {
     showToast("Price discussion requires a connected Skillmate account.", "error");
     return;
@@ -2965,22 +3030,55 @@ async function openServiceDiscussion(providerId, serviceId) {
       p_other_user_id: providerId, p_booking_id: null,
     });
     if (conversationError) throw conversationError;
-    const { error } = await appSupabase.rpc("create_price_negotiation", {
-      p_service_id: serviceId, p_conversation_id: conversationId,
-      p_initial_amount: null, p_message: "",
-    });
-    if (error) throw error;
-    await refreshSupabaseState();
+    const provider = getProvider(providerId);
+    if (!provider) throw new Error("The service provider could not be found.");
+    let chat = state.messages.find(item => item.id === conversationId);
+    if (!chat) {
+      chat = { id: conversationId, providerId, name: provider.name, messages: [] };
+      state.messages.unshift(chat);
+    }
+    chat.name = provider.name;
     setActiveConversation(conversationId);
     chatNegotiationServiceSelection.set(conversationId, serviceId);
+    conversationsOpeningNegotiation.add(conversationId);
     for (const modalId of ["#provider-detail-modal", "#booking-modal"]) {
       const modal = document.querySelector(modalId);
       if (modal.open) modal.close();
     }
     showPage("messages", { openConversation: true });
-    renderConversations();
+    try {
+      const [negotiationResult, messagesResult] = await Promise.allSettled([
+        appSupabase.rpc("create_price_negotiation", {
+          p_service_id: serviceId, p_conversation_id: conversationId,
+          p_initial_amount: null, p_message: "",
+        }).then(result => {
+          if (result.error) throw result.error;
+          return result.data;
+        }),
+        loadConversationMessages(conversationId, provider.name),
+      ]);
+      if (messagesResult.status === "fulfilled") {
+        chat.messages = messagesResult.value;
+        conversationMessageRefreshTimes.set(conversationId, Date.now());
+        cacheConversationMessages(state.messages);
+      }
+      if (negotiationResult.status === "rejected") throw negotiationResult.reason;
+      if (messagesResult.status === "rejected") throw messagesResult.reason;
+      const negotiation = await loadConversationPriceNegotiation(negotiationResult.value);
+      priceNegotiations = [
+        negotiation,
+        ...priceNegotiations.filter(item => item.id !== negotiation.id),
+      ];
+    } catch (error) {
+      console.error("Could not finish loading the Skillmate price discussion.", error);
+      showToast("Chat is open, but the price discussion could not finish loading. You can still message the provider.", "error");
+    } finally {
+      conversationsOpeningNegotiation.delete(conversationId);
+      if (activeConversationId === conversationId && state.activePage === "messages") renderConversations();
+    }
   }, "Could not open price discussion.", "Opening your conversation…", {
     friendlyFailureMessage: "Could not open the price discussion. Check that the migration is applied and try again.",
+    submitButton: triggerButton,
   });
 }
 document.querySelector("#price-offer-form").addEventListener("submit", event => {
@@ -3171,13 +3269,13 @@ function addGroup(group) {
 
 document.querySelectorAll(".nav-link[data-page]").forEach((link) => link.addEventListener("click", (event) => {
   event.preventDefault();
-  showPage(link.dataset.page);
+  showPage(link.dataset.page, { useViewTransition: true });
 }));
 document.addEventListener("click", event => {
   const link = event.target.closest("[data-page-link]");
   if (!link) return;
   event.preventDefault();
-  showPage(link.dataset.pageLink);
+  showPage(link.dataset.pageLink, { useViewTransition: true });
 });
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-open]");
@@ -3420,6 +3518,9 @@ function handleCardAction(event) {
         .filter((provider) => state.saved.includes(provider.id)));
     }
     setProviderSaveButtonsBusy(id, true);
+    document.dispatchEvent(new CustomEvent("skillmate:provider-save", {
+      detail: { providerId: id, saved: saving },
+    }));
     void runAction(async () => {
       try {
         if (appSupabase) {
@@ -4294,6 +4395,42 @@ function setSettingsFeedback(element, message, kind = "success") {
   element.dataset.state = kind;
   element.hidden = !message;
 }
+async function removeUnusedAvatar(path, reason) {
+  try {
+    const { error } = await appSupabase.storage.from("profile-avatars").remove([path]);
+    if (!error) return true;
+    console.error(reason, error);
+  } catch (error) {
+    console.error(reason, error);
+  }
+  return false;
+}
+let pendingAvatarPreviewUrl = "";
+document.querySelector("#settings-avatar-file").addEventListener("change", (event) => {
+  const input = event.currentTarget;
+  const photo = input.files[0];
+  const preview = document.querySelector("#settings-avatar-preview");
+  const feedback = document.querySelector("#account-profile-feedback");
+  if (pendingAvatarPreviewUrl) {
+    URL.revokeObjectURL(pendingAvatarPreviewUrl);
+    pendingAvatarPreviewUrl = "";
+  }
+  if (!photo) {
+    if (state.profile.avatarUrl) preview.src = state.profile.avatarUrl;
+    else preview.removeAttribute("src");
+    return;
+  }
+  if (!["image/jpeg", "image/png", "image/webp"].includes(photo.type) || photo.size > 5_000_000) {
+    input.value = "";
+    if (state.profile.avatarUrl) preview.src = state.profile.avatarUrl;
+    else preview.removeAttribute("src");
+    setSettingsFeedback(feedback, "Choose a JPG, PNG or WebP image smaller than 5 MB.", "error");
+    return;
+  }
+  pendingAvatarPreviewUrl = URL.createObjectURL(photo);
+  preview.src = pendingAvatarPreviewUrl;
+  setSettingsFeedback(feedback, "Photo selected. Select Save profile to upload it.", "loading");
+});
 document.querySelector("#account-profile-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -4336,13 +4473,28 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
     let cvPath = previousCvPath;
     let cvName = previousCvName;
     if (photo) {
-      const compressedPhoto = await window.skillmateServiceUtils.compressImageFile(photo, {
-        maxDimension: 1200, quality: 0.82,
-      });
+      let compressedPhoto;
+      try {
+        compressedPhoto = await window.skillmateServiceUtils.compressImageFile(photo, {
+          maxDimension: 512, quality: 0.75, maxOutputBytes: 1_000_000,
+        });
+      } catch (error) {
+        error.userMessage = error.message || "This photo could not be prepared. Try a different JPG, PNG or WebP image.";
+        throw error;
+      }
       avatarPath = `${appUser.id}/${crypto.randomUUID()}.webp`;
       const { error: uploadError } = await appSupabase.storage.from("profile-avatars")
         .upload(avatarPath, compressedPhoto, { contentType: compressedPhoto.type, cacheControl: "3600" });
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        if (uploadError.statusCode === "404" || /bucket not found/i.test(uploadError.message || "")) {
+          uploadError.userMessage = "Profile photo storage is not set up yet. Please contact support so the profile-avatars bucket can be enabled.";
+        } else if (uploadError.statusCode === "403" || /row-level security|permission denied/i.test(uploadError.message || "")) {
+          uploadError.userMessage = "Supabase blocked this photo upload. Check that profile-avatars allows signed-in users to upload to their own user folder.";
+        } else {
+          uploadError.userMessage = uploadError.message || "Supabase could not upload this profile photo. Please try again.";
+        }
+        throw uploadError;
+      }
       avatarUrl = appSupabase.storage.from("profile-avatars").getPublicUrl(avatarPath).data.publicUrl;
     }
     if (cvFile) {
@@ -4351,8 +4503,8 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
         .upload(uploadedCvPath, cvFile, { contentType: "application/pdf", cacheControl: "3600" });
       if (uploadError) {
         if (avatarPath) {
-          const { error: cleanupError } = await appSupabase.storage.from("profile-avatars").remove([avatarPath]);
-          if (cleanupError) console.error("Could not remove the unused profile photo after CV upload failure.", cleanupError);
+          const cleaned = await removeUnusedAvatar(avatarPath, "Could not remove the unused profile photo after CV upload failure.");
+          if (!cleaned) uploadError.userMessage = `${uploadError.userMessage || uploadError.message || "The CV upload failed."} The unused profile photo could not be removed from storage; please contact support.`;
         }
         throw uploadError;
       }
@@ -4371,8 +4523,8 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
           if (cleanupError) console.error("Could not remove the unused CV upload.", cleanupError);
         }
         if (avatarPath) {
-          const { error: cleanupError } = await appSupabase.storage.from("profile-avatars").remove([avatarPath]);
-          if (cleanupError) console.error("Could not remove the unused profile photo after CV metadata failure.", cleanupError);
+          const cleaned = await removeUnusedAvatar(avatarPath, "Could not remove the unused profile photo after CV metadata failure.");
+          if (!cleaned) cvUpdateError.userMessage = "Your CV settings could not be saved, and the unused profile photo could not be removed from storage. Please contact support.";
         }
         throw cvUpdateError;
       }
@@ -4410,8 +4562,8 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
         if (cleanupError) console.error("Could not remove the unused CV upload after a profile-save failure.", cleanupError);
       }
       if (avatarPath) {
-        const { error: cleanupError } = await appSupabase.storage.from("profile-avatars").remove([avatarPath]);
-        if (cleanupError) console.error("Could not remove the unused profile photo upload.", cleanupError);
+        const cleaned = await removeUnusedAvatar(avatarPath, "Could not remove the unused profile photo upload.");
+        if (!cleaned) error.userMessage = `${error.userMessage || error.message || "Could not save your profile."} The unused profile photo could not be removed from storage; please contact support.`;
       }
       throw error;
     }
@@ -4423,17 +4575,13 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
     state.profile.cvPath = cvPath || "";
     state.profile.cvName = cvName || "";
     let cvCleanupFailed = false;
+    let avatarCleanupFailed = false;
     if (avatarPath && previousAvatarUrl) {
       const prefix = `${window.SKILLMATE_SUPABASE_CONFIG.url}/storage/v1/object/public/profile-avatars/`;
       if (previousAvatarUrl.startsWith(prefix)) {
         const oldPath = previousAvatarUrl.slice(prefix.length).split("?")[0];
         if (oldPath.startsWith(`${appUser.id}/`) && !oldPath.includes("..")) {
-          try {
-            const { error: cleanupError } = await appSupabase.storage.from("profile-avatars").remove([oldPath]);
-            if (cleanupError) console.error("Could not remove the replaced profile photo.", cleanupError);
-          } catch (cleanupError) {
-            console.error("Could not remove the replaced profile photo.", cleanupError);
-          }
+          avatarCleanupFailed = !(await removeUnusedAvatar(oldPath, "Could not remove the replaced profile photo."));
         }
       }
     }
@@ -4454,13 +4602,20 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
     document.querySelector("#profile-bio").value = bio;
     renderAll();
     loadAccountSettings();
+    if (pendingAvatarPreviewUrl) {
+      URL.revokeObjectURL(pendingAvatarPreviewUrl);
+      pendingAvatarPreviewUrl = "";
+    }
     if (campusChanged) {
       showToast("Campus updated. Submit a new campus verification request if needed.");
     }
     document.querySelector("#settings-avatar-file").value = "";
-    setSettingsFeedback(feedback, cvCleanupFailed
-      ? "Your profile was saved, but an older CV file could not be deleted. Contact support."
-      : "Your profile has been saved.", cvCleanupFailed ? "error" : "success");
+    const cleanupWarnings = [];
+    if (avatarCleanupFailed) cleanupWarnings.push("the old profile photo may still use storage");
+    if (cvCleanupFailed) cleanupWarnings.push("the older CV file could not be deleted");
+    setSettingsFeedback(feedback, cleanupWarnings.length
+      ? `Your profile was saved, but ${cleanupWarnings.join(" and ")}. Contact support.`
+      : "Your profile has been saved.", cleanupWarnings.length ? "error" : "success");
   }, "Could not save your profile.", "Saving your profile…", {
     inlineFeedback: feedback,
     submitButton: form.querySelector('button[type="submit"]'),
@@ -5020,31 +5175,6 @@ document.querySelector("#review-form").addEventListener("submit", (event) => {
   event.target.closest("dialog").close();
   showToast("Thank you. Your review has been added to your demo booking record.");
 });
-document.querySelector("#provider-booking-list").addEventListener("click", (event) => {
-  const messageButton = event.target.closest("[data-message]");
-  if (messageButton) {
-    openMessage(messageButton.dataset.message);
-    return;
-  }
-  if (handleNegotiationChatAction(event)) return;
-  if (handleAppointmentActions(event)) return;
-  const button = event.target.closest("[data-decision]");
-  if (!button) return;
-  const booking = state.bookings.find((item) => item.id === button.dataset.bookingId);
-  if (!booking) return;
-  if (appSupabase) {
-    runAction(async () => {
-      await persistBookingStatus(booking.id, button.dataset.decision);
-      showToast(button.dataset.decision === "Confirmed" ? "Booking accepted. The student can see the confirmation." : button.dataset.decision === "Completed" ? "Booking marked as completed." : button.dataset.decision === "In progress" ? "Work started." : "Booking request declined.");
-    }, "Could not update this booking.");
-    return;
-  }
-  booking.status = button.dataset.decision;
-  if (booking.status === "In progress") booking.workStartedAt = new Date().toISOString();
-  saveState();
-  renderAll();
-  showToast(booking.status === "Confirmed" ? "Booking accepted. Your student can see the confirmation." : booking.status === "Completed" ? "Booking marked as completed." : button.dataset.decision === "In progress" ? "Work started." : "Booking request declined.");
-});
 document.querySelector("#earnings-list").addEventListener("click", (event) => {
   const messageButton = event.target.closest("[data-message]");
   if (messageButton) {
@@ -5068,7 +5198,6 @@ document.querySelector("#earnings-list").addEventListener("click", (event) => {
   if (booking.status === "In progress") booking.workStartedAt = new Date().toISOString();
   saveState();
   renderEarnings();
-  renderBookingList("provider-booking-list", state.bookings.filter((item) => item.providerId === "alex"), { provider: true });
 });
 document.querySelector("#booking-tabs").addEventListener("click", (event) => {
   const button = event.target.closest("[data-booking-filter]");
