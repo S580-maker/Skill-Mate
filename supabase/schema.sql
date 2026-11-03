@@ -2047,6 +2047,8 @@ values
   ('service-covers', 'service-covers', true, 5000000,
     array['image/jpeg', 'image/png', 'image/webp']),
   ('student-verification-ids', 'student-verification-ids', false, 5242880,
-    array['image/jpeg', 'image/png', 'image/webp']);
+    array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update set name = excluded.name, public = excluded.public,
+  file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
 notify pgrst, 'reload schema';

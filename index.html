@@ -7,17 +7,18 @@
     <title>Skillmate | Student marketplace</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet" />
     <link rel="preload" href="user.css?v=28" as="style" />
     <link rel="stylesheet" href="user.css?v=28" />
     <link rel="stylesheet" href="app-refresh.css?v=7" />
+    <link rel="stylesheet" href="marketplace-growth.css?v=1" />
     <script src="theme.js?v=2"></script>
   </head>
   <body class="app-auth-pending">
     <div class="auth-screen" id="app-auth-status" role="status" aria-live="polite" hidden>
       <section class="dashboard-loading-skeleton" id="dashboard-loading-skeleton" aria-label="Loading your dashboard">
         <aside class="dashboard-skeleton-sidebar" aria-hidden="true">
-          <div class="dashboard-skeleton-brand"><span class="brand-mark"><img src="skillmate-mark.svg?v=3" alt="" /></span><strong>skillmate<span>.</span></strong></div>
+          <div class="dashboard-skeleton-brand"><strong>Skillmate</strong></div>
           <i class="skeleton dashboard-skeleton-campus"></i>
           <div class="dashboard-skeleton-nav"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div>
           <i class="skeleton dashboard-skeleton-profile"></i>
@@ -53,13 +54,13 @@
     <div class="app-shell" id="app-shell">
       <aside class="sidebar" id="sidebar">
         <a class="brand" href="#home" data-page-link="home" aria-label="Skillmate home">
-<span class="brand-mark" aria-hidden="true"><img src="skillmate-mark.svg?v=3" alt="" /></span>
-          <span class="brand-name">skillmate<span>.</span></span>
+          <span class="brand-name">Skillmate</span>
         </a>
         <div class="campus-card"><span class="campus-icon">UG</span><span><small>YOUR CAMPUS</small><strong>University of Ghana</strong></span><button class="verified-mark" id="verification-open" type="button" title="Campus verification" aria-label="Verify your campus">!</button></div>
         <nav class="side-nav" aria-label="Student navigation">
           <span class="nav-caption">YOUR SPACE</span>
           <a class="nav-link active" href="#home" data-page="home"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></svg><span>Discover</span></a>
+          <a class="nav-link" href="#requests" data-page="requests"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span>Campus requests</span></a>
           <a class="nav-link" href="#bookings" data-page="bookings"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M7.5 3.5v3M16.5 3.5v3M3.5 10h17M8 14h3M8 17h6" /></svg><span>My bookings</span><span class="nav-count" id="booking-count">2</span></a>
           <a class="nav-link" href="#messages" data-page="messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 9 9 0 0 1-4-.9L3 20l1.8-4A7.2 7.2 0 0 1 4 12c0-4.1 3.6-7.5 8-7.5s8 3.1 8 7Z" /><path d="M8 12h.01M12 12h.01M16 12h.01" /></svg><span>Messages</span><span class="nav-count nav-count-soft" id="message-count">2</span></a>
           <a class="nav-link" href="#saved" data-page="saved"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16Z" /></svg><span>Saved</span></a>
@@ -100,16 +101,32 @@
             </div>
             <div class="category-strip" id="category-strip" aria-label="Filter by service category">
             </div>
+            <form class="marketplace-tools" id="marketplace-filters" aria-label="Filter services">
+              <label>Min price (GH&#8373;)<input name="min" type="number" min="0" step="1" placeholder="Any" /></label>
+              <label>Max price (GH&#8373;)<input name="max" type="number" min="0" step="1" placeholder="Any" /></label>
+              <label>Delivery<select name="delivery"><option value="">Any delivery</option><option value="online">Online</option><option value="in_person">In person</option></select></label>
+              <label>Sort by<select name="sort"><option value="">Best match</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="rating">Highest rated</option></select></label>
+              <label class="filter-toggle"><input name="verified" type="checkbox" /> Campus verified</label>
+              <label class="filter-toggle"><input name="scheduled" type="checkbox" /> Published hours</label>
+              <button class="subtle-button" type="reset">Clear filters</button>
+            </form>
             <div class="marketplace-heading"><h2 id="marketplace-heading">Services on your campus</h2><span id="marketplace-result-count" aria-live="polite"></span></div>
             <p class="search-status" id="search-status" aria-live="polite" hidden></p>
             <div class="marketplace-grid" id="marketplace-grid"></div>
+            <aside class="request-board-entry"><div><h2>Need help finding a service?</h2><p>Post your task and let students on your campus offer to help.</p></div><button class="button button-primary" type="button" data-page-link="requests">Post what you need</button></aside>
             <section class="safety-note"><span class="safety-note-icon">✓</span><span><strong>Made for students. Built around trust.</strong><small>See campus badges, keep booking records, and report or block when needed. <button type="button" data-open="safety-modal">Read our safety tips</button></small></span></section>
           </section>
 
+          <section class="view request-board" id="view-requests" data-view="requests">
+            <div class="view-heading"><div><p class="eyebrow">HELP STARTS HERE</p><h1>Campus requests</h1><p>Tell your campus what you need, or offer your skills to another student.</p></div><button class="button button-primary" id="request-post-open" type="button">Post a request</button></div>
+            <div class="request-board-toolbar"><label>Show<select id="request-board-filter"><option value="campus">Open requests on my campus</option><option value="mine">My requests</option><option value="responses">Requests I replied to</option></select></label><button class="subtle-button" id="request-board-refresh" type="button">Refresh</button></div>
+            <p class="growth-feedback" id="request-board-feedback" role="status" aria-live="polite"></p><div class="request-board-grid" id="request-board-grid"></div>
+          </section>
           <section class="view" id="view-bookings" data-view="bookings">
             <div class="view-heading"><div><p class="eyebrow">YOUR SKILLMATE ACTIVITY</p><h1>My bookings</h1><p>Every appointment, request and group booking in one place.</p></div><button class="button button-primary" type="button" data-page-link="home">Find a service</button></div>
             <div class="booking-directions" role="group" aria-label="Booking direction"><button class="active" type="button" data-booking-direction="made" aria-pressed="true">Bookings I made</button><button type="button" data-booking-direction="received" aria-pressed="false">Requests I received</button></div>
             <div class="tab-row" id="booking-tabs"><button class="tab-button active" data-booking-filter="all">All <span id="all-booking-count">0</span></button><button class="tab-button" data-booking-filter="upcoming">Upcoming</button><button class="tab-button" data-booking-filter="requests">Requests</button><button class="tab-button" data-booking-filter="completed">Completed</button></div>
+            <div class="booking-nudges" id="booking-nudges" aria-label="Booking reminders"></div>
             <aside class="required-review-reminder" id="required-review-reminder" aria-live="polite" hidden></aside>
             <div class="booking-list" id="user-booking-list"></div>
           </section>
@@ -134,6 +151,13 @@
             <div class="view-heading"><div><p class="eyebrow">YOUR SKILLS, YOUR BUSINESS</p><h1>My services</h1><p>Manage the work you offer to your campus community.</p></div><button class="button button-primary" type="button" data-open="service-modal">＋ Add a service</button></div>
             <div class="provider-summary"><div class="provider-stat"><span>ACTIVE LISTINGS</span><strong id="active-listings-count">0</strong><small>Services visible to students</small></div><div class="provider-stat"><span>ACTIVE REQUESTS</span><strong id="provider-request-count">0</strong><small>Bookings to review</small></div><div class="provider-stat"><span>YOUR RATING</span><strong>—</strong><small>No reviews yet</small></div><div class="provider-stat"><span>THIS MONTH</span><strong id="provider-earnings">GH₵ 0</strong><small>Completed bookings</small></div></div>
             <article class="panel provider-profile-panel"><div class="provider-profile-main"><div class="profile-avatar profile-avatar-large">AM</div><div><span class="verified-pill">✓ Campus verified</span><h2>Alex Morgan</h2><p>Graphic designer &amp; laptop fixer · University of Ghana</p><div class="profile-tags"><span>Graphic design</span><span>Tech help</span><span>Available this week</span></div></div></div><button class="button button-outline" type="button" data-open="profile-modal">Edit profile</button></article>
+            <div id="growth-metrics" class="growth-metrics" aria-label="Your booking results"></div>
+            <section class="panel availability-panel"><h2>Your availability</h2><p class="growth-feedback">Publish your working hours so students can choose a suitable time. You still confirm each request.</p>
+              <form id="availability-form" class="availability-form"><label class="availability-enabled"><input id="availability-enabled" type="checkbox" /> Publish my available hours</label>
+              <div class="availability-settings-row"><label>Time zone<input id="availability-timezone" required maxlength="80" placeholder="Africa/Accra" /><small>All hours below use this time zone.</small></label><label>Appointment length<select id="availability-duration"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60" selected>1 hour</option><option value="90">90 minutes</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></label></div>
+              <fieldset class="availability-days"><legend>Weekly hours</legend><div id="availability-week"></div></fieldset>
+              <label>Dates off<input id="availability-days-off" placeholder="2026-12-24, 2026-12-25" /><small>Separate dates with commas. Use YYYY-MM-DD.</small></label><p class="growth-feedback" id="availability-feedback" role="status" aria-live="polite"></p><button class="button button-primary" type="submit">Save availability</button></form>
+            </section>
             <div class="section-heading"><div><h2>Your listings</h2><p>Update your services and availability.</p></div></div>
             <div class="listing-list" id="listing-list"></div>
             <div class="section-heading appointment-heading"><div><h2>Appointment requests</h2><p>Accept a booking or let a student know you’re unavailable.</p></div><button class="subtle-button" type="button" data-page-link="bookings">Booking history →</button></div>
@@ -205,7 +229,7 @@
                 <details><summary>How do payments work?</summary><p>Skillmate does not collect payment for bookings. Agree on the price and a safe payment method directly with the provider before the appointment.</p></details>
                 <details><summary>How do I become a provider?</summary><p>Open Profile, choose Offer a service, and add a clear description, price and examples of your work.</p></details>
                 <details><summary>Can I cancel or change a booking?</summary><p>Open My bookings and message the other student as soon as possible to agree on a change or cancellation.</p></details>
-                <details><summary>How does campus verification work?</summary><p>Submit a university email from the verification option. A campus badge appears only after the campus team reviews and approves it.</p></details>
+                <details><summary>How does campus verification work?</summary><p>Submit your university email and a clear photo of your current student ID. A campus badge appears only after review and approval. Your ID photo is private and deleted after review.</p></details>
                 <details><summary>What should I do if someone behaves inappropriately?</summary><p>Use Report on their profile or booking, block them if needed, and contact support. Do not share passwords or banking details.</p></details>
                 <details><summary>How do I update my profile or password?</summary><p>Open Profile &amp; Settings from the sidebar to update your profile details, change your password and choose notification preferences.</p></details>
               </div>
@@ -257,7 +281,7 @@
         <input type="hidden" id="booking-negotiation-id" />
         <section class="booking-service-summary" aria-live="polite">
           <div class="booking-service-copy"><span class="booking-field-kicker">SERVICE</span><strong id="booking-summary-service"></strong><small id="booking-provider-name"></small></div>
-          <div class="booking-price-copy"><span id="booking-price-label">Listed price</span><strong id="booking-price"></strong><span id="booking-negotiable-badge" class="booking-price-type">Negotiable</span></div>
+          <div class="booking-price-copy"><span id="booking-price-label">Listed price</span><strong id="booking-price"></strong><span id="booking-negotiable-badge" class="booking-price-type">Negotiable</span><p id="booking-price-detail"></p></div>
         </section>
         <label id="booking-service-switch" class="booking-service-switch" hidden>Switch service<select id="booking-service" required></select></label>
         <section class="booking-agreement-review" id="booking-agreement-review" hidden>
@@ -270,6 +294,7 @@
             <label>Preferred date<input id="booking-date" type="date" required aria-describedby="booking-availability-note" /></label>
             <label>Preferred time<input id="booking-time" type="time" value="10:00" required aria-describedby="booking-availability-note" /></label>
           </div>
+          <label class="booking-slot-label" id="booking-slot-label" hidden>Available appointments<select id="booking-slot"><option value="">Choose a time</option></select></label>
           <label class="booking-location-label">Location<select id="booking-location-type" required aria-controls="booking-location-details"></select></label>
           <label id="booking-location-details" class="booking-location-details" hidden>Location details<input id="booking-location" maxlength="493" placeholder="Building, area or meeting point" /></label>
         </section>
@@ -278,7 +303,7 @@
           <label for="booking-note">Anything the provider should know?</label>
           <textarea id="booking-note" rows="2" maxlength="1000" placeholder="Share a helpful detail"></textarea>
         </details>
-        <label class="booking-confirm-check" id="booking-confirm-label" hidden><input id="booking-confirm-details" type="checkbox" /><span>I’ve reviewed the agreed service scope and price.</span></label>
+        <label class="booking-confirm-check" id="booking-confirm-label" hidden><input id="booking-confirm-details" type="checkbox" /><span>I’ve reviewed the agreed service scope and price. I understand this is a request and the provider still needs to confirm.</span></label>
         <div id="booking-negotiation-option" class="booking-negotiation-option" hidden><button id="booking-negotiate" class="booking-inline-link" type="button">Prefer a different price? <span>Negotiate in chat →</span></button></div>
         <footer class="booking-submit-footer">
           <p class="booking-availability-note" id="booking-availability-note">The provider must confirm your requested appointment.</p>
@@ -345,7 +370,7 @@
     <dialog class="app-modal" id="verification-modal"><form method="dialog" class="modal-frame" id="verification-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">CAMPUS COMMUNITY</p><h2>Earn your campus badge</h2><p class="modal-description">Upload a clear photo of your current student ID. An administrator will review it privately, and the photo will be deleted after the review.</p><label>University email<input id="verification-email" type="email" required placeholder="you@university.edu" /></label><label>Photo of your student ID<input id="verification-photo" type="file" accept="image/jpeg,image/png,image/webp" required /><small>JPG, PNG, or WebP · Max 5 MB. Your ID photo is stored privately, not in the database.</small></label><p class="modal-feedback" id="verification-feedback" role="status" aria-live="polite" hidden></p><button class="button button-primary modal-submit" id="verification-submit" type="submit">Submit for review</button><small class="modal-footnote">A green campus badge appears on your profile only after approval.</small></form></dialog>
     <dialog class="app-modal" id="safety-modal"><form method="dialog" class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">TRUST &amp; SAFETY</p><h2>Your campus, your community.</h2><p class="modal-description">Only meet in appropriate public or campus-approved locations. Keep your messages on-platform, agree on prices before work starts, and use booking records if something goes wrong.</p><div class="safety-actions"><button class="safety-action" type="button" data-open="report-modal">Report a concern</button><button class="safety-action" type="button" data-open="blocked-modal">Manage blocked students</button></div><small class="modal-footnote">Reports are visible to the Skillmate safety team. Blocking also hides the student from your marketplace and messages.</small></form></dialog>
     <dialog class="app-modal" id="report-modal"><form method="dialog" class="modal-frame" id="report-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">HELP KEEP SKILLMATE SAFE</p><h2>Report a concern</h2><p class="modal-description" id="report-description">Tell us what happened. The safety team will review your report.</p><input type="hidden" id="report-provider-id" /><label>Student you’re reporting<select id="report-target"><option value="">Choose a student</option><option value="daniel">Daniel Owusu</option><option value="akosua">Akosua Appiah</option><option value="nana">Nana Adu</option><option value="michael">Michael Frimpong</option><option value="efua">Efua Boateng</option><option value="kojo">Kojo Asare</option></select></label><label>What’s the issue?<select id="report-reason"><option>Suspicious profile or fraud</option><option>Harassment or inappropriate messages</option><option>Booking or payment disagreement</option><option>Unsafe or poor conduct</option><option>Other safety concern</option></select></label><label>Details<textarea id="report-details" rows="3" required maxlength="400" placeholder="Share only the details needed to understand the concern."></textarea></label><label class="check-label"><input id="report-block" type="checkbox" /> Block this student too</label><button class="button button-danger modal-submit" type="submit"><span aria-hidden="true">&#9888;</span> Submit report</button></form></dialog>
-    <dialog class="app-modal" id="blocked-modal"><form method="dialog" class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">YOUR SAFETY CONTROLS</p><h2>Blocked students</h2><p class="modal-description">Blocked students are removed from your marketplace and message list on this device.</p><div class="blocked-list" id="blocked-list"></div></form></dialog>
+    <dialog class="app-modal" id="blocked-modal"><form method="dialog" class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">YOUR SAFETY CONTROLS</p><h2>Blocked students</h2><p class="modal-description">Blocked students are hidden from your marketplace and messages. For connected accounts, blocking applies across your devices.</p><div class="blocked-list" id="blocked-list"></div></form></dialog>
     <dialog class="app-modal" id="review-modal"><form method="dialog" class="modal-frame" id="review-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">HELP STUDENTS CHOOSE WELL</p><h2>Leave a review</h2><p class="modal-description" id="review-description"></p><input type="hidden" id="review-booking-id" /><label>Your rating<select id="review-rating"><option value="5">★★★★★ — Great</option><option value="4">★★★★☆ — Good</option><option value="3">★★★☆☆ — Okay</option><option value="2">★★☆☆☆ — Not great</option><option value="1">★☆☆☆☆ — Poor</option></select></label><label>Share your experience<textarea id="review-text" rows="3" required maxlength="300" placeholder="What should another student know?"></textarea></label><button class="button button-primary modal-submit" type="submit">Post review</button></form></dialog>
     <div class="loading-indicator" id="loading-indicator" role="status" aria-live="polite" hidden>
       <span class="loading-spinner" aria-hidden="true"></span>
@@ -355,6 +380,10 @@
         <span><span id="loading-elapsed">10 seconds elapsed</span><span id="loading-remaining">Estimated time remaining: calculating…</span></span>
       </span>
     </div>
+
+    <dialog class="app-modal" id="request-post-modal"><form class="modal-frame" id="request-post-form"><button class="modal-close" type="button" data-close aria-label="Close">&times;</button><p class="eyebrow">ASK YOUR CAMPUS</p><h2>What do you need?</h2><label>Request title<input id="request-title" required minlength="5" maxlength="100" placeholder="A poster for our club event" /></label><label>Category<select id="request-category" required></select></label><label>Describe the task<textarea id="request-description" required minlength="20" maxlength="2000" rows="4" placeholder="Include the work you need and what a good result looks like. Keep personal contact and payment details out of your post."></textarea></label><div class="form-row"><label>Budget (GH&#8373;)<input id="request-budget" type="number" min="1" max="999999" step="0.01" placeholder="Optional" /></label><label>Needed by<input id="request-deadline" type="date" required /></label></div><label>Delivery<select id="request-delivery"><option value="in_person">In person</option><option value="online">Online</option><option value="both">Either</option></select></label><small class="growth-feedback">Requests are shared on your campus and expire on your chosen date (up to 30 days). Agree on the scope and price before booking.</small><p id="request-post-feedback" class="growth-feedback" role="status" aria-live="polite"></p><button class="button button-primary" type="submit">Publish request</button></form></dialog>
+    <dialog class="app-modal" id="request-reply-modal"><form class="modal-frame" id="request-reply-form"><button class="modal-close" type="button" data-close aria-label="Close">&times;</button><h2>Offer to help</h2><input id="request-reply-id" type="hidden" /><label>Your offer<textarea id="request-reply-message" required minlength="10" maxlength="1000" rows="4" placeholder="Explain how you can help, what is included and when you are available."></textarea></label><label>Suggested price (GH&#8373;)<input id="request-reply-price" type="number" min="1" max="999999" step="0.01" placeholder="Optional" /></label><p id="request-reply-feedback" class="growth-feedback" role="status" aria-live="polite"></p><button class="button button-primary" type="submit">Send response</button></form></dialog>
+    <dialog class="app-modal" id="request-report-modal"><form class="modal-frame" id="request-report-form"><button class="modal-close" type="button" data-close aria-label="Close">&times;</button><h2>Report this request</h2><input id="request-report-id" type="hidden" /><label>What happened?<textarea id="request-report-message" required minlength="10" maxlength="1000" rows="4" placeholder="Explain why this request needs review."></textarea></label><p id="request-report-feedback" class="growth-feedback" role="status" aria-live="polite"></p><button class="button button-danger" type="submit">Send report</button></form></dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script defer src="supabase-config.js"></script>
@@ -364,7 +393,9 @@
     <script defer src="service-form-utils.js?v=2"></script>
     <script defer src="marketplace-utils.js?v=2"></script>
     <script defer src="push-notification-platform.js?v=1"></script>
+    <script defer src="marketplace-growth-utils.js?v=1"></script>
     <script defer src="user.js?v=40"></script>
+    <script defer src="marketplace-growth.js?v=1"></script>
     <script defer src="service-form.js?v=3"></script>
     <script defer src="notifications.js?v=1"></script>
   </body>

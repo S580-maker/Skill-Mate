@@ -20,6 +20,7 @@ const {
   googleSignIn,
   requestPasswordRecovery,
   resend,
+  signIn,
   signUp,
   updateRecoveredPassword,
   verify,
@@ -56,6 +57,22 @@ function envelope(value) {
     data: encrypted.toString("base64url"),
   };
 }
+
+test("sign-in reports missing email verification configuration", async () => {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const response = responseStub();
+  try {
+    await signIn({
+      method: "POST",
+      body: { email: "student@example.test", password: "password" },
+    }, response);
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.error, "Missing required server setting: SUPABASE_SERVICE_ROLE_KEY.");
+  } finally {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = serviceKey;
+  }
+});
 
 test("signup stores a pending password only inside authenticated encrypted challenge data", async () => {
   const requests = [];

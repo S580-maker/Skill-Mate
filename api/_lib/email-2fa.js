@@ -16,13 +16,14 @@ const challengeWindowMs = 15 * 60 * 1000;
 
 function getServiceKey() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!serviceKey) throw new Error("Email verification is not configured on this server.");
+  if (!serviceKey) throw new Error("Missing required server setting: SUPABASE_SERVICE_ROLE_KEY.");
   return serviceKey;
 }
 
 function getOtpSecret() {
   const secret = process.env.AUTH_OTP_SECRET?.trim();
-  if (!secret || secret.length < 32) throw new Error("Email verification is not configured on this server.");
+  if (!secret) throw new Error("Missing required server setting: AUTH_OTP_SECRET.");
+  if (secret.length < 32) throw new Error("AUTH_OTP_SECRET must contain at least 32 characters.");
   return secret;
 }
 
@@ -129,7 +130,15 @@ function getMailer() {
   const user = process.env.SMTP_USER?.trim();
   const pass = process.env.SMTP_PASS?.trim();
   const from = process.env.SMTP_FROM?.trim() || user;
-  if (!host || !user || !pass || !from) throw new Error("Email verification is not configured on this server.");
+  const missingSettings = [
+    !host && "SMTP_HOST",
+    !user && "SMTP_USER",
+    !pass && "SMTP_PASS",
+    !from && "SMTP_FROM",
+  ].filter(Boolean);
+  if (missingSettings.length) {
+    throw new Error(`Missing required email server settings: ${missingSettings.join(", ")}.`);
+  }
   const port = Number(process.env.SMTP_PORT || 587);
   return {
     from: from.includes("<") ? from : `Skillmate <${from}>`,
@@ -396,7 +405,17 @@ async function signIn(request, response) {
     return response.status(200).json({ message: "A six-digit sign-in code was sent to your email." });
   } catch (error) {
     console.error("Could not start Skillmate email verification.", error);
-    return respondError(response, 503, "Email verification is temporarily unavailable. Please try again shortly.");
+    const message = error instanceof Error ? error.message : "";
+    const isConfigurationError = message.startsWith("Missing required server setting:")
+      || message.startsWith("Missing required email server settings:")
+      || message.startsWith("AUTH_OTP_SECRET must contain");
+    return respondError(
+      response,
+      503,
+      isConfigurationError
+        ? message
+        : "Email verification is temporarily unavailable. Please try again shortly.",
+    );
   }
 }
 

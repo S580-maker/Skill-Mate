@@ -7,7 +7,7 @@ self.addEventListener("push", (event) => {
   }
   const title = typeof notification.title === "string" ? notification.title : "Skillmate";
   const body = typeof notification.body === "string" ? notification.body : "You have a new update.";
-  const path = ["/index.html#bookings", "/index.html#messages"].includes(notification.path)
+  const path = ["/index.html#bookings", "/index.html#messages", "/index.html#requests"].includes(notification.path)
     ? notification.path
     : "/";
   event.waitUntil(self.registration.showNotification(title, {

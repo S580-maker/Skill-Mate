@@ -1,4 +1,5 @@
 const routes = {
+  "booking-reminders": require("./_lib/routes/booking-reminders"),
   "account-delete": require("./_lib/routes/account-delete"),
   health: require("./_lib/routes/health"),
   "push-config": require("./_lib/routes/push-config"),

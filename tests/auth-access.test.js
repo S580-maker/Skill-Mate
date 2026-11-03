@@ -45,6 +45,7 @@ function otpFixture(fetchHandler = async () => ({ ok: false, json: async () => (
       contains(name) { return this.values.has(name); },
     },
     addEventListener(name, callback) { this.handlers[name] = callback; },
+    requestSubmit() { this.submissions = (this.submissions || 0) + 1; },
     setAttribute(name, value) { this.attributes[name] = value; },
     removeAttribute(name) { delete this.attributes[name]; },
     focus() { this.focused = true; },
@@ -133,6 +134,7 @@ test("OTP input filters digits, handles navigation and paste, and gates verifica
   assert.equal(prevented, true);
   assert.deepEqual(inputs.map(input => input.value), ["1", "2", "3", "4", "5", "6"]);
   assert.equal(nodes["#otp-submit"].disabled, false);
+  assert.equal(nodes["#otp-form"].submissions, 1, "A complete pasted code automatically submits");
 });
 
 test("OTP verification rejects incorrect codes with retry feedback and accepts six digits", async () => {
@@ -149,9 +151,11 @@ test("OTP verification rejects incorrect codes with retry feedback and accepts s
   assert.equal(requests[0].body.code, "012345");
   assert.equal(nodes["#auth-otp"].classList.contains("is-error"), true);
   assert.equal(nodes["#otp-message"].textContent, "That code doesn’t match.");
-  assert.equal(nodes["#otp-submit"].disabled, false);
+  assert.equal(nodes["#otp-submit"].disabled, true);
   assert.equal(inputs.every(input => !input.disabled), true);
+  assert.equal(inputs.every(input => input.value === ""), true, "Rejected digits are cleared for a fresh retry");
 
+  inputs.forEach((input, index) => { input.value = String(index); });
   await nodes["#otp-form"].handlers.submit({ preventDefault() {} });
   assert.equal(requests[1].body.code, "012345");
   assert.equal(nodes["#auth-otp"].classList.contains("is-success"), true);

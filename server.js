@@ -137,6 +137,7 @@ app.get("/api/push-config", (request, response) => {
   return handlePushConfig(request, response);
 });
 app.all("/api/push-subscriptions", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }, "push-subscriptions"), (request, response) => {
+app.all("/api/booking-reminders", require("./api/_lib/routes/booking-reminders"));
   const { handlePushSubscriptions } = require("./api/_lib/push");
   return handlePushSubscriptions(request, response);
 });

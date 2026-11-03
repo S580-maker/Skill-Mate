@@ -21,13 +21,13 @@ test("provider showcase exposes portfolio, reviews, skills and a signed private 
   assert.match(page, /id="settings-cv-file" type="file" accept="application\/pdf,\.pdf"/);
 });
 
-test("customers are prompted for completed-work reviews and cannot bypass the booking gate", () => {
-  assert.match(migration, /create trigger bookings_require_completed_work_review\s+before insert on public\.bookings/);
-  assert.match(migration, /Please review your completed work before requesting another booking/);
+test("completed-work reviews are optional and do not block another booking", () => {
+  const growthMigration = read("supabase/migrations/20261106100000_marketplace_growth.sql");
+  assert.match(growthMigration, /drop trigger if exists bookings_require_completed_work_review/);
   assert.match(userScript, /function pendingCustomerReviews\(\)/);
-  assert.match(userScript, /function requireCustomerReview\(\)/);
-  assert.match(userScript, /if \(requireCustomerReview\(\)\) return;/);
-  assert.match(userScript, /review-required-note/);
+  assert.doesNotMatch(userScript, /requireCustomerReview\(/);
+  assert.match(read("marketplace-growth.js"), /data-dismiss-reviews/);
+  assert.match(userScript, /You can book again at any time/);
   assert.match(page, /id="required-review-reminder"/);
 });
 

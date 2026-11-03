@@ -10,14 +10,14 @@ function isNotificationInsert(event) {
     && typeof record.kind === "string"
     && ["booking_request", "booking_update", "message", "negotiation_offer",
       "negotiation_accepted", "negotiation_rejected", "negotiation_counter",
-      "negotiation_agreed"].includes(record.kind)
+      "negotiation_agreed", "booking_reminder", "request_response", "booking_appointment_proposed", "booking_appointment_accepted", "booking_appointment_rejected"].includes(record.kind)
     && typeof record.title === "string"
     && record.title.length >= 2
     && record.title.length <= 120
     && typeof record.body === "string"
     && record.body.length <= 500
     && typeof record.target_path === "string"
-    && ["bookings", "messages"].includes(record.target_path);
+    && ["bookings", "messages", "requests"].includes(record.target_path);
 }
 
 function getDispatchUrl(value) {

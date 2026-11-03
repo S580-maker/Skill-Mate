@@ -188,7 +188,7 @@ async function fetchAdminDashboard() {
     adminClient.from("bookings").select("id", { count: "exact", head: true }).eq("status", "pending"),
     adminClient.from("profiles").select("id", { count: "exact", head: true }).eq("campus_verified", true),
     adminClient.from("reports")
-      .select("id, reason, details, created_at, reporter:profiles!reports_reporter_id_fkey(full_name), reported:profiles!reports_reported_user_id_fkey(full_name)")
+      .select("*, reporter:profiles!reports_reporter_id_fkey(full_name), reported:profiles!reports_reported_user_id_fkey(full_name)")
       .eq("status", "open").order("created_at", { ascending: false }).limit(10),
     adminClient.from("bookings").select("created_at").gte("created_at", activityStart.toISOString()),
     adminClient.from("profiles").select("created_at").gte("created_at", activityStart.toISOString()),
@@ -256,7 +256,7 @@ async function fetchAdminDashboard() {
   document.querySelector("#open-reports").textContent = String(reports.count || 0);
   const reportList = document.querySelector("#report-rows");
   reportList.innerHTML = reportRows.data?.length ? reportRows.data.map((report) =>
-    `<article class="admin-report-row"><div><strong>${escapeAdminText(report.reason)}</strong><small>${escapeAdminText(report.reporter?.full_name || "Student")} reported ${escapeAdminText(report.reported?.full_name || "a student")} · ${escapeAdminText(formatAdminDate(report.created_at))}</small><p>${escapeAdminText(report.details)}</p></div><span class="report-actions"><button class="review-button" type="button" data-report-action="resolved" data-report-id="${escapeAdminText(report.id)}">Resolve</button><button class="review-button" type="button" data-report-action="dismissed" data-report-id="${escapeAdminText(report.id)}">Dismiss</button></span></article>`).join("")
+    `<article class="admin-report-row"><div><strong>${escapeAdminText(report.reason)}</strong><small>${escapeAdminText(report.reporter?.full_name || "Student")} reported ${escapeAdminText(report.reported?.full_name || "a student")} · ${escapeAdminText(formatAdminDate(report.created_at))}</small><p>${escapeAdminText(report.details)}</p></div><span class="report-actions">${report.campus_request_id ? `<button class="review-button" type="button" data-remove-campus-request="${escapeAdminText(report.campus_request_id)}">Remove request</button>` : ""}<button class="review-button" type="button" data-report-action="resolved" data-report-id="${escapeAdminText(report.id)}">Resolve</button><button class="review-button" type="button" data-report-action="dismissed" data-report-id="${escapeAdminText(report.id)}">Dismiss</button></span></article>`).join("")
     : '<p class="empty-state">No open safety reports.</p>';
   window.adminActivity = {
     bookings: activityBookings.data || [],
@@ -501,6 +501,14 @@ async function protectAdminDashboard() {
       }
     });
     document.querySelector("#report-rows").addEventListener("click", async (event) => {
+      const remove = event.target.closest("[data-remove-campus-request]");
+      if (remove) {
+        remove.disabled = true;
+        const result = await adminClient.rpc("close_campus_request", {p_request_id: remove.dataset.removeCampusRequest, p_remove: true});
+        if (result.error) { showAdminToast(result.error.message || "Could not remove the request."); remove.disabled = false; }
+        else { remove.textContent = "Request removed"; showAdminToast("Request removed. You can now resolve the report."); }
+        return;
+      }
       const button = event.target.closest("[data-report-action]");
       if (!button) return;
       button.disabled = true;

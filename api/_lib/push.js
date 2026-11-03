@@ -156,10 +156,10 @@ function getPushEvent(request) {
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(record.user_id)
     || typeof record.title !== "string" || record.title.length > 120
     || typeof record.body !== "string" || record.body.length > 500
-    || !["bookings", "messages"].includes(record.target_path)
+    || !["bookings", "messages", "requests"].includes(record.target_path)
     || !["booking_request", "booking_update", "message", "negotiation_offer",
       "negotiation_accepted", "negotiation_rejected", "negotiation_counter",
-      "negotiation_agreed"].includes(record.kind)) return null;
+      "negotiation_agreed", "booking_reminder", "request_response", "booking_appointment_proposed", "booking_appointment_accepted", "booking_appointment_rejected"].includes(record.kind)) return null;
   return record;
 }
 
@@ -191,7 +191,7 @@ async function handlePushDispatch(request, response) {
       body: notification.kind === "message"
         ? "You have a new message in Skillmate."
         : notification.body,
-      path: notification.target_path === "messages" ? "/index.html#messages" : "/index.html#bookings",
+      path: notification.target_path === "messages" ? "/index.html#messages" : notification.target_path === "requests" ? "/index.html#requests" : "/index.html#bookings",
     });
     const failures = [];
     let sent = 0;

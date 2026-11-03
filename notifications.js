@@ -13,7 +13,7 @@
     status.textContent = "Loading notifications…";
     try {
       let result = appSupabase
-        ? await appSupabase.from("notifications").select("id, title, body, read_at, created_at, conversation_id, booking_id")
+        ? await appSupabase.from("notifications").select("id, title, body, read_at, created_at, conversation_id, booking_id, target_path")
           .order("created_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + 9)
         : { data: [], error: null };
       if (result.error && ["42703", "PGRST204"].includes(result.error.code)) {
@@ -34,6 +34,10 @@
         time.dateTime = item.created_at;
         time.textContent = new Date(item.created_at).toLocaleString();
         row.append(title, body, time);
+        if (item.target_path === "requests") {
+          const open = document.createElement("button"); open.type = "button"; open.className = "button button-outline button-small"; open.textContent = "Open campus requests";
+          open.addEventListener("click", () => { dialog.close(); showPage("requests"); }); row.append(open);
+        }
         if (item.booking_id) {
           const open = document.createElement("button");
           open.type = "button";

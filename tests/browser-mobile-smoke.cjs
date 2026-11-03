@@ -31,6 +31,7 @@ window.fetch=async(url,options)=>{
     return new Response(JSON.stringify({message:"A six-digit verification code was sent to your email."}),{status:200,headers:{"content-type":"application/json"}});
   }
   if(url==="/api/auth/verify"){
+    await new Promise(resolve=>setTimeout(resolve,500));
     if(window.sessionStorage.getItem("skillmate-google-otp-active")==="1"){
       window.__verifyCalls.push(JSON.parse(options.body));
       return new Response(JSON.stringify({provider:"google",session:{access_token:"verified-google-access",refresh_token:"verified-google-refresh"}}),{status:200,headers:{"content-type":"application/json"}});
@@ -77,6 +78,13 @@ from(){return {select(){return this;},eq(){return this;},single:async()=>({data:
 </script>`;
 const server = http.createServer((req, res) => {
   const name = new URL(req.url, "http://localhost").pathname.slice(1) || "index.html";
+  if (/^assets\/[\w-]+\.png$/.test(name)) {
+    try {
+      res.setHeader("Content-Type", "image/png");
+      res.end(fs.readFileSync(path.join(root, name)));
+    } catch { res.writeHead(404).end(); }
+    return;
+  }
   if (!/^[\w-]+\.(html|css|js|svg)$/.test(name)) { res.writeHead(404).end(); return; }
   let content;
   try { content = fs.readFileSync(path.join(root, name), "utf8"); }
@@ -84,7 +92,7 @@ const server = http.createServer((req, res) => {
   if (name.endsWith(".html")) {
     content = content.replace(/<script[^>]*src="(?:https:[^"]+|supabase-config.js|supabase-client.js[^"]*)"[^>]*><\/script>/g, "");
     if (name === "login.html") content = content.replace('<script src="ghana-universities.js">', `${authFixture}<script src="ghana-universities.js">`);
-    if (name === "forgot-password.html") content = content.replace('<script src="forgot-password.js?v=2">', `${recoveryFixture}<script src="forgot-password.js?v=2">`);
+    if (name === "forgot-password.html") content = content.replace(/(<script src="forgot-password\.js[^"]*">)/, `${recoveryFixture}$1`);
     if (name === "onboarding.html") content = content.replace('<script src="ghana-universities.js">', `${onboardingFixture}<script src="ghana-universities.js">`);
   }
   if (name === "user.js") {
@@ -154,6 +162,8 @@ async function main() {
     fs.writeFileSync(path.join(output, `${name}.png`), Buffer.from(data, "base64"));
   };
   const checkWidth = async label => {
+    assert.equal(await evaluate('document.querySelectorAll(".brand-logo").length'), 0, `${label}: brand logos are removed`);
+    assert.equal(await evaluate('document.querySelector(".brand-name")?.textContent'), "Skillmate", `${label}: text brand remains visible`);
     const dimensions = await evaluate(`({viewport:innerWidth, document:document.documentElement.scrollWidth, body:document.body.scrollWidth})`);
     assert.ok(dimensions.document <= dimensions.viewport + 1 && dimensions.body <= dimensions.viewport + 1, `${label}: horizontal overflow ${JSON.stringify(dimensions)}`);
     const duplicates = await evaluate(`Array.from(document.querySelectorAll('[id]')).map(e=>e.id).filter((id,i,all)=>all.indexOf(id)!==i)`);
@@ -177,18 +187,16 @@ async function main() {
     await checkWidth("320:otp");
     await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     const pasteCode = async code => evaluate(`(()=>{const clipboard=new DataTransfer();clipboard.setData("text",${JSON.stringify(code)});document.querySelector('.auth-otp-inputs input').dispatchEvent(new ClipboardEvent("paste",{clipboardData:clipboard,bubbles:true,cancelable:true}));return Array.from(document.querySelectorAll(".auth-otp-inputs input"),input=>input.value).join("")})()`);
-    assert.equal(await pasteCode("12a3456"), "123456", "Pasting accepts and distributes only numeric OTP digits");
-    const completeState = await evaluate('({disabled:document.querySelector("#otp-submit").disabled,values:Array.from(document.querySelectorAll(".auth-otp-inputs input"),input=>input.value)})');
-    assert.equal(completeState.disabled, false, `Verify enables when all six digits are present: ${JSON.stringify(completeState)}`);
-    await pasteCode("000000");
+    assert.equal(await pasteCode("00a0000"), "000000", "Pasting accepts and distributes only numeric OTP digits");
     await evaluate('document.querySelector("#otp-form").requestSubmit()');
-    await wait(100);
+    await screenshot("otp-verifying-390");
+    await wait(350);
     assert.equal(await evaluate('document.querySelector("#auth-otp").classList.contains("is-error")'), true, "A rejected code highlights and animates the OTP inputs");
     assert.equal(await evaluate('document.querySelector("#otp-message").textContent'), "That code doesn’t match.");
-    assert.equal(await evaluate('document.querySelector("#otp-submit").disabled'), false, "A rejected code can be retried");
-    await pasteCode("123456");
+    assert.equal(await evaluate('document.querySelector("#otp-submit").disabled'), true, "A rejected code clears the digits for a fresh retry");
+    await evaluate('document.querySelectorAll(".auth-otp-inputs input").forEach((input,index)=>{input.value=String(index+1);input.dispatchEvent(new Event("input",{bubbles:true}));})');
     await evaluate('document.querySelector("#otp-form").requestSubmit()');
-    await wait(100);
+    await wait(550);
     assert.equal(await evaluate('document.querySelector("#auth-otp").classList.contains("is-success")'), true, "A valid code shows the success state");
     assert.equal(await evaluate('getComputedStyle(document.querySelector(".auth-otp-check")).display'), "block", "Success displays the animated checkmark");
     assert.equal(await evaluate('document.querySelector("#otp-submit .auth-submit-spinner").hidden'), true, "Success replaces the loading spinner");
@@ -227,6 +235,7 @@ async function main() {
     assert.equal(await evaluate('document.querySelector("#new-password-message").classList.contains("success")'), true);
   };
   const verifyGoogleOtpFlow = async () => {
+    await call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
     await navigate("login.html");
     await checkWidth("390:google-signin");
     await evaluate('document.querySelector("#auth-consent").checked=true;document.querySelector("#google-signin").click()');
@@ -241,7 +250,7 @@ async function main() {
     assert.equal(await evaluate('document.querySelectorAll(".auth-otp-inputs input").length'), 6);
     await evaluate('window.__googleSessionMissing=true');
     await evaluate('(()=>{const clipboard=new DataTransfer();clipboard.setData("text","246810");document.querySelector(".auth-otp-inputs input").dispatchEvent(new ClipboardEvent("paste",{clipboardData:clipboard,bubbles:true,cancelable:true}));document.querySelector("#otp-form").requestSubmit()})()');
-    await wait(100);
+    await wait(550);
     assert.deepEqual(await evaluate('window.__verifyCalls.map(call=>call.code)'), ["246810"]);
     assert.equal(await evaluate('window.__serverSessionSyncCalls'), 1, "Successful OTP reuses and syncs the preserved Google session");
     assert.equal(await evaluate('window.__setSessionCalls'), 1, "Missing local auth state is restored from the server-verified session");
@@ -249,6 +258,57 @@ async function main() {
     assert.equal(await evaluate('sessionStorage.getItem("skillmate-google-otp-active")'), null);
     await wait(600);
     assert.equal(await evaluate('location.pathname.endsWith("/index.html")'), true, "Verified Google user enters the app");
+    await call("Emulation.setEmulatedMedia", { features: [] });
+  };
+  const verifyGrowthFlow = async () => {
+    await navigate("index.html");
+    await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    assert.equal(await evaluate('!!window.skillmateGrowth'), true);
+    await evaluate('showPage("home");const filters=document.querySelector("#marketplace-filters");filters.elements.min.value="60";filters.elements.max.value="100";filters.dispatchEvent(new Event("input",{bubbles:true}))');
+    assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length'), 2, "Budget filters combine");
+    await evaluate('document.querySelector("#marketplace-filters").elements.verified.checked=true;document.querySelector("#marketplace-filters").dispatchEvent(new Event("input",{bubbles:true}))');
+    assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length'), 0, "Unverified providers are excluded");
+    await evaluate('document.querySelector("#marketplace-filters").reset()'); await wait(50);
+    assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length'), 6);
+    await screenshot("growth-filters-390"); await checkWidth("390:growth-filters");
+    await evaluate('showPage("bookings");renderAll();document.querySelector("[data-dismiss-reviews]").click();renderAll()');
+    assert.equal(await evaluate('document.querySelector("#required-review-reminder").hidden'), true, "Review reminders can be dismissed");
+    await evaluate('document.querySelector("[data-rebook]").click()');
+    assert.equal(await evaluate('document.querySelector("#booking-modal").open'), true, "Book again works with an outstanding review");
+    assert.equal(await evaluate('document.querySelector("#booking-negotiation-id").value'), "", "Repeat bookings do not reuse a stale negotiated price");
+    await evaluate('document.querySelector("#booking-modal").close();showPage("provider");appUser={id:"daniel"};document.querySelector("#availability-enabled").checked=true;document.querySelector("#availability-timezone").value="Africa/Accra";document.querySelectorAll("[data-hours-day]").forEach(row=>{row.querySelector("[type=checkbox]").checked=true;row.querySelector("[id^=hours-start]").value="09:00";row.querySelector("[id^=hours-end]").value="12:00"});document.querySelector("#availability-form").requestSubmit()');
+    await wait(50);
+    assert.ok(await evaluate('document.querySelector("#availability-feedback").textContent.includes("published")'));
+    await checkWidth("390:availability"); await screenshot("growth-availability-390");
+    await evaluate('appUser=null;openBooking("daniel","daniel-service")'); await wait(50);
+    assert.equal(await evaluate('document.querySelector("#booking-slot-label").hidden'), false);
+    assert.equal(await evaluate('document.querySelector("#booking-slot").options.length'), 4, "Three actual slots are available");
+    await evaluate('document.querySelector("#booking-slot").selectedIndex=1;window.__bookedSlot=document.querySelector("#booking-slot").value;document.querySelector("#booking-location-type").selectedIndex=1;document.querySelector("#booking-location-type").dispatchEvent(new Event("change",{bubbles:true}));document.querySelector("#booking-confirm-details").checked=true;document.querySelector("#booking-form").requestSubmit()');
+    assert.equal(await evaluate('state.bookings[0].scheduledAt'), await evaluate('window.__bookedSlot'));
+    await evaluate('state.bookings[0].status="Confirmed";openBooking("daniel","daniel-service")'); await wait(50);
+    assert.equal(await evaluate('Array.from(document.querySelector("#booking-slot").options).some(option=>option.value===window.__bookedSlot)'), false, "Confirmed work removes its slot");
+    await evaluate('document.querySelector("#booking-modal").close();showPage("provider");renderAll();document.querySelector("#provider-booking-list [data-decision^=In]").click()');
+    assert.ok(await evaluate('state.bookings.some(booking=>isOwnBooking(booking)&&booking.status==="In progress")'));
+    assert.ok(await evaluate('Array.from(document.querySelectorAll("#provider-booking-list [aria-current=step]")).some(item=>item.textContent==="In progress")'));
+    await evaluate('showPage("requests")'); await wait(50);
+    await evaluate('document.querySelector("#request-post-open").click();document.querySelector("#request-title").value="Poster for our campus event";document.querySelector("#request-description").value="We need a clear event poster with two revisions. <img src=x onerror=alert(1)>";document.querySelector("#request-budget").value="80";document.querySelector("#request-post-form").requestSubmit()');
+    await wait(70);
+    assert.equal(await evaluate('document.querySelectorAll("#request-board-grid .request-card").length'), 1);
+    assert.equal(await evaluate('document.querySelectorAll("#request-board-grid .request-card img").length'), 0, "Request text is escaped");
+    await checkWidth("390:request-board"); await screenshot("growth-request-board-390");
+    await evaluate('appUser={id:"nana"};document.querySelector("#request-board-filter").value="campus";document.querySelector("#request-board-filter").dispatchEvent(new Event("change"));document.querySelector("[data-reply-request]").click();document.querySelector("#request-reply-message").value="I can create your poster with two revisions by Friday.";document.querySelector("#request-reply-price").value="75";document.querySelector("#request-reply-form").requestSubmit()'); await wait(60);
+    assert.equal(await evaluate('document.querySelector("[data-reply-request]").disabled'), true, "A student can respond only once");
+    await evaluate('appUser={id:"daniel"};document.querySelector("#request-board-filter").dispatchEvent(new Event("change"))');
+    assert.equal(await evaluate('document.querySelectorAll(".request-response").length'), 0, "Other students cannot read a private response");
+    await evaluate('appUser=null;document.querySelector("#request-board-filter").value="mine";document.querySelector("#request-board-filter").dispatchEvent(new Event("change"))');
+    assert.equal(await evaluate('document.querySelectorAll(".request-response").length'), 1, "The requester can review responses");
+    await call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await checkWidth("1440:request-board"); await screenshot("growth-request-board-1440");
+    await evaluate('document.querySelector("[data-close-request]").click()'); await wait(60);
+    assert.ok(await evaluate('document.querySelector(".request-meta").textContent.includes("Closed")'));
+    await evaluate('document.querySelector("#request-board-filter").value="campus";document.querySelector("#request-board-filter").dispatchEvent(new Event("change"))');
+    assert.equal(await evaluate('document.querySelectorAll(".request-card").length'), 0, "Closed requests disappear from the open board");
+    console.log("PASS marketplace growth: filters, optional reviews, rebooking, published slots, booking progress, request posts, private responses and closure");
   };
   const verifyMissingGoogleSessionFeedback = async () => {
     await navigate("login.html?skillmate-google-otp=1");
@@ -260,10 +320,18 @@ async function main() {
   await call("Page.enable"); await call("Runtime.enable"); await call("Network.enable");
   await call("Page.bringToFront");
   await call("Network.setBlockedURLs", { urls: ["*supabase.co*", "*supabase.in*", "*fonts.googleapis.com*", "*fonts.gstatic.com*"] });
+  if (process.argv.includes("--growth-only")) {
+    await verifyGrowthFlow();
+    assert.deepEqual(errors, [], "Uncaught browser errors");
+    console.log(`Screenshots: ${output}`);
+    return;
+  }
   if (process.argv.includes("--otp-only")) {
     await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await verifyOtpFlow();
-    console.log("PASS six-digit OTP flow: six inputs, sanitized paste, disabled state, incorrect-code retry, success animation and redirect");
+    assert.deepEqual(errors, [], "Uncaught browser errors");
+    console.log(`Screenshots: ${output}`);
+    console.log("PASS six-digit OTP flow: six inputs, sanitized paste, disabled state, incorrect-code retry, success feedback and redirect");
     return;
   }
   if (process.argv.includes("--recovery-only")) {
@@ -423,11 +491,8 @@ async function main() {
   await wait(350);
   assert.ok(await evaluate('!!document.querySelector("#marketplace-grid [data-book=akosua]")'));
   await evaluate('document.querySelector("#marketplace-grid [data-book=akosua]").click()');
-  assert.equal(await evaluate('document.querySelector("#review-modal").open'), true, "An unrated completed booking requires a customer review before another booking");
-  assert.equal(await evaluate('document.querySelector("#booking-modal").open'), false, "The next booking stays blocked until the review is posted");
-  await evaluate('document.querySelector("#review-text").value="The service was helpful and completed as agreed.";document.querySelector("#review-form").requestSubmit()');
-  assert.equal(await evaluate('state.bookings.find(b=>b.status==="Completed"&&!isOwnBooking(b)).reviewed'), true);
-  await evaluate('document.querySelector("#marketplace-grid [data-book=akosua]").click()');
+  assert.equal(await evaluate('document.querySelector("#review-modal").open'), false, "An outstanding review never interrupts another booking");
+  assert.equal(await evaluate('document.querySelector("#booking-modal").open'), true, "Students can book while a review is outstanding");
   assert.equal(await evaluate('document.querySelector("#booking-price").textContent'), "GH₵ 120");
   assert.equal(await evaluate('document.querySelector("#booking-time").type'), "time");
   assert.equal(await evaluate('document.querySelector("#booking-service-switch").hidden'), true, "A single-service provider has no unnecessary service switch");
@@ -560,6 +625,7 @@ async function main() {
   assert.equal(await evaluate('JSON.parse(sessionStorage.getItem("onboarding-fixture")).onboarding_completed'), true);
   assert.equal(await evaluate('JSON.parse(sessionStorage.getItem("onboarding-fixture")).university'), "University of Ghana");
   await verifyPasswordRecoveryFlow();
+  await verifyGrowthFlow();
   assert.deepEqual(errors, [], "Uncaught browser errors");
   console.log("PASS interactions: profile editing, student details, mobile seller label, search refocus, service selection, categories, booking, chat, theme, first listing and Google OTP gate");
   console.log(`Screenshots: ${output}`);

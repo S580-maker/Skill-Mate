@@ -304,7 +304,7 @@ function hideOtpChallenge() {
 
 async function submitOtpCode(event) {
   event.preventDefault();
-  if (authSubmitting) return;
+  if (authSubmitting || document.querySelector("#auth-otp").classList.contains("is-success")) return;
   const inputs = [...document.querySelectorAll(".auth-otp-inputs input")];
   const code = inputs.map((input) => input.value).join("");
   if (!/^\d{6}$/.test(code)) {
@@ -379,7 +379,8 @@ async function submitOtpCode(event) {
     void challenge.offsetWidth;
     challenge.classList.add("is-error");
     message.textContent = error.message || "Could not verify your code. Please try again.";
-    inputs.forEach((input) => { input.disabled = false; });
+    inputs.forEach((input) => { input.disabled = false; input.value = ""; });
+    inputs[0]?.focus();
     if (error.message?.includes("expired") || error.message?.includes("Sign in again")) {
       window.clearInterval(otpCountdownTimer);
       document.querySelector("#otp-resend").disabled = true;
@@ -427,6 +428,12 @@ function fillOtpInputs(digits, startIndex, inputs) {
   updateOtpSubmitState(inputs);
 }
 
+function submitCompletedOtp() {
+  if (!document.querySelector("#otp-submit").disabled) {
+    document.querySelector("#otp-form").requestSubmit();
+  }
+}
+
 document.querySelector("#otp-form").addEventListener("submit", submitOtpCode);
 const otpInputs = [...document.querySelectorAll(".auth-otp-inputs input")];
 otpInputs.forEach((input, index, inputs) => {
@@ -437,6 +444,7 @@ otpInputs.forEach((input, index, inputs) => {
       fillOtpInputs(digits.slice(0, inputs.length - startIndex), startIndex, inputs);
       inputs[Math.min(startIndex + digits.length, inputs.length) - 1]?.focus();
       clearOtpError();
+      submitCompletedOtp();
       return;
     }
     input.value = digits.slice(-1);
@@ -444,6 +452,7 @@ otpInputs.forEach((input, index, inputs) => {
     if (input.value && index < inputs.length - 1) inputs[index + 1].focus();
     clearOtpError();
     updateOtpSubmitState(inputs);
+    submitCompletedOtp();
   });
   input.addEventListener("keydown", (event) => {
     if (event.key === "Backspace" && !input.value && index > 0) inputs[index - 1].focus();
@@ -459,6 +468,7 @@ otpInputs.forEach((input, index, inputs) => {
     if (startIndex + digits.length > inputs.length) return;
     fillOtpInputs(digits, startIndex, inputs);
     inputs[Math.min(startIndex + digits.length, inputs.length) - 1].focus();
+    submitCompletedOtp();
   });
 });
 
@@ -502,6 +512,7 @@ document.querySelector("#otp-resend").addEventListener("click", async () => {
 });
 
 document.querySelector("#otp-back").addEventListener("click", () => {
+  if (authSubmitting || document.querySelector("#auth-otp").classList.contains("is-success")) return;
   fetch("/api/auth/sign-in", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
   sessionOtpStarted = false;
   if (window.sessionStorage.getItem("skillmate-google-otp-active") === "1" || sessionOtpStarted) {

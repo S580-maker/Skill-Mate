@@ -49,14 +49,14 @@
   function filterBookings(bookings, { direction = "made", filter = "all", ownId, now = Date.now() }) {
     const filtered = bookings.filter(booking => {
       if ((booking.providerId === ownId) !== (direction === "received")) return false;
-      if (filter === "upcoming") return ["Confirmed", "Pending"].includes(booking.status) && bookingTimestamp(booking) >= now;
+      if (filter === "upcoming") return ["Confirmed", "In progress", "Pending"].includes(booking.status) && bookingTimestamp(booking) >= now;
       if (filter === "requests") return booking.status === "Pending";
       if (filter === "completed") return booking.status === "Completed";
       return true;
     });
     const rank = booking => direction === "received" && booking.status === "Pending" ? 0
-      : ["Confirmed", "Pending"].includes(booking.status) && bookingTimestamp(booking) >= now ? 1
-      : ["Confirmed", "Pending"].includes(booking.status) ? 2
+      : ["Confirmed", "In progress", "Pending"].includes(booking.status) && bookingTimestamp(booking) >= now ? 1
+      : ["Confirmed", "In progress", "Pending"].includes(booking.status) ? 2
       : booking.status === "Completed" ? 3 : 4;
     return filtered.sort((a, b) => rank(a) - rank(b)
       || (rank(a) <= 1 ? bookingTimestamp(a) - bookingTimestamp(b) : bookingTimestamp(b) - bookingTimestamp(a)));

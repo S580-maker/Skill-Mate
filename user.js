@@ -943,13 +943,6 @@ function openBookingReview(booking) {
     `Share a fair review of your completed booking with ${provider?.name || "this student"}.`;
   openModal("review-modal");
 }
-function requireCustomerReview() {
-  const booking = pendingCustomerReviews()[0];
-  if (!booking) return false;
-  showToast("Please review your completed work before requesting another booking.", "error");
-  openBookingReview(booking);
-  return true;
-}
 function marketplaceSearchScore(provider, query) {
   const normalizedQuery = window.skillmateSmartSearch.normalize(query);
   const fields = [
@@ -990,10 +983,10 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
     if (state.blocked.includes(provider.id)) return false;
     if (targetId !== "saved-grid" && window.skillmateMarketplace.campusRank(provider, campus) === null) return false;
     if (targetId !== "saved-grid" && !window.skillmateMarketplace.matchesCategory(provider.category, selectedCategory)) return false;
-    return window.skillmateSmartSearch.matches(provider, query);
+    return (targetId === "saved-grid" || !window.skillmateGrowth || window.skillmateGrowth.matches(provider)) && window.skillmateSmartSearch.matches(provider, query);
   });
   const visible = window.skillmateMarketplace.sortByCampus(matching, campus, (left, right) => (
-    query ? marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query) : 0
+    (targetId !== "saved-grid" && window.skillmateGrowth?.compare(left, right)) || (query ? marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query) : 0)
   ));
   if (targetId === "marketplace-grid") {
     document.querySelector("#marketplace-result-count").textContent = `${visible.length} ${visible.length === 1 ? "service" : "services"}`;
@@ -1009,7 +1002,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
       <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><div class="listing-cover-button" aria-hidden="true"><span class="cover-fallback"><span aria-hidden="true">${getCategoryIcon(provider.category)}</span><strong>${escapeHTML(provider.category)}</strong><small>Student service</small></span>${listingImage(provider) ? `<img class="service-marketplace-cover" src="${escapeHTML(listingImage(provider))}" alt="" loading="lazy" decoding="async" />` : ""}</div>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-pressed="${state.saved.includes(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
       <div class="provider-card-body">
         <div class="listing-category-row"><p class="service-category">${escapeHTML(provider.category)}</p><span class="rating">${providerReviewSummary(provider).count ? `★ ${providerReviewSummary(provider).rating}<small> (${providerReviewSummary(provider).count})</small>` : "New provider"}</span></div>
-        <h3>${escapeHTML(provider.service)}</h3><p class="provider-description">${escapeHTML(provider.description)}</p>
+        <h3>${escapeHTML(provider.service)}</h3><p class="provider-scope-label">${escapeHTML(provider.deliveryMethod === "online" ? "Online service" : provider.deliveryMethod === "in_person" ? "In person" : provider.deliveryMethod === "both" ? "Online or in person" : "Ask about delivery")} ? ${escapeHTML(provider.estimatedDelivery || "Agree on delivery time")}</p><p class="provider-description">${escapeHTML(provider.description)}</p>
         <div class="provider-card-person"><button class="provider-profile-trigger" type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="View ${escapeHTML(provider.name)}’s provider profile">${providerAvatarMarkup(provider)}</button><span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? '<i class="verified-dot">✓</i> Campus verified · ' : ""}${escapeHTML(provider.campus)}</small></span></div>
         ${serviceDetailLabel(provider) ? `<p class="service-delivery-label">${escapeHTML(serviceDetailLabel(provider))}</p>` : ""}
         <div class="provider-card-footer"><span class="price"><small>Price</small>${currency(provider.price)}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">Request booking</button></span>`}</div>
@@ -1104,11 +1097,13 @@ function renderBookingList(targetId, list, options = {}) {
     const providerView = options.provider || isOwnBooking(booking);
     const appointmentProposalPending = Boolean(booking.pendingAppointmentProposalId);
     const actions = providerView
-      ? `${booking.status === "Pending" ? `${appointmentProposalPending ? "" : `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button>`}<button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : booking.status === "Confirmed" ? `<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : ""}${["Pending", "Confirmed"].includes(status) && !appointmentProposalPending ? `<button class="subtle-button" data-propose-appointment="${escapeHTML(booking.id)}">Suggest another time</button>` : ""}<button class="subtle-button" data-message="customer:${escapeHTML(booking.id)}">Message student</button>`
-      : `${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-primary review-required-button" data-review="${escapeHTML(booking.id)}">Review required</button>` : ""}${appointmentProposalPending ? `<button class="button button-small button-primary" data-appointment-response="accept" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Accept suggested time</button><button class="button button-small button-outline" data-appointment-response="reject" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Keep original time</button>` : ""}${!booking.groupId && ["Pending", "Confirmed"].includes(status) ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
+      ? `${booking.status === "Pending" ? `${appointmentProposalPending ? "" : `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button>`}<button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : ["Confirmed", "In progress"].includes(booking.status) ? `${booking.status === "Confirmed" && window.skillmateGrowth?.canStartWork() ? `<button class="button button-small button-primary" data-decision="In progress" data-booking-id="${escapeHTML(booking.id)}">Start work</button>` : ""}<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : ""}${["Pending", "Confirmed"].includes(status) && !appointmentProposalPending ? `<button class="subtle-button" data-propose-appointment="${escapeHTML(booking.id)}">Suggest another time</button>` : ""}<button class="subtle-button" data-message="customer:${escapeHTML(booking.id)}">Message student</button>`
+      : `${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-primary review-required-button" data-review="${escapeHTML(booking.id)}">Leave a review</button>` : ""}${appointmentProposalPending ? `<button class="button button-small button-primary" data-appointment-response="accept" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Accept suggested time</button><button class="button button-small button-outline" data-appointment-response="reject" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Keep original time</button>` : ""}${!booking.groupId && ["Pending", "Confirmed"].includes(status) ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
+    const repeatAction = !providerView && status === "Completed" ? `<button class="button button-small button-outline" data-rebook="${escapeHTML(booking.id)}">Book again</button>` : "";
+    const progress = window.skillmateGrowth?.progress(booking, providerView) || "";
     const priceChatAction = booking.priceNegotiationId
       ? `<button class="subtle-button" data-negotiation-chat="${escapeHTML(booking.priceNegotiationId)}">Open price chat</button>` : "";
-    const location = status === "Confirmed" && booking.otherLocation
+    const location = ["Confirmed", "In progress"].includes(status) && booking.otherLocation
       ? `<div class="booking-location"><strong>${providerView ? "Customer" : "Provider"}’s hostel or campus: ${escapeHTML(booking.otherLocation)}</strong><small>Shared for this confirmed booking. Approximate distance isn’t available without map pins.</small></div>`
       : "";
     const listedPriceNote = Number.isFinite(booking.listedPrice) && booking.listedPrice !== booking.price
@@ -1120,7 +1115,7 @@ function renderBookingList(targetId, list, options = {}) {
       ? `<small class="booking-note">Arrangement: ${escapeHTML(booking.requestedLocation)}</small>` : "";
     const agreedScope = booking.scopeSnapshot
       ? `<div class="booking-location"><strong>${booking.priceAgreementId ? "Agreed service scope" : "Service details"}</strong><small>${escapeHTML(booking.scopeSnapshot)}</small></div>` : "";
-    return `<article class="booking-card${!providerView && status === "Completed" && !booking.reviewed ? " booking-awaiting-review" : ""}" data-booking-card-id="${escapeHTML(booking.id)}"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span>${booking.priceAgreementId ? '<span class="booking-type-pill">Agreed price</span>' : ""}<span class="status status-${escapeHTML(status.toLowerCase())}">${escapeHTML(status === "Pending" ? providerView ? appointmentProposalPending ? "Time change awaiting customer" : "Needs your reply" : "Awaiting confirmation" : status)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${appointmentSuggestion}${listedPriceNote}${requestedArrangement}${booking.note ? `<small class="booking-note">Instructions: “${escapeHTML(booking.note)}”</small>` : ""}${agreedScope}${!providerView && status === "Completed" && !booking.reviewed ? '<small class="review-required-note">Your review is required before you can request another booking.</small>' : ""}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${priceChatAction}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
+    return `<article class="booking-card${!providerView && status === "Completed" && !booking.reviewed ? " booking-awaiting-review" : ""}" data-booking-card-id="${escapeHTML(booking.id)}"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span>${booking.priceAgreementId ? '<span class="booking-type-pill">Agreed price</span>' : ""}<span class="status status-${escapeHTML(status.toLowerCase())}">${escapeHTML(status === "Pending" ? providerView ? appointmentProposalPending ? "Time change awaiting customer" : "Needs your reply" : "Awaiting confirmation" : status)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${appointmentSuggestion}${listedPriceNote}${requestedArrangement}${booking.note ? `<small class="booking-note">Instructions: “${escapeHTML(booking.note)}”</small>` : ""}${agreedScope}${progress}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${repeatAction}${priceChatAction}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
   }).join("") : '<div class="empty-card"><span>◷</span><strong>Nothing here just yet</strong><small>Your bookings and requests will appear here.</small></div>';
 }
 function resizeChatInput(input) {
@@ -1743,12 +1738,13 @@ function bookingsForActiveFilter() {
   return bookings;
 }
 function renderBookingActivity() {
+  window.skillmateGrowth?.render();
   renderBookingList("user-booking-list", bookingsForActiveFilter());
   const pendingReviews = pendingCustomerReviews();
   const reviewReminder = document.querySelector("#required-review-reminder");
-  reviewReminder.hidden = pendingReviews.length === 0;
+  reviewReminder.hidden = pendingReviews.length === 0 || Boolean(window.skillmateGrowth?.reviewDismissed());
   reviewReminder.innerHTML = pendingReviews.length
-    ? `<span><strong>${pendingReviews.length} completed ${pendingReviews.length === 1 ? "booking needs" : "bookings need"} your review</strong><small>Share your experience to unlock your next booking.</small></span><button class="button button-primary button-small" type="button" data-review="${escapeHTML(pendingReviews[0].id)}">Write review</button>`
+    ? `<span><strong>${pendingReviews.length} completed ${pendingReviews.length === 1 ? "booking needs" : "bookings need"} your review</strong><small>Your feedback helps other students. You can book again at any time.</small></span><button class="button button-primary button-small" type="button" data-review="${escapeHTML(pendingReviews[0].id)}">Write review</button><button class="subtle-button" type="button" data-dismiss-reviews>Not now</button>`
     : "";
   renderBookingList("provider-booking-list", state.bookings.filter(isOwnBooking), { provider: true });
   renderEarnings();
@@ -1764,6 +1760,7 @@ function renderBookingActivity() {
   );
 }
 function renderAll() {
+  window.skillmateGrowth?.render();
   if (typeof window.renderProfileCompleteness === "function") {
     window.renderProfileCompleteness(state.profile);
   }
@@ -2051,9 +2048,10 @@ async function loadSupabaseState() {
   }
   state.bookings = (bookings.data || []).map((booking) => {
     const otherUserId = booking.customer_id === appUser.id ? booking.provider_id : booking.customer_id;
-    const status = toLocalStatus(booking.status);
+    const status = booking.status === "confirmed" && booking.work_started_at ? "In progress" : toLocalStatus(booking.status);
     return {
-      id: booking.id, providerId: booking.provider_id, customerId: booking.customer_id,
+      id: booking.id, serviceId: booking.service_id, providerId: booking.provider_id, customerId: booking.customer_id,
+      workStartedAt: booking.work_started_at || null, durationMinutes: booking.duration_minutes || 60,
       customer: booking.customer_name || "Student", service: booking.service_title || "Service",
       category: booking.category || "Other", price: Number(booking.agreed_price),
       listedPrice: Number(booking.listed_price ?? booking.agreed_price), priceNegotiationId: booking.price_negotiation_id || "",
@@ -2064,7 +2062,7 @@ async function loadSupabaseState() {
       pendingAppointmentAt: booking.pending_appointment_at || "",
       currency: booking.currency, scheduledAt: booking.scheduled_at, date: localDateInputValue(new Date(booking.scheduled_at)),
       time: new Date(booking.scheduled_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-      status, otherLocation: status === "Confirmed"
+      status, otherLocation: ["Confirmed", "In progress"].includes(status)
         ? (userLocations.data || []).find((item) => item.user_id === otherUserId)?.location_name || ""
         : "",
       type: booking.group_booking_id ? "Group booking" : "Individual",
@@ -2116,6 +2114,7 @@ async function loadSupabaseState() {
   cacheConversationMessages(messages);
   const verificationButton = document.querySelector("#verification-open");
   verificationButton.dataset.requested = verification.data?.status || "";
+  await window.skillmateGrowth?.refresh();
   const reportTarget = document.querySelector("#report-target");
   reportTarget.innerHTML = '<option value="">Choose a student</option>' + connectedProviders
     .filter((provider) => provider.id !== appUser.id)
@@ -2133,9 +2132,10 @@ async function refreshLiveBookings() {
   }
   state.bookings = (bookings.data || []).map((booking) => {
     const otherUserId = booking.customer_id === appUser.id ? booking.provider_id : booking.customer_id;
-    const status = toLocalStatus(booking.status);
+    const status = booking.status === "confirmed" && booking.work_started_at ? "In progress" : toLocalStatus(booking.status);
     return {
-      id: booking.id, providerId: booking.provider_id, customerId: booking.customer_id,
+      id: booking.id, serviceId: booking.service_id, providerId: booking.provider_id, customerId: booking.customer_id,
+      workStartedAt: booking.work_started_at || null, durationMinutes: booking.duration_minutes || 60,
       customer: booking.customer_name || "Student", service: booking.service_title || "Service",
       category: booking.category || "Other", price: Number(booking.agreed_price),
       listedPrice: Number(booking.listed_price ?? booking.agreed_price), priceNegotiationId: booking.price_negotiation_id || "",
@@ -2146,7 +2146,7 @@ async function refreshLiveBookings() {
       pendingAppointmentAt: booking.pending_appointment_at || "",
       currency: booking.currency, scheduledAt: booking.scheduled_at, date: localDateInputValue(new Date(booking.scheduled_at)),
       time: new Date(booking.scheduled_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-      status, otherLocation: status === "Confirmed"
+      status, otherLocation: ["Confirmed", "In progress"].includes(status)
         ? (userLocations.data || []).find((item) => item.user_id === otherUserId)?.location_name || ""
         : "",
       type: booking.group_booking_id ? "Group booking" : "Individual",
@@ -2231,9 +2231,12 @@ async function persistBookingStatus(bookingId, status) {
     renderAll();
   }
   try {
-    const { error } = await appSupabase.rpc("update_booking_status", {
-      p_booking_id: bookingId, p_status: toDatabaseStatus(status),
-    });
+    const result = status === "In progress"
+      ? await appSupabase.rpc("start_booking_work", { p_booking_id: bookingId })
+      : await appSupabase.rpc("update_booking_status", {
+        p_booking_id: bookingId, p_status: toDatabaseStatus(status),
+      });
+    const { error } = result;
     if (error) throw error;
   } catch (error) {
     if (booking) {
@@ -2547,7 +2550,7 @@ function initializeDashboard() {
   updateGroupPrice();
   renderAll();
   const pageFromHash = window.location.hash.slice(1);
-  const requestedPage = ["home", "bookings", "messages", "saved", "provider", "earnings", "profile-settings", "help-support"].includes(pageFromHash) ? pageFromHash : "home";
+  const requestedPage = ["home", "bookings", "messages", "saved", "provider", "earnings", "profile-settings", "help-support", "requests"].includes(pageFromHash) ? pageFromHash : "home";
   showPage(requestedPage);
 }
 async function bootstrapStudentApp() {
@@ -2708,6 +2711,8 @@ function showPage(page, options = {}) {
     }
   }
   state.activePage = page;
+  if (page === "requests") window.skillmateGrowth?.refreshBoard();
+  window.skillmateGrowth?.render();
   saveState();
   syncMessageChannels();
   document.querySelectorAll(".view").forEach((element) => element.classList.toggle("active-view", element === view));
@@ -2716,7 +2721,7 @@ function showPage(page, options = {}) {
     if (element.dataset.page === page) element.setAttribute("aria-current", "page");
     else element.removeAttribute("aria-current");
   });
-  const mobilePage = ["home", "bookings", "messages"].includes(page) ? page : "profile-settings";
+  const mobilePage = page === "requests" ? "home" : ["home", "bookings", "messages"].includes(page) ? page : "profile-settings";
   document.querySelectorAll(".mobile-nav [data-page-link]").forEach(element => {
     if (element.dataset.pageLink === mobilePage) element.setAttribute("aria-current", "page");
     else element.removeAttribute("aria-current");
@@ -2758,7 +2763,6 @@ function persistPageScrollPosition() {
   }, "");
 }
 function openBooking(providerId, serviceId, negotiationId = "") {
-  if (requireCustomerReview()) return;
   const provider = getProvider(providerId);
   const services = providerServices(providerId);
   if (!provider || !services.length) { showToast("This provider hasn’t listed an active service yet."); return; }
@@ -2817,6 +2821,7 @@ function openBooking(providerId, serviceId, negotiationId = "") {
     updateBookingLocationVisibility();
   }
   openModal("booking-modal");
+  window.skillmateGrowth?.refreshSlots();
 }
 function updateBookingLocationVisibility() {
   const isOtherLocation = document.querySelector("#booking-location-type").value === "other";
@@ -3473,7 +3478,6 @@ document.querySelector("#group-grid").addEventListener("click", (event) => {
   const group = state.groups.find((item) => item.id === button.dataset.joinGroup);
   if (!group) return;
   if (pendingGroupActions.has(group.id)) return;
-  if (!group.joinedByMe && requireCustomerReview()) return;
   if (appSupabase) {
     const wasJoined = group.joinedByMe;
     const previousGroup = { joined: group.joined, joinedByMe: group.joinedByMe, status: group.status };
@@ -3527,7 +3531,6 @@ document.querySelector("#group-grid").addEventListener("click", (event) => {
 document.querySelector("#booking-form").addEventListener("submit", (event) => {
   event.preventDefault();
   if (bookingSubmissionPending) return;
-  if (requireCustomerReview()) return;
   if (document.querySelector("#booking-confirm-details").required
       && !document.querySelector("#booking-confirm-details").checked) {
     showToast("Review the booking details and confirm before sending the request.", "error");
@@ -3545,7 +3548,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
   const bookingDraftKey = `${providerId}:${service.id}`;
   const appointmentDate = document.querySelector("#booking-date").value;
   const appointmentTime = document.querySelector("#booking-time").value;
-  const scheduledAt = parseLocalAppointment(appointmentDate, appointmentTime);
+  const scheduledAt = window.skillmateGrowth ? window.skillmateGrowth.appointment(appointmentDate, appointmentTime) : parseLocalAppointment(appointmentDate, appointmentTime);
   if (!scheduledAt || scheduledAt <= new Date()) {
     showToast("Choose a future appointment date and time.");
     return;
@@ -3563,7 +3566,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
     bookingSubmissionPending = true;
     const temporaryId = `pending-booking-${Date.now()}`;
     const pendingBooking = {
-      id: temporaryId, providerId, customerId: appUser.id, customer: state.profile.name,
+      id: temporaryId, serviceId: service.id, providerId, customerId: appUser.id, customer: state.profile.name,
       service: service.title, category: service.category, price: negotiation?.agreedPrice ?? Number(service.price),
       listedPrice: negotiation?.listedPrice ?? Number(service.price), priceNegotiationId: negotiationId,
       scopeSnapshot: negotiation?.agreedScope || "",
@@ -3601,6 +3604,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
       } catch (error) {
         state.bookings = state.bookings.filter((booking) => booking.id !== temporaryId);
         renderAll();
+        window.skillmateGrowth?.refreshSlots();
         throw error;
       }
     }, "Could not send the booking request.").finally(() => {
@@ -3610,7 +3614,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
   }
   bookingSubmissionPending = true;
   state.bookings.unshift({
-    id: `booking-${Date.now()}`, providerId, service: service.title, price: Number(service.price),
+    id: `booking-${Date.now()}`, serviceId: service.id, scheduledAt: scheduledAt.toISOString(), providerId, service: service.title, price: Number(service.price),
     date: appointmentDate, time: scheduledAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
     status: "Pending", type: "Individual", note: document.querySelector("#booking-note").value.trim(),
     requestedLocation: bookingLocationValue(),
@@ -3626,7 +3630,6 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
 });
 document.querySelector("#group-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  if (requireCustomerReview()) return;
   const serviceId = document.querySelector("#group-service").value;
   const service = appSupabase
     ? connectedServices.find((item) => item.id === serviceId)
@@ -4965,10 +4968,11 @@ document.querySelector("#user-booking-list").addEventListener("click", (event) =
             ? "Booking request declined."
             : decision.dataset.decision === "Completed"
               ? "Booking marked as completed."
-              : "Booking cancelled.");
+              : decision.dataset.decision === "In progress" ? "Work started. The customer can see the update." : "Booking cancelled.");
       }, "Could not update this booking.");
     } else {
       booking.status = decision.dataset.decision;
+      if (booking.status === "In progress") booking.workStartedAt = new Date().toISOString();
       saveState();
       renderAll();
       showToast(decision.dataset.decision === "Confirmed"
@@ -4977,7 +4981,7 @@ document.querySelector("#user-booking-list").addEventListener("click", (event) =
           ? "Booking request declined."
           : decision.dataset.decision === "Completed"
             ? "Booking marked as completed."
-            : "Booking cancelled.");
+            : decision.dataset.decision === "In progress" ? "Work started. The customer can see the update." : "Booking cancelled.");
     }
     return;
   }
@@ -5031,14 +5035,15 @@ document.querySelector("#provider-booking-list").addEventListener("click", (even
   if (appSupabase) {
     runAction(async () => {
       await persistBookingStatus(booking.id, button.dataset.decision);
-      showToast(button.dataset.decision === "Confirmed" ? "Booking accepted. The student can see the confirmation." : button.dataset.decision === "Completed" ? "Booking marked as completed." : "Booking request declined.");
+      showToast(button.dataset.decision === "Confirmed" ? "Booking accepted. The student can see the confirmation." : button.dataset.decision === "Completed" ? "Booking marked as completed." : button.dataset.decision === "In progress" ? "Work started." : "Booking request declined.");
     }, "Could not update this booking.");
     return;
   }
   booking.status = button.dataset.decision;
+  if (booking.status === "In progress") booking.workStartedAt = new Date().toISOString();
   saveState();
   renderAll();
-  showToast(booking.status === "Confirmed" ? "Booking accepted. Your student can see the confirmation." : booking.status === "Completed" ? "Booking marked as completed." : "Booking request declined.");
+  showToast(booking.status === "Confirmed" ? "Booking accepted. Your student can see the confirmation." : booking.status === "Completed" ? "Booking marked as completed." : button.dataset.decision === "In progress" ? "Work started." : "Booking request declined.");
 });
 document.querySelector("#earnings-list").addEventListener("click", (event) => {
   const messageButton = event.target.closest("[data-message]");
@@ -5060,6 +5065,7 @@ document.querySelector("#earnings-list").addEventListener("click", (event) => {
     return;
   }
   booking.status = button.dataset.decision;
+  if (booking.status === "In progress") booking.workStartedAt = new Date().toISOString();
   saveState();
   renderEarnings();
   renderBookingList("provider-booking-list", state.bookings.filter((item) => item.providerId === "alex"), { provider: true });
