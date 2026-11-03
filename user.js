@@ -553,11 +553,16 @@ function syncChatVisualViewport() {
   const root = document.documentElement;
   root.style.setProperty("--chat-visual-height", `${Math.round(viewport.height)}px`);
   root.style.setProperty("--chat-visual-top", `${Math.round(viewport.offsetTop)}px`);
+  const mobileViewport = window.innerWidth <= 768;
+  const bottomOffset = mobileViewport
+    ? Math.max(0, window.innerHeight - viewport.offsetTop - viewport.height)
+    : 0;
+  root.style.setProperty("--mobile-nav-viewport-bottom", `${Math.round(bottomOffset)}px`);
   const activeElement = document.activeElement;
   const textEntryFocused = activeElement instanceof HTMLElement
     && (activeElement.matches('textarea, input:not([type="button"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])')
       || activeElement.isContentEditable);
-  const keyboardOpen = window.innerWidth <= 768 && textEntryFocused
+  const keyboardOpen = mobileViewport && textEntryFocused
     && (window.innerHeight - viewport.height > 120 || window.screen.height - viewport.height > 220);
   document.body.classList.toggle("mobile-keyboard-open", keyboardOpen);
 }

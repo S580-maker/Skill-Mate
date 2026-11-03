@@ -292,6 +292,8 @@ async function main() {
       assert.equal(mobileNav.linkCount, 4, "All four existing navigation destinations remain available");
       assert.equal(mobileNav.activeColor, mobileNav.themeBlue, "The active destination uses the existing blue theme color");
       assert.ok(parseFloat(mobileNav.contentPadding) >= 90, "Page content reserves space below the floating navigation");
+      const viewportOffset = await evaluate(`(()=>{const descriptor=Object.getOwnPropertyDescriptor(window,"visualViewport");try{Object.defineProperty(window,"visualViewport",{configurable:true,value:{height:innerHeight-80,offsetTop:10,addEventListener(){}}});syncChatVisualViewport();return getComputedStyle(document.documentElement).getPropertyValue("--mobile-nav-viewport-bottom").trim();}finally{if(descriptor)Object.defineProperty(window,"visualViewport",descriptor);else delete window.visualViewport;syncChatVisualViewport();}})()`);
+      assert.equal(viewportOffset, "70px", "The floating navigation follows changes to the visible mobile viewport");
       await evaluate('document.body.classList.add("mobile-keyboard-open")');
       assert.equal(await evaluate('getComputedStyle(document.querySelector(".mobile-nav")).display'), "none", "The floating navigation hides while a mobile keyboard is open");
       await evaluate('document.body.classList.remove("mobile-keyboard-open")');

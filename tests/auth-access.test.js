@@ -35,6 +35,7 @@ function fixture() {
 
 function otpFixture(fetchHandler = async () => ({ ok: false, json: async () => ({ error: "That code doesn’t match." }) })) {
   const nodes = new Map();
+  const intervals = [];
   const makeNode = () => ({
     value: "", disabled: false, hidden: false, textContent: "", attributes: {}, handlers: {},
     classList: {
@@ -58,6 +59,8 @@ function otpFixture(fetchHandler = async () => ({ ok: false, json: async () => (
     "#otp-submit-label": makeNode(),
     "#otp-message": makeNode(),
     "#otp-resend": makeNode(),
+    "#otp-resend-prefix": makeNode(),
+    "#otp-countdown": makeNode(),
   };
   for (const [selector, node] of Object.entries(selectors)) nodes.set(selector, node);
   const document = {
@@ -71,12 +74,13 @@ function otpFixture(fetchHandler = async () => ({ ok: false, json: async () => (
     authSubmitting: false,
     authClient: { auth: { setSession: async () => ({ data: { session: {} }, error: null }) } },
     fetch: async (url, options) => {
-      requests.push({ url, body: JSON.parse(options.body) });
+      requests.push({ url, body: options.body ? JSON.parse(options.body) : undefined, options });
       return fetchHandler(url, options);
     },
     getPostAuthUrl: () => "index.html",
     window: {
       clearInterval() {},
+      setInterval(callback, delay) { intervals.push({ callback, delay }); return intervals.length; },
       setTimeout(callback) { callback(); return 1; },
       sessionStorage: { getItem() { return null; }, removeItem() {} },
       syncSkillmateServerSession: async () => {},
@@ -85,11 +89,20 @@ function otpFixture(fetchHandler = async () => ({ ok: false, json: async () => (
     console: { error() {} },
   };
   vm.createContext(context);
+  vm.runInContext("let otpCountdownTimer = null;", context);
+  vm.runInContext(source.slice(
+    source.indexOf("function getResendRetryDelay"),
+    source.indexOf("function showOtpChallenge"),
+  ), context);
   vm.runInContext(source.slice(
     source.indexOf("async function submitOtpCode"),
     source.indexOf('document.querySelector("#otp-resend").addEventListener'),
   ), context);
-  return { context, inputs, nodes: selectors, requests, navigations };
+  vm.runInContext(source.slice(
+    source.indexOf('document.querySelector("#otp-resend").addEventListener'),
+    source.indexOf('document.querySelector("#otp-back").addEventListener'),
+  ), context);
+  return { context, inputs, nodes: selectors, requests, navigations, intervals };
 }
 
 test("OTP markup has exactly six one-digit inputs", () => {
@@ -145,6 +158,54 @@ test("OTP verification rejects incorrect codes with retry feedback and accepts s
   assert.equal(nodes["#otp-submit-label"].textContent, "Verified");
   assert.deepEqual(navigations, ["index.html"]);
   assert.equal(context.authSubmitting, false);
+});
+
+test("OTP resend handles success and honors the server cooldown", async () => {
+  let response = {
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    json: async () => ({ message: "A new code was sent to your email." }),
+  };
+  const { nodes, requests } = otpFixture(async () => response);
+  const button = nodes["#otp-resend"];
+
+  button.disabled = false;
+  await button.handlers.click();
+  assert.equal(requests[0].url, "/api/auth/resend");
+  assert.equal(requests[0].options.method, "POST");
+  assert.equal(requests[0].options.credentials, "same-origin");
+  assert.equal(nodes["#otp-message"].textContent, "A new code was sent to your email.");
+  assert.equal(nodes["#otp-countdown"].textContent, "0:30");
+  assert.equal(button.disabled, true);
+  assert.equal(button.attributes["aria-busy"], undefined);
+
+  response = {
+    ok: false,
+    status: 429,
+    headers: { get: name => name === "retry-after" ? "19" : null },
+    json: async () => ({ error: "Please wait 19 seconds before requesting another code." }),
+  };
+  button.disabled = false;
+  await button.handlers.click();
+  assert.equal(nodes["#otp-countdown"].textContent, "0:19");
+  assert.equal(button.disabled, true);
+  assert.equal(nodes["#otp-message"].textContent, "Please wait 19 seconds before requesting another code.");
+});
+
+test("OTP resend countdown uses elapsed time instead of throttled timer ticks", () => {
+  const { context, nodes, intervals } = otpFixture();
+  let now = 1000;
+  context.Date = { now: () => now };
+  const button = nodes["#otp-resend"];
+
+  context.startOtpCountdown(30);
+  assert.equal(nodes["#otp-countdown"].textContent, "0:30");
+  assert.equal(button.disabled, true);
+  now += 31_000;
+  intervals.at(-1).callback();
+  assert.equal(nodes["#otp-countdown"].textContent, "Resend code");
+  assert.equal(button.disabled, false);
 });
 
 test("restored sessions without OTP proof start email verification instead of redirecting", async () => {

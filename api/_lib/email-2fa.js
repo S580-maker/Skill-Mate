@@ -645,10 +645,13 @@ async function resend(request, response) {
     }
     if (Date.now() - new Date(challenge.last_sent_at).getTime() < resendCooldownMs) {
       const seconds = Math.ceil((resendCooldownMs - (Date.now() - new Date(challenge.last_sent_at).getTime())) / 1000);
+      response.setHeader("Retry-After", String(seconds));
       return respondError(response, 429, `Please wait ${seconds} seconds before requesting another code.`);
     }
 
     const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+    const pending = decryptSession(challenge.session_data);
+    await sendCode(challenge.email, code, pending.type);
     const { response: updateResponse } = await supabaseRequest(
       `/rest/v1/auth_login_challenges?challenge_hash=eq.${challengeHash}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}`,
       {
@@ -657,14 +660,12 @@ async function resend(request, response) {
         body: JSON.stringify({
           code_hash: hashValue(`${challengeHash}:${code}`),
           last_sent_at: new Date().toISOString(),
-          resend_count: challenge.resend_count + 1,
+          resend_count: Number(challenge.resend_count) + 1,
         }),
       },
       true,
     );
     if (!updateResponse.ok) throw new Error("Could not update the email verification code.");
-    const pending = decryptSession(challenge.session_data);
-    await sendCode(challenge.email, code, pending.type);
     return response.status(200).json({ message: "A new code was sent to your email." });
   } catch (error) {
     console.error("Could not resend the Skillmate email code.", error);

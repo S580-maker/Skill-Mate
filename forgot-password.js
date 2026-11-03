@@ -34,6 +34,20 @@ function updateCodeSubmitState() {
   codeSubmit.disabled = codeSubmitting || !/^\d{6}$/.test(codeInputs.map((input) => input.value).join(""));
 }
 
+function getResendRetryDelay(response, error) {
+  const retryAfter = response.headers?.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds > 0) return Math.ceil(seconds);
+    const retryAt = Date.parse(retryAfter);
+    if (Number.isFinite(retryAt)) return Math.max(1, Math.ceil((retryAt - Date.now()) / 1000));
+  }
+  const reset = Number(response.headers?.get("ratelimit-reset"));
+  if (Number.isFinite(reset) && reset > 0) return Math.ceil(reset);
+  const match = String(error).match(/wait\s+(\d+)\s+seconds?/i);
+  return match ? Math.max(1, Number(match[1])) : 30;
+}
+
 function animateCodeDigit(input) {
   input.classList.remove("otp-digit-entered");
   void input.offsetWidth;
@@ -58,11 +72,12 @@ function fillCode(digits, startIndex = 0) {
 
 function startCountdown(seconds = 30) {
   window.clearInterval(countdownTimer);
-  let remaining = seconds;
+  const deadline = Date.now() + Math.max(0, Number(seconds) || 0) * 1000;
   resendButton.disabled = true;
   resendPrefix.hidden = false;
   const update = () => {
-    resendCountdown.textContent = `0:${String(remaining).padStart(2, "0")}`;
+    const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    resendCountdown.textContent = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
     if (remaining <= 0) {
       window.clearInterval(countdownTimer);
       resendButton.disabled = false;
@@ -70,7 +85,6 @@ function startCountdown(seconds = 30) {
       resendCountdown.textContent = "Resend code";
       return;
     }
-    remaining -= 1;
   };
   update();
   countdownTimer = window.setInterval(update, 1000);
@@ -220,9 +234,14 @@ codeForm.addEventListener("submit", async (event) => {
 resendButton.addEventListener("click", async () => {
   if (resendButton.disabled || codeSubmitting) return;
   resendButton.disabled = true;
+  resendButton.setAttribute("aria-busy", "true");
+  resendPrefix.hidden = true;
+  resendCountdown.textContent = "Sending…";
   codeMessage.textContent = "";
+  codeMessage.classList.remove("success");
+  let response;
   try {
-    const response = await fetch("/api/auth/resend", { method: "POST", credentials: "same-origin" });
+    response = await fetch("/api/auth/resend", { method: "POST", credentials: "same-origin" });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Could not resend your code.");
     codeMessage.textContent = result.message;
@@ -231,7 +250,19 @@ resendButton.addEventListener("click", async () => {
   } catch (error) {
     codeMessage.classList.remove("success");
     codeMessage.textContent = error.message || "Could not resend your code.";
-    resendButton.disabled = false;
+    if (response?.status === 429) {
+      startCountdown(getResendRetryDelay(response, error.message));
+    } else if (response?.status === 410) {
+      window.clearInterval(countdownTimer);
+      resendPrefix.hidden = true;
+      resendCountdown.textContent = "Code expired";
+    } else {
+      resendButton.disabled = false;
+      resendPrefix.hidden = true;
+      resendCountdown.textContent = "Resend code";
+    }
+  } finally {
+    resendButton.removeAttribute("aria-busy");
   }
 });
 

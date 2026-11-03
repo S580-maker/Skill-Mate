@@ -19,6 +19,7 @@ process.env.SMTP_FROM = "Skillmate <mailer@example.test>";
 const {
   googleSignIn,
   requestPasswordRecovery,
+  resend,
   signUp,
   updateRecoveredPassword,
   verify,
@@ -376,4 +377,42 @@ test("password recovery rejects short passwords before consuming the reset grant
   );
   assert.equal(response.statusCode, 400);
   assert.match(response.body.error, /at least 8 characters/);
+});
+
+test("email delivery failure leaves the existing sign-in code active", async () => {
+  const requests = [];
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  nodemailer.createTransport = () => ({
+    async sendMail() { throw new Error("SMTP unavailable"); },
+  });
+  global.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), method: options.method });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => [{
+        email: "student@example.test",
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        last_sent_at: new Date(Date.now() - 60 * 1000).toISOString(),
+        resend_count: 0,
+        session_data: envelope({ type: "signin" }),
+      }],
+    };
+  };
+
+  try {
+    const response = responseStub();
+    await resend({
+      method: "POST",
+      cookies: { skillmate_login_challenge: "existing-challenge-token" },
+    }, response);
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(requests.some(request => request.method === "PATCH"), false);
+  } finally {
+    global.fetch = originalFetch;
+    nodemailer.createTransport = originalTransport;
+    console.error = originalConsoleError;
+  }
 });
