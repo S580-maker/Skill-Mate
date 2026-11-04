@@ -2722,7 +2722,7 @@ function showPage(page, options = {}) {
   const pageTitles = {
     home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers",
     provider: "My services", earnings: "Estimated earnings", "profile-settings": "Your profile",
-    "help-support": "Help & Support",
+    "help-support": "Help & Support", requests: "Campus requests",
   };
   const pageTitle = pageTitles[page];
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());

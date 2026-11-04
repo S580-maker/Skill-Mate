@@ -317,10 +317,14 @@ async function main() {
     await evaluate('showPage("bookings");document.querySelector("[data-booking-direction=received]").click();document.querySelector("#user-booking-list [data-decision^=In]").click()');
     assert.ok(await evaluate('state.bookings.some(booking=>isOwnBooking(booking)&&booking.status==="In progress")'));
     assert.ok(await evaluate('Array.from(document.querySelectorAll("#user-booking-list [aria-current=step]")).some(item=>item.textContent==="In progress")'));
-    await evaluate('showPage("requests")'); await wait(50);
-    await evaluate('document.querySelector("#request-post-open").click();document.querySelector("#request-title").value="Poster for our campus event";document.querySelector("#request-description").value="We need a clear event poster with two revisions. <img src=x onerror=alert(1)>";document.querySelector("#request-budget").value="80";document.querySelector("#request-post-form").requestSubmit()');
+    await evaluate('showPage("home");document.querySelector(".request-board-entry button").click()');
+    assert.equal(await evaluate('document.querySelector("#request-post-modal").open'), true, "The home banner opens the posting form directly");
+    await checkWidth("390:request-post-form"); await screenshot("growth-post-form-390");
+    await evaluate('document.querySelector("#request-title").value="Poster for our campus event";document.querySelector("#request-description").value="We need a clear event poster with two revisions. <img src=x onerror=alert(1)>";document.querySelector("#request-budget").value="80";document.querySelector("#request-post-form").requestSubmit()');
     await wait(70);
     assert.equal(await evaluate('document.querySelectorAll("#request-board-grid .request-card").length'), 1);
+    assert.equal(await evaluate('state.activePage'), "requests", "Successful posting opens My requests");
+    assert.equal(await evaluate('document.querySelector("#breadcrumb-title").textContent'), "Campus requests", "The request board has a page title");
     assert.equal(await evaluate('document.querySelectorAll("#request-board-grid .request-card img").length'), 0, "Request text is escaped");
     await checkWidth("390:request-board"); await screenshot("growth-request-board-390");
     await evaluate('appUser={id:"nana"};document.querySelector("#request-board-filter").value="campus";document.querySelector("#request-board-filter").dispatchEvent(new Event("change"));document.querySelector("[data-reply-request]").click();document.querySelector("#request-reply-message").value="I can create your poster with two revisions by Friday.";document.querySelector("#request-reply-price").value="75";document.querySelector("#request-reply-form").requestSubmit()'); await wait(60);
@@ -337,6 +341,33 @@ async function main() {
     assert.equal(await evaluate('document.querySelectorAll(".request-card").length'), 0, "Closed requests disappear from the open board");
     console.log("PASS marketplace growth: filters, optional reviews, rebooking, published slots, booking progress, request posts, private responses and closure");
   };
+  const verifyRequestPostingRetry = async () => {
+    await navigate("index.html");
+    await evaluate(`window.__requestRows=[];window.__requestWrites=[];window.__failRequest=true;window.__requestReads=0;
+      appUser={id:"requester-fixture"};
+      appSupabase={from(table){return {select(){return this},order(){return this},in(){return this},async range(){window.__requestReads++;await new Promise(resolve=>setTimeout(resolve,200));return {data:table==="campus_request_directory"?window.__requestRows:[],error:null}},async limit(){return {data:[],error:null}}}},
+      async rpc(name,args){window.__requestWrites.push({name,args});if(window.__failRequest)return {error:{code:"TEST",message:"Could not save your request. Please retry."}};
+      const row={id:"request-fixture",requester_id:appUser.id,campus:"University of Ghana",title:args.p_title,description:args.p_description,category:args.p_category,budget:args.p_budget,delivery_method:args.p_delivery,status:"open",expires_at:new Date(Date.now()+86400000).toISOString()};window.__requestRows=[row];return {data:row,error:null}}};
+      document.querySelector('.request-board-entry button').click()`);
+    assert.equal(await evaluate('document.querySelector("#request-post-modal").open'), true, "Posting can start before the connected board has loaded");
+    await evaluate('document.querySelector("#request-title").value="Need a poster for Friday";document.querySelector("#request-description").value="Please make an event poster with two revisions and a social media version.";document.querySelector("#request-budget").value="80";document.querySelector("#request-post-form").requestSubmit()');
+    await wait(60);
+    assert.equal(await evaluate('document.querySelector("#request-post-modal").open'), true, "A failed save keeps the form open");
+    assert.equal(await evaluate('document.querySelector("#request-title").value'), "Need a poster for Friday", "A failed save preserves the task");
+    assert.ok(await evaluate('document.querySelector("#request-post-feedback").textContent.includes("retry")'));
+    await evaluate('window.__failRequest=false;window.skillmateGrowth.refreshBoard();document.querySelector("#request-post-form").requestSubmit();document.querySelector("#request-post-form").requestSubmit()');
+    await wait(650);
+    assert.equal(await evaluate('window.__requestWrites.length'), 2, "Retry sends one write, even with a double submission");
+    assert.equal(await evaluate('window.__requestWrites[1].name'), "post_campus_request");
+    assert.equal(await evaluate('window.__requestWrites[1].args.p_budget'), 80);
+    assert.equal(await evaluate('state.activePage'), "requests");
+    assert.equal(await evaluate('document.querySelector("#request-post-modal").open'), false);
+    assert.equal(await evaluate('document.querySelector("#request-board-filter").value'), "mine");
+    assert.equal(await evaluate('document.querySelectorAll("#request-board-grid .request-card").length'), 1, "A refresh already in progress does not hide the new post");
+    assert.ok(await evaluate('window.__requestReads>=2'));
+    await evaluate('appSupabase=null;appUser=null');
+    console.log("PASS connected posting: banner opens form, failed save preserves inputs, retry saves once and displays the new post");
+  };
   const verifyMissingGoogleSessionFeedback = async () => {
     await navigate("login.html?skillmate-google-otp=1");
     await wait(50);
@@ -349,6 +380,7 @@ async function main() {
   await call("Network.setBlockedURLs", { urls: ["*supabase.co*", "*supabase.in*", "*fonts.googleapis.com*", "*fonts.gstatic.com*"] });
   if (process.argv.includes("--growth-only")) {
     await verifyGrowthFlow();
+    await verifyRequestPostingRetry();
     assert.deepEqual(errors, [], "Uncaught browser errors");
     console.log(`Screenshots: ${output}`);
     return;
@@ -670,6 +702,7 @@ async function main() {
   assert.equal(await evaluate('JSON.parse(sessionStorage.getItem("onboarding-fixture")).university'), "University of Ghana");
   await verifyPasswordRecoveryFlow();
   await verifyGrowthFlow();
+  await verifyRequestPostingRetry();
   assert.deepEqual(errors, [], "Uncaught browser errors");
   console.log("PASS interactions: profile editing, student details, mobile seller label, search refocus, service selection, categories, booking, chat, theme, first listing and Google OTP gate");
   console.log(`Screenshots: ${output}`);

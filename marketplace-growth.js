@@ -9,10 +9,9 @@
   let schedules = [];
   let requests = [];
   let responses = [];
-  let boardLoading = false;
+  let boardLoading = null;
   let schedulesReady = !appSupabase;
   let schedulesAvailable = !appSupabase;
-  let boardAvailable = !appSupabase;
   let slotRequest = 0;
   let slotLoading = false;
   let failedSlots = false;
@@ -177,8 +176,9 @@
       return parseLocalAppointment(date, time);
     },
     async refreshBoard() {
-      if (boardLoading || (appSupabase && !appUser)) return;
-      boardLoading = true;
+      if (boardLoading) return boardLoading;
+      if (appSupabase && !appUser) return;
+      boardLoading = (async () => {
       $("#request-board-refresh").disabled = true;
       feedback("#request-board-feedback", "Loading campus requests…");
       try {
@@ -190,14 +190,15 @@
           if (replyResult.error) throw replyResult.error;
           responses = replyResult.data || [];
         }
-        boardAvailable = true;
         feedback("#request-board-feedback", appSupabase ? "Requests expire at the end of their chosen day in Ghana time. Keep personal and payment details out of public posts." : "Demo board: posts and replies stay in this browser and are not sent to other students.");
         renderBoard();
       } catch {
-        boardAvailable = false;
         feedback("#request-board-feedback", "Campus requests could not load. Try Refresh in a moment.", true);
         $("#request-board-grid").innerHTML = '<div class="empty-card"><strong>Requests are temporarily unavailable</strong><small>Your existing bookings and messages are still available.</small></div>';
-      } finally { boardLoading = false; $("#request-board-refresh").disabled = false; }
+      } finally { $("#request-board-refresh").disabled = false; }
+      })();
+      try { return await boardLoading; }
+      finally { boardLoading = null; }
     },
   };
   function renderBoard() {
@@ -258,7 +259,6 @@
   $("#booking-date").addEventListener("change", growth.refreshSlots);
   $("#booking-service").addEventListener("change", growth.refreshSlots);
   function openPost() {
-    if (appSupabase && !boardAvailable) { showToast("Refresh campus requests before posting.", "error"); return; }
     $("#request-post-form").reset();
     $("#request-category").innerHTML = serviceCategories.map(category => `<option>${escapeHTML(category)}</option>`).join("");
     $("#request-deadline").min = localDateInputValue();
@@ -280,7 +280,13 @@
       if (appSupabase) await rpc("post_campus_request", args);
       else requests.unshift({ id: crypto.randomUUID(), requester_id: ownId(), campus: state.profile.university, title, description, category: args.p_category, budget: args.p_budget, delivery_method: args.p_delivery,
         expires_at: new Date(Date.parse(`${args.p_deadline}T00:00:00Z`) + 86400000).toISOString(), status: "open", created_at: new Date().toISOString() });
-      saveDemo(); $("#request-post-modal").close(); $("#request-board-filter").value = "mine"; await growth.refreshBoard(); showToast("Your request is posted.");
+      saveDemo();
+      $("#request-post-modal").close();
+      $("#request-board-filter").value = "mine";
+      if (boardLoading) await boardLoading;
+      showPage("requests");
+      await growth.refreshBoard();
+      showToast("Your request is posted.");
     });
   });
   $("#request-reply-form").addEventListener("submit", event => {

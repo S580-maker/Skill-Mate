@@ -25,6 +25,7 @@
 .request-meta span { padding: 5px 9px; border-radius: 7px; background: var(--bg); }
 .request-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: auto; padding-top: 14px; }
 .request-response { width: 100%; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border); }
+.request-response [data-request-chat] { display: block; margin-top: 10px; }
 .growth-feedback { margin: 12px 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
 .growth-feedback[data-state=error] { color: var(--danger); }
 .availability-panel { margin: 22px 0; padding: 0; overflow: hidden; }
