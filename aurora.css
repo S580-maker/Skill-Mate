@@ -1,0 +1,115 @@
+/* Reusable Ambient Blue Aurora background.
+   Markup: <div class="aurora-bg" data-aurora aria-hidden="true"> ... </div> inside a relatively positioned section.
+   Add .aurora-bg--soft for a quieter variant. Only transform and opacity are animated. */
+.has-aurora { position:relative; isolation:isolate; }
+main { overflow-x:clip; }
+
+.aurora-bg {
+  --px:0;
+  --py:0;
+  position:absolute;
+  top:0;
+  bottom:0;
+  left:calc(50% - 50vw);
+  right:calc(50% - 50vw);
+  z-index:-1;
+  overflow:hidden;
+  pointer-events:none;
+  contain:layout paint style;
+}
+
+.aurora-layer {
+  position:absolute;
+  inset:0;
+  transition:transform .9s cubic-bezier(.22,.61,.36,1);
+}
+.aurora-layer--far { transform:translate3d(calc(var(--px)*-14px),calc(var(--py)*-10px),0); }
+.aurora-layer--near { transform:translate3d(calc(var(--px)*22px),calc(var(--py)*16px),0); }
+
+.aurora-blob {
+  position:absolute;
+  border-radius:50%;
+  filter:blur(70px);
+  opacity:.5;
+  will-change:transform,opacity;
+}
+.aurora-blob--blue {
+  width:560px; height:560px;
+  top:-170px; left:-80px;
+  background:radial-gradient(circle at 40% 40%,#2855df55,#2855df00 68%);
+  animation:aurora-drift-a 26s ease-in-out infinite alternate,aurora-breathe 11s ease-in-out infinite alternate;
+}
+.aurora-blob--violet {
+  width:520px; height:520px;
+  top:-60px; right:-60px;
+  background:radial-gradient(circle at 55% 45%,#7a5af855,#7a5af800 68%);
+  animation:aurora-drift-b 32s ease-in-out infinite alternate,aurora-breathe 14s ease-in-out -4s infinite alternate;
+}
+.aurora-blob--sky {
+  width:460px; height:460px;
+  bottom:-200px; left:32%;
+  background:radial-gradient(circle,#4f9dff4d,#4f9dff00 70%);
+  animation:aurora-drift-c 29s ease-in-out infinite alternate,aurora-breathe 16s ease-in-out -7s infinite alternate;
+}
+.aurora-blob--lilac {
+  width:380px; height:380px;
+  bottom:-120px; right:12%;
+  background:radial-gradient(circle,#9b7bff40,#9b7bff00 70%);
+  animation:aurora-drift-a 35s ease-in-out -10s infinite alternate-reverse,aurora-breathe 13s ease-in-out -2s infinite alternate;
+}
+
+/* A wide, flowing band that gives the wave-like movement. */
+.aurora-wave {
+  position:absolute;
+  left:-15%;
+  width:130%;
+  height:260px;
+  top:34%;
+  border-radius:50%;
+  filter:blur(60px);
+  opacity:.45;
+  background:linear-gradient(90deg,#2855df00,#2855df2e 30%,#7a5af833 62%,#4f9dff00);
+  will-change:transform,opacity;
+  animation:aurora-wave 22s ease-in-out infinite alternate;
+}
+
+.aurora-grid {
+  position:absolute;
+  inset:0;
+  opacity:.7;
+  background-image:linear-gradient(#2855df12 1px,transparent 1px),linear-gradient(90deg,#2855df12 1px,transparent 1px);
+  background-size:56px 56px;
+  -webkit-mask-image:radial-gradient(ellipse 75% 70% at 50% 40%,#000 25%,transparent 78%);
+  mask-image:radial-gradient(ellipse 75% 70% at 50% 40%,#000 25%,transparent 78%);
+  animation:aurora-grid 18s ease-in-out infinite alternate;
+}
+
+.aurora-bg--soft .aurora-blob { opacity:.22; }
+.aurora-bg--soft .aurora-wave { opacity:.2; }
+.aurora-bg--soft .aurora-grid { opacity:.35; }
+
+@keyframes aurora-drift-a { from { transform:translate3d(0,0,0) scale(1); } to { transform:translate3d(90px,60px,0) scale(1.12); } }
+@keyframes aurora-drift-b { from { transform:translate3d(0,20px,0) scale(1.05); } to { transform:translate3d(-110px,70px,0) scale(.94); } }
+@keyframes aurora-drift-c { from { transform:translate3d(-70px,0,0) scale(.95); } to { transform:translate3d(90px,-50px,0) scale(1.1); } }
+@keyframes aurora-breathe { from { opacity:.34; } to { opacity:.62; } }
+@keyframes aurora-wave { from { transform:translate3d(-4%,-20px,0) rotate(-3deg) scaleY(.9); } to { transform:translate3d(4%,24px,0) rotate(3deg) scaleY(1.15); } }
+@keyframes aurora-grid { from { opacity:.45; } to { opacity:.8; } }
+
+/* Lighter, cheaper rendering on small screens. */
+@media(max-width:800px) {
+  .aurora-blob { filter:blur(48px); }
+  .aurora-blob--blue { width:340px; height:340px; top:-120px; left:-120px; }
+  .aurora-blob--violet { width:320px; height:320px; right:-130px; }
+  .aurora-blob--sky { width:300px; height:300px; left:10%; }
+  .aurora-blob--lilac,.aurora-wave { display:none; }
+  .aurora-grid { background-size:40px 40px; }
+  .aurora-layer { transform:none !important; }
+}
+
+.aurora-bg[data-paused] *,
+.aurora-bg[data-paused] { animation-play-state:paused !important; }
+
+@media(prefers-reduced-motion:reduce) {
+  .aurora-bg *,.aurora-bg { animation:none !important; transition:none !important; }
+  .aurora-layer { transform:none !important; }
+}

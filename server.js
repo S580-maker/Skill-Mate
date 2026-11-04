@@ -252,7 +252,7 @@ app.get("/admin.html", async (request, response) => {
   }
 });
 
-app.get("/", (_request, response) => response.redirect(302, "/login.html"));
+app.get("/", (_request, response) => response.sendFile(path.join(projectRoot, "landing.html")));
 
 app.use((request, response, next) => {
   const pathname = decodeURIComponent(request.path);

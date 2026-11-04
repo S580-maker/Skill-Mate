@@ -7,14 +7,11 @@
       "includeFiles": "api/_lib/admin.html"
     }
   },
-  "redirects": [
+  "rewrites": [
     {
       "source": "/",
-      "destination": "/login.html",
-      "permanent": false
-    }
-  ],
-  "rewrites": [
+      "destination": "/landing.html"
+    },
     {
       "source": "/supabase-config.js",
       "destination": "/api/index?path=supabase-config"

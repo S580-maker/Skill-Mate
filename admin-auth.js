@@ -524,6 +524,7 @@ async function protectAdminDashboard() {
       signout.disabled = true;
       try {
         await window.skillmateSignOut();
+        window.location.replace("/");
       } catch (error) {
         console.error("Could not sign out.", error);
         showAdminToast(error.message || "Could not sign out.");

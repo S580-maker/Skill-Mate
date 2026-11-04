@@ -2589,7 +2589,7 @@ async function bootstrapStudentApp() {
     if (event === "SIGNED_OUT") {
       window.clearSkillmateServerSession()
         .catch((sessionError) => console.error("Could not clear the secure Skillmate session.", sessionError))
-        .finally(() => window.location.replace("login.html"));
+        .finally(() => window.location.replace("/"));
     }
     if (event === "TOKEN_REFRESHED" && session) {
       window.syncSkillmateServerSession(session).catch((syncError) => {
