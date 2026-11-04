@@ -34,8 +34,8 @@ test("public homepage serves without a session while existing app routes remain 
       assert.equal((await fetch(base + asset)).status, 200, asset);
     }
     assert.equal((html.match(/data-aurora/g) || []).length, 4);
-    assert.match(html, /landing-gold\.css/);
-    assert.equal((await fetch(base + "/landing-gold.css")).status, 200);
+    assert.match(html, /landing-home\.css/);
+    assert.equal((await fetch(base + "/landing-home.css")).status, 200);
     const aurora = await (await fetch(base + "/aurora.css")).text();
     assert.match(aurora, /pointer-events:none/);
     assert.match(aurora, /prefers-reduced-motion:reduce/);
