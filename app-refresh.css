@@ -1,24 +1,4 @@
 /* Marketplace layout and phone navigation. Shared colors follow the chosen theme. */
-:root {
-  --dur-instant: 100ms;
-  --dur-fast: 150ms;
-  --dur-base: 250ms;
-  --dur-slow: 400ms;
-  --dur-page: 500ms;
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
-  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  --spring-snappy: cubic-bezier(0.2, 1.3, 0.4, 1);
-  --spring-gentle: cubic-bezier(0.2, 1.1, 0.35, 1);
-  --spring-bouncy: cubic-bezier(0.25, 1.5, 0.45, 1);
-}
-@supports (animation-timing-function: linear(0, 1)) {
-  :root {
-    --spring-snappy: linear(0, 0.108 8.3%, 0.33 16.7%, 0.563 25%, 0.755 33.3%, 0.893 41.7%, 0.977 50%, 1.021 58.3%, 1.038 66.7%, 1.038 75%, 1.031 83.3%, 1.022 91.7%, 1 100%);
-    --spring-gentle: linear(0, 0.093 8.3%, 0.277 16.7%, 0.467 25%, 0.63 33.3%, 0.754 41.7%, 0.844 50%, 0.905 58.3%, 0.945 66.7%, 0.97 75%, 0.984 83.3%, 0.993 91.7%, 1 100%);
-    --spring-bouncy: linear(0, 0.219 8.3%, 0.659 16.7%, 1.05 25%, 1.255 33.3%, 1.271 41.7%, 1.172 50%, 1.045 58.3%, 0.954 66.7%, 0.92 75%, 0.932 83.3%, 0.967 91.7%, 1 100%);
-  }
-}
 [hidden] { display: none !important; }
 html { scroll-padding-top: 80px; }
 body { font-size: 15px; line-height: 1.55; }
@@ -58,12 +38,10 @@ button.button-primary[data-open="service-modal"] { color: var(--on-main); backgr
   position: relative; inset: auto; display: flex; width: 100%; height: 58px; gap: 12px;
   padding: 0 18px; transform: none; border: 1px solid var(--border); border-radius: 14px;
   background: var(--surface); box-shadow: 0 4px 16px color-mix(in srgb, var(--shadow-color) 8%, transparent);
-  animation: none; transition: transform var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+  animation: none; transition: border-color 150ms, box-shadow 150ms;
 }
 .discover-search .search-box:focus-within, .search-open .discover-search .search-box:focus-within { border-color: var(--main); box-shadow: 0 0 0 3px var(--main-soft); }
-.discover-search .search-box.motion-search-focused { transform: scale(1.01); box-shadow: 0 0 0 3px var(--main-soft), 0 8px 22px color-mix(in srgb, var(--main) 12%, transparent); }
-.discover-search .search-box > svg { width: 21px; flex: 0 0 21px; stroke: var(--main); transition: transform var(--dur-fast) var(--ease-standard), filter var(--dur-fast) var(--ease-standard); }
-.discover-search .search-box.motion-search-focused > svg { transform: translateX(1px); filter: drop-shadow(0 1px 3px color-mix(in srgb, var(--main) 30%, transparent)); }
+.discover-search .search-box > svg { width: 21px; flex: 0 0 21px; stroke: var(--main); }
 .discover-search .search-box input, .search-open .discover-search .search-box input { display: block; min-width: 0; padding: 0; font-size: 16px; }
 .discover-search .search-box input::placeholder { color: var(--muted); }
 .discover-search .search-box kbd { color: var(--muted); font-size: 11px; }
@@ -74,16 +52,11 @@ button.button-primary[data-open="service-modal"] { color: var(--on-main); backgr
 .search-suggestion { min-height: 58px; }
 .search-suggestion-copy strong { font-size: 14px; }
 .search-suggestion-copy small { color: var(--muted); font-size: 12px; }
-.category-strip { position: relative; isolation: isolate; display: flex; gap: 8px; margin: 0 0 24px; padding: 0 0 4px; overflow-x: auto; scroll-snap-type: x proximity; scroll-padding-inline: 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch; mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent); }
+.category-strip { display: flex; gap: 8px; margin: 0 0 24px; padding: 0 0 4px; overflow-x: auto; scrollbar-width: none; }
 .category-strip::-webkit-scrollbar { display: none; }
-.category-active-pill { position: absolute; z-index: -1; display: block; border-radius: 999px; background: var(--main); transform-origin: top left; pointer-events: none; }
-.category-chip { position: relative; z-index: 0; min-height: 44px; flex: 0 0 auto; gap: 7px; padding: 0 14px; border-radius: 999px; background: var(--surface); font-size: 13px; scroll-snap-align: start; transition: transform var(--dur-instant) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard); }
+.category-chip { min-height: 44px; flex: 0 0 auto; gap: 7px; padding: 0 14px; border-radius: 999px; background: var(--surface); font-size: 13px; }
 .category-chip.selected { border-color: var(--main); color: var(--on-main); background: var(--main); }
-.category-strip.has-active-pill .category-chip.selected { background: transparent; }
-.category-chip:active { transform: scale(.96); }
 .more-categories { border-style: dashed; }
-.more-categories > span { display: inline-block; transition: transform var(--dur-fast) var(--ease-standard); }
-.more-categories[aria-expanded="true"] > span { transform: rotate(45deg); }
 .all-categories { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .all-categories .category-chip { justify-content: flex-start; min-width: 0; padding: 10px 12px; white-space: normal; text-align: left; border-radius: 10px; }
 .marketplace-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
@@ -107,8 +80,6 @@ button.button-primary[data-open="service-modal"] { color: var(--on-main); backgr
 .listing-cover-button .service-marketplace-cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .save-button { z-index: 2; top: 12px; right: 12px; width: 44px; height: 44px; border: 1px solid var(--border); color: var(--dark); background: var(--surface); font-size: 25px; }
 .save-button.is-saved { color: var(--danger); background: var(--surface); animation: none; }
-.save-button.motion-heart-ripple::before { position: absolute; inset: -4px; border: 1px solid currentColor; border-radius: 50%; content: ""; animation: motion-heart-ripple 430ms var(--ease-standard) both; pointer-events: none; }
-@keyframes motion-heart-ripple { from { opacity: .48; transform: scale(.62); } to { opacity: 0; transform: scale(1.42); } }
 .provider-card-body { display: flex; flex: 1; flex-direction: column; padding: 20px; }
 .listing-category-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
 .listing-category-row .service-category { margin: 0; font-size: 11px; letter-spacing: .6px; }
@@ -246,71 +217,13 @@ button.button-primary[data-open="service-modal"] { color: var(--on-main); backgr
 
 /* Small, predictable transitions. Updating data never replays staggered entry effects. */
 .provider-card, .booking-card, .group-card, .listing-card, .conversation-item, .portfolio-item, .chat-message { animation: none; }
-.view.active-view { animation: refresh-view-in var(--dur-fast) var(--ease-standard); }
+.view.active-view { animation: refresh-view-in 160ms ease-out; }
 @keyframes refresh-view-in { from { opacity: .65; } to { opacity: 1; } }
-.provider-card, .booking-card, .group-card, .listing-card { transition: transform var(--dur-base) var(--ease-standard), border-color var(--dur-base) var(--ease-standard), box-shadow var(--dur-base) var(--ease-standard); }
-.provider-card:active { transform: scale(.98); }
+.provider-card, .booking-card, .group-card, .listing-card { transition: border-color 150ms, box-shadow 150ms; }
 .provider-card:hover, .provider-card:focus-within, .booking-card:hover, .group-card:hover, .listing-card:hover { transform: none; }
 .listing-cover-button:hover, .provider-card h3 button:hover { transform: none; }
 .app-modal::backdrop { backdrop-filter: none; background: #0f172a80; }
 body:has(dialog[open]) { overflow: hidden; }
-.marketplace-loading { grid-column: 1/-1; display: grid; grid-template-columns: inherit; gap: 14px; }
-.marketplace-skeleton-card { position: relative; display: block; min-height: 390px; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: linear-gradient(color-mix(in srgb, var(--border) 48%, var(--surface)) 0 0) 16px 188px/62% 12px no-repeat, linear-gradient(color-mix(in srgb, var(--border) 34%, var(--surface)) 0 0) 16px 214px/82% 10px no-repeat, radial-gradient(circle, color-mix(in srgb, var(--border) 42%, var(--surface)) 0 18px, transparent 19px) 16px calc(100% - 58px)/38px 38px no-repeat, linear-gradient(color-mix(in srgb, var(--border) 34%, var(--surface)) 0 0) 62px calc(100% - 54px)/48% 9px no-repeat, linear-gradient(color-mix(in srgb, var(--border) 26%, var(--surface)) 0 0) 16px calc(100% - 30px)/38% 10px no-repeat, linear-gradient(color-mix(in srgb, var(--main) 12%, var(--surface)), color-mix(in srgb, var(--main) 12%, var(--surface))) 0 0/100% 164px no-repeat, var(--surface); }
-.marketplace-skeleton-card::after { position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(100deg, transparent 25%, color-mix(in srgb, var(--surface) 82%, transparent) 48%, transparent 70%); animation: motion-skeleton-shimmer 1.4s linear infinite; content: ""; }
-@keyframes motion-skeleton-shimmer { to { transform: translateX(100%); } }
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .provider-card:hover { transform: translateY(-4px); box-shadow: 0 14px 30px color-mix(in srgb, var(--nav-bg) 16%, transparent); }
-  .provider-card:hover .cover-fallback > span { transform: rotate(-3deg); }
-  .cover-fallback > span { transition: transform var(--dur-base) var(--ease-standard); }
-}
-@media (max-width: 768px) {
-  .sidebar { transition: transform var(--dur-slow) var(--spring-gentle); }
-  .sidebar-backdrop:not([hidden]) { animation: motion-backdrop-in var(--dur-base) var(--ease-standard) both; }
-  .mobile-nav { transition: transform var(--dur-slow) var(--spring-gentle), opacity var(--dur-fast) var(--ease-standard); }
-  .mobile-nav a { z-index: 1; background: transparent; transition: color var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--spring-snappy); }
-  .mobile-nav a[aria-current="page"] { color: var(--main); background: var(--main-soft); }
-  .mobile-nav.has-active-indicator a[aria-current="page"] { background: transparent; }
-  .mobile-nav a[aria-current="page"] svg { transform: scale(1.08); }
-  .mobile-nav a > span:not(.mobile-unread) { transition: opacity var(--dur-fast) var(--ease-standard); }
-  .mobile-nav a:not([aria-current="page"]) > span:not(.mobile-unread) { opacity: .82; }
-  .mobile-nav-indicator { position: absolute; z-index: 0; display: block; border-radius: 999px; background: var(--main-soft); transform-origin: top left; pointer-events: none; }
-  .mobile-nav.is-hidden { transform: translateY(calc(100% + 24px)); opacity: 0; pointer-events: none; }
-  .mobile-unread:not([hidden]) { animation: motion-badge-pop 430ms var(--spring-bouncy) both; }
-  .provider-card:active { transform: scale(.98); }
-}
-@media (max-width: 900px) {
-  .sidebar.open .side-nav .nav-link { animation: motion-drawer-item var(--dur-base) var(--ease-enter) both; animation-delay: calc(var(--motion-index, 0) * 45ms); }
-}
-@media (min-width: 769px) and (max-width: 900px) {
-  .sidebar { transition: transform var(--dur-slow) var(--spring-gentle); }
-  .sidebar-backdrop:not([hidden]) { animation: motion-backdrop-in var(--dur-base) var(--ease-standard) both; }
-}
-@keyframes motion-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes motion-drawer-item { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes motion-badge-pop { 0% { opacity: 0; transform: scale(.5); } 70% { opacity: 1; transform: scale(1.12); } 100% { opacity: 1; transform: scale(1); } }
-@keyframes motion-state-in { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: scale(1); } }
-@keyframes motion-error-shake { 0%, 100% { transform: translateX(0); } 25%, 75% { transform: translateX(-3px); } 50% { transform: translateX(3px); } }
-#toast .toast-success-message { display: flex; align-items: center; gap: 8px; }
-.toast-success-mark { display: grid; width: 20px; height: 20px; flex: 0 0 20px; place-items: center; border-radius: 50%; color: var(--main); background: var(--main-soft); }
-.toast-success-mark svg { width: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.toast-success-mark path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: motion-success-check var(--dur-slow) var(--ease-enter) both; }
-@keyframes motion-success-check { to { stroke-dashoffset: 0; } }
-.empty-card { animation: motion-state-in var(--dur-base) var(--ease-enter) both; }
-.growth-feedback:not(:empty), .modal-feedback:not(:empty) { animation: motion-state-in var(--dur-fast) var(--ease-enter) both; }
-.growth-feedback[data-state="error"], .modal-feedback[data-state="error"] { animation: motion-error-shake 300ms var(--ease-standard) both; }
-#toast { transition: opacity var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard); }
-#toast[data-kind="success"].visible { animation: motion-state-in var(--dur-base) var(--ease-enter) both; }
-#toast[data-kind="error"].visible { animation: motion-error-shake 300ms var(--ease-standard) both; }
-@supports (view-transition-name: root) {
-  ::view-transition-old(root) { animation: motion-page-out var(--dur-fast) var(--ease-exit) both; }
-  ::view-transition-new(root) { animation: motion-page-in var(--dur-page) var(--ease-enter) both; }
-  html[data-page-direction="backward"]::view-transition-old(root) { animation-name: motion-page-out-back; }
-  html[data-page-direction="backward"]::view-transition-new(root) { animation-name: motion-page-in-back; }
-}
-@keyframes motion-page-out { to { opacity: 0; transform: translateX(-12px); } }
-@keyframes motion-page-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes motion-page-out-back { to { opacity: 0; transform: translateX(12px); } }
-@keyframes motion-page-in-back { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
 @media (min-width: 1400px) { .marketplace-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1100px) and (min-width: 769px) {
   .sidebar { width: 220px; }
@@ -365,6 +278,8 @@ body:has(dialog[open]) { overflow: hidden; }
   .card-actions .button-small { min-height: 44px; padding-inline: 12px; font-size: 12px; }
   .card-message { width: 44px; height: 44px; flex-basis: 44px; }
   .mobile-nav { position: fixed; z-index: 50; right: max(16px, env(safe-area-inset-right)); bottom: calc(var(--mobile-nav-viewport-bottom, 0px) + 12px + env(safe-area-inset-bottom)); left: max(16px, env(safe-area-inset-left)); display: grid; width: min(420px, calc(100% - 32px)); min-height: 68px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-inline: auto; padding: 7px; border: 1px solid color-mix(in srgb, var(--border) 80%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--surface) 88%, transparent); box-shadow: 0 10px 32px color-mix(in srgb, var(--nav-bg) 20%, transparent), 0 2px 8px color-mix(in srgb, var(--nav-bg) 10%, transparent); backdrop-filter: blur(18px); }
+  .mobile-nav { transform-origin: center center; transition: transform 360ms var(--ease), opacity 140ms var(--ease); }
+  .mobile-nav.is-hidden { transform: translateY(14px) scaleY(.035); opacity: 0; transition-delay: 0ms, 100ms; pointer-events: none; }
   .mobile-nav a { position: relative; display: flex; min-width: 0; min-height: 52px; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 999px; color: var(--muted); font-size: 10px; font-weight: 500; transition: color var(--fast) var(--ease), background-color var(--fast) var(--ease), transform var(--fast) var(--ease); }
   .mobile-nav a[aria-current="page"] { color: var(--main); background: var(--main-soft); }
   .mobile-nav a:active { transform: scale(.96); }
@@ -526,14 +441,5 @@ body:has(dialog[open]) { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
-  .discover-search .search-box.motion-search-focused { transform: none; }
-  .category-chip:active, .provider-card:active, .save-button:active, .mobile-nav a[aria-current="page"] svg { transform: none; }
-  .more-categories[aria-expanded="true"] > span { transform: none; }
-  .button:active:not(:disabled), .icon-button:active, .theme-toggle:active, .mode-switch:active { transform: none; }
-  .view.active-view, .empty-card, .growth-feedback:not(:empty), .modal-feedback:not(:empty), #toast.visible { animation: motion-reduced-fade var(--dur-fast) var(--ease-standard) both !important; }
-  .sidebar.open .side-nav .nav-link { animation: motion-reduced-fade var(--dur-fast) var(--ease-standard) both !important; }
-  .toast-success-mark path { stroke-dashoffset: 0; }
-  .mobile-nav.is-hidden { transform: none; opacity: 1; pointer-events: auto; }
-  .marketplace-skeleton-card::after { animation: none; }
+  .mobile-nav.is-hidden { transform: none; opacity: 0; }
 }
-@keyframes motion-reduced-fade { from { opacity: 0; } to { opacity: 1; } }

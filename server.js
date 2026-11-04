@@ -259,23 +259,7 @@ app.use((request, response, next) => {
   return next();
 });
 
-app.use((request, response, next) => {
-  if (!/\.(?:css|js|mjs|svg|png|jpe?g|webp|woff2?)$/i.test(request.path)) return next();
-  response.locals.staticAssetCacheControl = typeof request.query.v === "string" && /^\d+(?:\.\d+)?$/.test(request.query.v)
-    ? "public, max-age=31536000, immutable"
-    : "public, max-age=300";
-  return next();
-});
-
-app.use(express.static(projectRoot, {
-  dotfiles: "deny",
-  index: false,
-  setHeaders(response, filePath) {
-    if (/\.(?:css|js|mjs|svg|png|jpe?g|webp|woff2?)$/i.test(filePath)) {
-      response.setHeader("Cache-Control", response.locals.staticAssetCacheControl || "public, max-age=300");
-    }
-  },
-}));
+app.use(express.static(projectRoot, { dotfiles: "deny", index: false }));
 
 app.use((error, request, response, _next) => {
   const errorId = randomUUID();

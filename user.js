@@ -538,23 +538,7 @@ function providerServices(providerId) {
 }
 function showToast(message, kind = "info") {
   const toast = document.querySelector("#toast");
-  if (kind === "success") {
-    const wrapper = document.createElement("span");
-    const mark = document.createElement("span");
-    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    wrapper.className = "toast-success-message";
-    mark.className = "toast-success-mark";
-    mark.setAttribute("aria-hidden", "true");
-    icon.setAttribute("viewBox", "0 0 24 24");
-    path.setAttribute("d", "m5 12.5 4.5 4.5L19 7");
-    icon.append(path);
-    mark.append(icon);
-    wrapper.append(mark, document.createTextNode(message));
-    toast.replaceChildren(wrapper);
-  } else {
-    toast.textContent = message;
-  }
+  toast.textContent = message;
   toast.dataset.kind = kind;
   toast.classList.add("visible");
   window.clearTimeout(toastTimer);
@@ -990,7 +974,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   if (!target) return;
   if (appSupabase && !dashboardDataLoaded && targetId === "marketplace-grid") {
     target.setAttribute("aria-busy", "true");
-    target.innerHTML = '<div class="marketplace-loading" role="status" aria-label="Finding services on your campus"><span class="marketplace-skeleton-card" aria-hidden="true"></span><span class="marketplace-skeleton-card" aria-hidden="true"></span></div>';
+    target.innerHTML = '<div class="marketplace-loading" role="status"><span class="loading-spinner" aria-hidden="true"></span> Finding services on your campus…</div>';
     return;
   }
   target.removeAttribute("aria-busy");
@@ -1015,7 +999,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
       : "";
   }
   target.innerHTML = visible.length ? visible.map((provider) => `
-    <article class="provider-card" data-motion-key="${escapeHTML(provider.id + ":" + (provider.serviceId || provider.id))}">
+    <article class="provider-card">
       <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><div class="listing-cover-button" aria-hidden="true"><span class="cover-fallback"><span aria-hidden="true">${getCategoryIcon(provider.category)}</span><strong>${escapeHTML(provider.category)}</strong><small>Student service</small></span>${listingImage(provider) ? `<img class="service-marketplace-cover" src="${escapeHTML(listingImage(provider))}" alt="" loading="lazy" decoding="async" />` : ""}</div>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-pressed="${state.saved.includes(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
       <div class="provider-card-body">
         <div class="listing-category-row"><p class="service-category">${escapeHTML(provider.category)}</p><span class="rating">${providerReviewSummary(provider).count ? `★ ${providerReviewSummary(provider).rating}<small> (${providerReviewSummary(provider).count})</small>` : "New provider"}</span></div>
@@ -2735,28 +2719,6 @@ function showPage(page, options = {}) {
   if (page === "profile") page = "profile-settings";
   const view = document.querySelector(`[data-view="${page}"]`);
   if (!view) return;
-  const pageOrder = ["home", "bookings", "messages", "saved", "provider", "earnings", "profile-settings", "help-support"];
-  const currentPage = state.activePage === "profile" ? "profile-settings" : state.activePage;
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (options.useViewTransition
-    && !options.skipViewTransition
-    && page !== currentPage
-    && !reducedMotion
-    && typeof document.startViewTransition === "function") {
-    const direction = pageOrder.indexOf(page) < pageOrder.indexOf(currentPage) ? "backward" : "forward";
-    document.documentElement.dataset.pageDirection = direction;
-    const transition = document.startViewTransition(() => showPage(page, { ...options, skipViewTransition: true }));
-    transition.finished.then(() => {
-      if (document.documentElement.dataset.pageDirection === direction) {
-        delete document.documentElement.dataset.pageDirection;
-      }
-    }, () => {
-      if (document.documentElement.dataset.pageDirection === direction) {
-        delete document.documentElement.dataset.pageDirection;
-      }
-    });
-    return;
-  }
   const pageTitles = {
     home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers",
     provider: "My services", earnings: "Estimated earnings", "profile-settings": "Your profile",
@@ -3269,13 +3231,13 @@ function addGroup(group) {
 
 document.querySelectorAll(".nav-link[data-page]").forEach((link) => link.addEventListener("click", (event) => {
   event.preventDefault();
-  showPage(link.dataset.page, { useViewTransition: true });
+  showPage(link.dataset.page);
 }));
 document.addEventListener("click", event => {
   const link = event.target.closest("[data-page-link]");
   if (!link) return;
   event.preventDefault();
-  showPage(link.dataset.pageLink, { useViewTransition: true });
+  showPage(link.dataset.pageLink);
 });
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-open]");
@@ -3376,6 +3338,36 @@ if ("scrollRestoration" in window.history) window.history.scrollRestoration = "m
 window.addEventListener("scroll", () => {
   window.clearTimeout(pageScrollSaveTimer);
   pageScrollSaveTimer = window.setTimeout(persistPageScrollPosition, 120);
+}, { passive: true });
+const mobileNav = document.querySelector(".mobile-nav");
+let mobileNavScrollAnchor = window.scrollY;
+let mobileNavScrollFrame = 0;
+window.addEventListener("scroll", () => {
+  if (window.innerWidth > 768 || mobileNavScrollFrame) return;
+  mobileNavScrollFrame = requestAnimationFrame(() => {
+    const currentScrollY = window.scrollY;
+    const forceVisible = currentScrollY < 72
+      || document.body.classList.contains("mobile-keyboard-open")
+      || document.body.classList.contains("sidebar-open")
+      || Boolean(document.querySelector("dialog[open]"))
+      || (mobileNav && mobileNav.contains(document.activeElement) && document.activeElement.matches(":focus-visible"));
+    if (mobileNav) {
+      if (forceVisible) {
+        mobileNav.classList.remove("is-hidden");
+        mobileNavScrollAnchor = currentScrollY;
+      } else if (currentScrollY - mobileNavScrollAnchor > 8) {
+        mobileNav.classList.add("is-hidden");
+        mobileNavScrollAnchor = currentScrollY;
+      } else if (mobileNavScrollAnchor - currentScrollY > 20) {
+        mobileNav.classList.remove("is-hidden");
+        mobileNavScrollAnchor = currentScrollY;
+      }
+    }
+    mobileNavScrollFrame = 0;
+  });
+}, { passive: true });
+window.addEventListener("resize", () => {
+  if (window.innerWidth > 768 && mobileNav) mobileNav.classList.remove("is-hidden");
 }, { passive: true });
 window.addEventListener("popstate", (event) => showPage(window.location.hash.slice(1) || "home", {
   restoreScroll: Number.isFinite(event.state?.skillmateScrollY) ? event.state.skillmateScrollY : 0,
@@ -3518,9 +3510,6 @@ function handleCardAction(event) {
         .filter((provider) => state.saved.includes(provider.id)));
     }
     setProviderSaveButtonsBusy(id, true);
-    document.dispatchEvent(new CustomEvent("skillmate:provider-save", {
-      detail: { providerId: id, saved: saving },
-    }));
     void runAction(async () => {
       try {
         if (appSupabase) {
