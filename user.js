@@ -897,17 +897,31 @@ function currency(amount) {
 function getCategoryIcon(category) {
   return categoryIcons[category] || "✦";
 }
+function categoryOutlineIcon(category) {
+  const paths = {
+    All: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+    Tutoring: '<path d="M12 5c-3-2-7-2-10-1v15c4-1 7 0 10 2 3-2 6-3 10-2V4c-3-1-7-1-10 1v16"/>',
+    Design: '<path d="m4 16-1 5 5-1L21 7l-4-4L4 16Zm10-10 4 4M4 16l4 4"/>',
+    Writing: '<path d="M4 4h16M12 4v16M8 20h8"/>',
+    "Tech Support": '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4M7 8h10"/>',
+    "Media & Editing": '<rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="12" cy="12" r="4"/><path d="M8 5l1-2h6l1 2"/>',
+    Events: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-14 4h3"/>',
+    Lifestyle: '<path d="M12 21S3 15 3 8a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 7-9 13-9 13Z"/>',
+  };
+  const alias = { "Tech help": "Tech Support", "Writing & editing": "Writing", Photography: "Media & Editing", "Events & entertainment": "Events" };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[category] || paths[alias[category]] || paths.Lifestyle}</svg>`;
+}
 function renderServiceCategories() {
   const strip = document.querySelector("#category-strip");
-  const currentCategory = serviceCategories.includes(selectedCategory) ? selectedCategory : "All";
+  const currentCategory = [...serviceCategories, ...window.skillmateMarketplace.popularCategories].includes(selectedCategory) ? selectedCategory : "All";
   selectedCategory = currentCategory;
   const popular = window.skillmateMarketplace.popularCategories;
   const categoryButton = (category) => `
     <button class="category-chip ${category === currentCategory ? "selected" : ""}" data-category="${escapeHTML(category)}" type="button" aria-pressed="${category === currentCategory}">
-      <span aria-hidden="true">${getCategoryIcon(category)}</span> <span>${category === "All" ? "All services" : escapeHTML(category)}</span>
+      ${categoryOutlineIcon(category)} <span>${category === "All" ? "All Services" : escapeHTML(category)}</span>
     </button>`;
   strip.innerHTML = popular.map(categoryButton).join("") + `<button class="category-chip more-categories ${popular.includes(currentCategory) ? "" : "selected"}" type="button" data-open="category-modal" aria-haspopup="dialog" aria-controls="category-modal">${popular.includes(currentCategory) ? "More" : escapeHTML(currentCategory)} <span aria-hidden="true">＋</span></button>`;
-  document.querySelector("#all-categories").innerHTML = ["All", ...serviceCategories.filter(category => !Object.values(window.skillmateMarketplace.categoryFamilies).some(family => family.slice(1).includes(category)))].map(categoryButton).join("");
+  document.querySelector("#all-categories").innerHTML = ["All", ...serviceCategories].map(categoryButton).join("");
 
   const select = document.querySelector("#service-category");
   const selectedValue = serviceCategories.includes(select.value) ? select.value : serviceCategories[0];
@@ -982,16 +996,23 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   const campus = state.profile?.university || "";
   const matching = marketplaceEntries(providers).filter((provider) => {
     if (state.blocked.includes(provider.id)) return false;
+    if (targetId === "recent-grid" && !Number.isFinite(Date.parse(provider.createdAt))) return false;
     if (targetId !== "saved-grid" && window.skillmateMarketplace.campusRank(provider, campus) === null) return false;
     if (targetId !== "saved-grid" && !window.skillmateMarketplace.matchesCategory(provider.category, selectedCategory)) return false;
     return (targetId === "saved-grid" || !window.skillmateGrowth || window.skillmateGrowth.matches(provider)) && window.skillmateSmartSearch.matches(provider, query);
   });
   const visible = window.skillmateMarketplace.sortByCampus(matching, campus, (left, right) => (
-    (targetId !== "saved-grid" && window.skillmateGrowth?.compare(left, right)) || (query ? marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query) : 0)
+    (targetId !== "saved-grid" && window.skillmateGrowth?.compare(left, right)) || (query
+      ? marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query)
+      : Number(right.bookings || 0) - Number(left.bookings || 0))
   ));
+  const newestFirst = targetId === "recent-grid" || document.querySelector('#marketplace-filters [name="sort"]')?.value === "newest";
+  if (newestFirst && targetId !== "saved-grid") visible.sort((left, right) => (Date.parse(right.createdAt) || 0) - (Date.parse(left.createdAt) || 0));
+  if (targetId === "recent-grid") visible.splice(4);
   if (targetId === "marketplace-grid") {
     document.querySelector("#marketplace-result-count").textContent = `${visible.length} ${visible.length === 1 ? "service" : "services"}`;
-    document.querySelector("#marketplace-heading").textContent = query ? "Search results" : selectedCategory === "All" ? "Services for your campus" : selectedCategory;
+    document.querySelector("#marketplace-heading").textContent = query ? "Search results" : newestFirst ? "Recently Added" : selectedCategory === "All" ? "Featured Services" : selectedCategory;
+    document.querySelector("#marketplace-description").textContent = query || selectedCategory !== "All" ? "Find the right student for what you need." : newestFirst ? "Newest listings first. Services without publication dates appear last." : "Popular services from talented students on your campus.";
     const status = document.querySelector("#search-status");
     status.hidden = !query;
     status.textContent = query
@@ -1000,15 +1021,17 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   }
   target.innerHTML = visible.length ? visible.map((provider) => `
     <article class="provider-card">
-      <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><div class="listing-cover-button" aria-hidden="true"><span class="cover-fallback"><span aria-hidden="true">${getCategoryIcon(provider.category)}</span><strong>${escapeHTML(provider.category)}</strong><small>Student service</small></span>${listingImage(provider) ? `<img class="service-marketplace-cover" src="${escapeHTML(listingImage(provider))}" alt="" loading="lazy" decoding="async" />` : ""}</div>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-pressed="${state.saved.includes(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
+      <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><button type="button" class="listing-cover-button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="View ${escapeHTML(provider.service)} details"><span class="cover-fallback"><span aria-hidden="true">${categoryOutlineIcon(provider.category)}</span><strong>${escapeHTML(provider.category)}</strong><small>Student service</small></span>${listingImage(provider) ? `<img class="service-marketplace-cover" src="${escapeHTML(listingImage(provider))}" alt="" loading="lazy" decoding="async" />` : ""}</button>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-pressed="${state.saved.includes(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
       <div class="provider-card-body">
-        <div class="listing-category-row"><p class="service-category">${escapeHTML(provider.category)}</p><span class="rating">${providerReviewSummary(provider).count ? `★ ${providerReviewSummary(provider).rating}<small> (${providerReviewSummary(provider).count})</small>` : "New provider"}</span></div>
-        <h3>${escapeHTML(provider.service)}</h3><p class="provider-description">${escapeHTML(provider.description)}</p>
+        <div class="listing-category-row"><p class="service-category">${escapeHTML(provider.category)}</p><span class="rating${providerReviewSummary(provider).count ? "" : " is-new"}">${providerReviewSummary(provider).count ? `★ ${providerReviewSummary(provider).rating}<small> (${providerReviewSummary(provider).count})</small>` : "New provider"}</span></div>
+        <h3><button type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">${escapeHTML(provider.service)}</button></h3><p class="provider-description">${escapeHTML(provider.description)}</p>
         <div class="provider-card-person"><button class="provider-profile-trigger" type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="View ${escapeHTML(provider.name)}’s provider profile">${providerAvatarMarkup(provider)}</button><span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? '<i class="verified-dot">✓</i> Campus verified · ' : ""}${escapeHTML(provider.campus)}</small></span></div>
         ${serviceDetailLabel(provider) ? `<p class="service-delivery-label">${escapeHTML(serviceDetailLabel(provider))}</p>` : ""}
         <div class="provider-card-footer"><span class="price"><small>Price</small>${currency(provider.price)}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">Request booking</button></span>`}</div>
       </div>
     </article>`).join("") : `<div class="empty-card"><span aria-hidden="true">⌕</span><strong>${targetId === "saved-grid" ? "Your shortlist starts here" : "No services found"}</strong><small>${targetId === "saved-grid" ? "Tap the heart on a service to save its provider for later." : "Try another skill or browse all categories."}</small><button class="button button-outline" type="button" ${targetId === "saved-grid" ? 'data-page-link="home"' : 'data-clear-search'}>Explore services</button></div>`;
+  if (targetId === "recent-grid" && !visible.length) target.innerHTML = '<p class="recent-empty">No recently published services to show yet.</p>';
+  if (targetId === "marketplace-grid") { renderMarketplace("recent-grid", providers); renderMarketplaceActivity(); }
 }
 function renderSearchSuggestions() {
   const target = document.querySelector("#search-suggestions");
@@ -1163,6 +1186,7 @@ function renderConversations(options = {}) {
   if (activeConversationId) layout.dataset.chatOpen = "true";
   else layout.removeAttribute("data-chat-open");
   const totalUnread = conversations.reduce((total, chat) => total + unreadMessageCount(chat), 0);
+  renderMarketplaceActivity();
   const messageCountBadge = document.querySelector("#message-count");
   messageCountBadge.textContent = String(totalUnread);
   messageCountBadge.classList.toggle("has-unread", totalUnread > 0);
@@ -1774,6 +1798,24 @@ function renderBookingActivity() {
     state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Pending").length,
   );
 }
+function renderMarketplaceActivity() {
+  const profile = state.profile || {};
+  const bookings = window.skillmateMarketplace.filterBookings(state.bookings, {
+    direction: "made", filter: "upcoming", ownId: ownProviderId(),
+  }).length;
+  const messages = state.messages.filter(chat => !state.blocked.includes(chat.providerId))
+    .reduce((total, chat) => total + unreadMessageCount(chat), 0);
+  const saved = marketplaceEntries(appSupabase ? connectedProviders : seedProviders)
+    .filter(provider => state.saved.includes(provider.id) && !state.blocked.includes(provider.id)).length;
+  for (const [key, count] of Object.entries({ bookings, messages, saved })) {
+    document.querySelectorAll(`[data-activity-count="${key}"]`).forEach(node => { node.textContent = String(count); });
+  }
+  document.querySelectorAll("[data-student-name]").forEach(node => { node.textContent = profile.name?.trim().split(/\s+/)[0] || "student"; });
+  document.querySelectorAll("[data-student-full-name]").forEach(node => { node.textContent = profile.name || "Student account"; });
+  document.querySelectorAll("[data-student-campus]").forEach(node => { node.textContent = profile.university || "Add your campus in Profile & Settings"; });
+  document.querySelectorAll("[data-activity-avatar]").forEach(node => { node.textContent = initialsFor(profile.name || "Student"); });
+  document.querySelectorAll("[data-student-verification]").forEach(node => { node.textContent = profile.verified ? "Campus verified" : "Campus verification is available in your account menu."; });
+}
 function renderAll() {
   window.skillmateGrowth?.render();
   if (typeof window.renderProfileCompleteness === "function") {
@@ -2032,11 +2074,11 @@ async function loadSupabaseState() {
     location: (userLocations.data || []).find((item) => item.user_id === appUser.id)?.location_name || "",
   };
   connectedServices = (directory.data || []).map((row) => ({
-    id: row.service_id, providerId: row.provider_id, title: row.service_title, category: row.category,
+    id: row.service_id, providerId: row.provider_id, title: row.service_title, category: row.category, createdAt: row.service_created_at || "",
     description: row.service_description, price: Number(row.price), groups: row.accepts_groups,
     active: true, currency: row.currency, negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(row.negotiation_mode), ...window.skillmateServiceUtils.metadata(row),
   })).concat((ownServices.data || []).filter((service) => !(directory.data || []).some((row) => row.service_id === service.id)).map((service) => ({
-    id: service.id, providerId: service.provider_id, title: service.title, category: service.category,
+    id: service.id, providerId: service.provider_id, title: service.title, category: service.category, createdAt: service.created_at || "",
     description: service.description, price: Number(service.price), groups: service.accepts_groups,
     active: service.is_active, currency: service.currency, negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(service.negotiation_mode), ...window.skillmateServiceUtils.metadata(service),
   })));
@@ -2558,7 +2600,7 @@ function showConnectedApp() {
 }
 function syncSellerNavigation() {
   const isSeller = state.services.length > 0;
-  document.querySelectorAll('[data-seller-only], .side-nav [data-page="provider"], .side-nav [data-page="earnings"]').forEach(element => { element.hidden = !isSeller; });
+  document.querySelectorAll('[data-seller-only]').forEach(element => { element.hidden = !isSeller; });
   document.querySelector("#mode-switch-label").textContent = isSeller ? "Manage my services" : "Offer a service";
   document.querySelector("#seller-entry-title").textContent = isSeller ? "Your skills, your business." : "Good at something?";
   document.querySelector("#seller-entry-description").textContent = isSeller ? "Manage your listings, requests and completed jobs." : "Create a listing and help someone on campus.";
@@ -2577,7 +2619,7 @@ function initializeDashboard() {
   updateGroupPrice();
   renderAll();
   const pageFromHash = window.location.hash.slice(1);
-  const requestedPage = ["home", "bookings", "messages", "saved", "provider", "earnings", "profile-settings", "help-support", "requests"].includes(pageFromHash) ? pageFromHash : "home";
+  const requestedPage = ["home", "bookings", "messages", "saved", "provider", "earnings", "profile-settings", "help-support", "requests", "activity"].includes(pageFromHash) ? pageFromHash : "home";
   showPage(requestedPage);
 }
 async function bootstrapStudentApp() {
@@ -2721,8 +2763,8 @@ function showPage(page, options = {}) {
   if (!view) return;
   const pageTitles = {
     home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers",
-    provider: "My services", earnings: "Estimated earnings", "profile-settings": "Your profile",
-    "help-support": "Help & Support", requests: "Campus requests",
+    provider: "My Listings", earnings: "Estimated earnings", "profile-settings": "Your profile",
+    "help-support": "Help & Support", requests: "Campus requests", activity: "My Activity",
   };
   const pageTitle = pageTitles[page];
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
@@ -2739,6 +2781,8 @@ function showPage(page, options = {}) {
   }
   state.activePage = page;
   if (page === "requests") window.skillmateGrowth?.refreshBoard();
+  document.querySelector(".account-menu")?.removeAttribute("open");
+  renderMarketplaceActivity();
   window.skillmateGrowth?.render();
   saveState();
   syncMessageChannels();
@@ -2758,7 +2802,7 @@ function showPage(page, options = {}) {
   document.querySelector("#search-suggestions").hidden = true;
   document.querySelector("#breadcrumb-title").textContent = pageTitle;
   document.title = `${pageTitle} | Skillmate`;
-  closeSidebar(sidebar.contains(document.activeElement));
+  closeSidebar(sidebar.classList.contains("open") && sidebar.contains(document.activeElement));
   if (page === "saved") renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders).filter((provider) => state.saved.includes(provider.id)));
   if (page === "messages") {
     renderConversations();
@@ -3451,6 +3495,48 @@ menuToggle.addEventListener("click", () => {
   if (isOpen) sidebar.querySelector(".side-nav .nav-link").focus();
 });
 sidebarBackdrop.addEventListener("click", () => closeSidebar(true));
+document.querySelector("#marketplace-search-submit").addEventListener("click", () => {
+  renderMarketplace();
+  document.querySelector("#search-suggestions").hidden = true;
+  globalSearch.setAttribute("aria-expanded", "false");
+  document.body.classList.remove("search-open");
+  const heading = document.querySelector("#marketplace-heading");
+  heading.tabIndex = -1;
+  heading.focus({ preventScroll: true });
+  heading.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+});
+document.querySelector("#recent-view-all").addEventListener("click", () => {
+  document.querySelector('#marketplace-filters [name="sort"]').value = "newest";
+  document.querySelector("#marketplace-search-submit").click();
+});
+document.querySelectorAll('[data-activity-count="bookings"]').forEach(node => node.closest("a").addEventListener("click", () => {
+  bookingDirection = "made";
+  bookingFilter = "upcoming";
+  document.querySelectorAll("[data-booking-direction]").forEach(button => {
+    const active = button.dataset.bookingDirection === "made";
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  document.querySelectorAll("[data-booking-filter]").forEach(button => button.classList.toggle("active", button.dataset.bookingFilter === "upcoming"));
+}));
+sidebar.addEventListener("keydown", event => {
+  if (event.key !== "Tab" || !sidebar.classList.contains("open")) return;
+  const focusable = [...sidebar.querySelectorAll('a,button,summary')].filter(node => {
+    const closedDetails = node.closest("details:not([open])");
+    return !node.hidden && !node.disabled && node.getClientRects().length
+      && (!closedDetails || node === closedDetails.querySelector("summary"));
+  });
+  if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable.at(-1)?.focus(); }
+  else if (!event.shiftKey && document.activeElement === focusable.at(-1)) { event.preventDefault(); focusable[0]?.focus(); }
+});
+window.matchMedia("(min-width:1101px)").addEventListener("change", event => { if (event.matches) closeSidebar(); });
+document.addEventListener("click", event => {
+  if (!event.target.closest(".account-menu")) document.querySelector(".account-menu").open = false;
+});
+document.addEventListener("keydown", event => {
+  const account = document.querySelector(".account-menu");
+  if (event.key === "Escape" && account.open) { account.open = false; account.querySelector("summary").focus(); }
+});
 document.querySelector("#mode-switch").addEventListener("click", () => {
   if (state.services.length) showPage("provider");
   else {
@@ -3461,6 +3547,7 @@ document.querySelector("#mode-switch").addEventListener("click", () => {
 
 document.querySelector("#marketplace-grid").addEventListener("click", handleCardAction);
 document.querySelector("#saved-grid").addEventListener("click", handleCardAction);
+document.querySelector("#recent-grid").addEventListener("click", handleCardAction);
 document.querySelector("#provider-detail-modal").addEventListener("click", (event) => {
   const negotiation = event.target.closest("[data-negotiation-action]");
   if (negotiation) {

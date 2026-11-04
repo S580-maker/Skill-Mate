@@ -57,3 +57,6 @@
   .topbar::after { opacity:.6; }
   .provider-card::after { left:14px; }
 }
+
+/* Unrated providers have no star, so keep the first letter the normal colour */
+.rating.is-new::first-letter{color:inherit}

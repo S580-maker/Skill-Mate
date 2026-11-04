@@ -5,14 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="description" content="Find trusted student services or earn with your skills on Skillmate." />
     <title>Skillmate | Student marketplace</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="landing-fonts.css?v=1" />
     <link rel="preload" href="user.css?v=29" as="style" />
     <link rel="stylesheet" href="user.css?v=29" />
     <link rel="stylesheet" href="app-refresh.css?v=12" />
     <link rel="stylesheet" href="marketplace-growth.css?v=11" />
-  <link rel="stylesheet" href="student-gold.css?v=2" />
+  <link rel="stylesheet" href="student-gold.css?v=3" />
+    <link rel="stylesheet" href="marketplace-redesign.css?v=2" />
     <script src="theme.js?v=2"></script>
   </head>
   <body class="app-auth-pending">
@@ -53,23 +52,19 @@
       </section>
     </div>
     <div class="app-shell" id="app-shell">
-      <aside class="sidebar" id="sidebar">
+      <header class="topbar marketplace-header">
         <a class="brand" href="#home" data-page-link="home" aria-label="Skillmate home">
           <span class="brand-name">Skillmate</span>
         </a>
-        <div class="campus-card"><span class="campus-icon">UG</span><span><small>YOUR CAMPUS</small><strong>University of Ghana</strong></span><button class="verified-mark" id="verification-open" type="button" title="Campus verification" aria-label="Verify your campus">!</button></div>
-        <nav class="side-nav" aria-label="Student navigation">
-          <span class="nav-caption">YOUR SPACE</span>
-          <a class="nav-link active" href="#home" data-page="home"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></svg><span>Discover</span></a>
-          <a class="nav-link" href="#requests" data-page="requests"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span>Campus requests</span></a>
-          <a class="nav-link" href="#bookings" data-page="bookings"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M7.5 3.5v3M16.5 3.5v3M3.5 10h17M8 14h3M8 17h6" /></svg><span>My bookings</span><span class="nav-count" id="booking-count">2</span></a>
-          <a class="nav-link" href="#messages" data-page="messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 9 9 0 0 1-4-.9L3 20l1.8-4A7.2 7.2 0 0 1 4 12c0-4.1 3.6-7.5 8-7.5s8 3.1 8 7Z" /><path d="M8 12h.01M12 12h.01M16 12h.01" /></svg><span>Messages</span><span class="nav-count nav-count-soft" id="message-count">2</span></a>
-          <a class="nav-link" href="#saved" data-page="saved"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16Z" /></svg><span>Saved</span></a>
-          <span class="nav-caption nav-caption-spaced" data-seller-only hidden>YOUR BUSINESS</span>
-          <a class="nav-link" href="#provider" data-page="provider"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8m0-12.8L5.6 18.4" /></svg><span>My services</span><span class="nav-dot"></span></a>
-          <a class="nav-link" href="#earnings" data-page="earnings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h16a2 2 0 0 1 2 2v10H5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2h13M21 11h-5a2 2 0 0 0 0 4h5" /><path d="M16 13h.01" /></svg><span>Estimated earnings</span></a>
-        </nav>
-        <div class="sidebar-bottom">
+        <button class="icon-button menu-toggle" id="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg></button>
+        <div class="sidebar" id="sidebar">
+          <nav class="side-nav" aria-label="Student navigation"><a class="nav-link active" href="#home" data-page="home"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></svg><span>Discover</span></a>
+<a class="nav-link" href="#bookings" data-page="bookings"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M7.5 3.5v3M16.5 3.5v3M3.5 10h17M8 14h3M8 17h6" /></svg><span>My Bookings</span><span class="nav-count" id="booking-count">2</span></a>
+<a class="nav-link" href="#messages" data-page="messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 9 9 0 0 1-4-.9L3 20l1.8-4A7.2 7.2 0 0 1 4 12c0-4.1 3.6-7.5 8-7.5s8 3.1 8 7Z" /><path d="M8 12h.01M12 12h.01M16 12h.01" /></svg><span>Messages</span><span class="nav-count nav-count-soft" id="message-count">2</span></a>
+<a class="nav-link" href="#saved" data-page="saved"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16Z" /></svg><span>Saved</span></a>
+<a class="nav-link" href="#provider" data-page="provider"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8m0-12.8L5.6 18.4" /></svg><span>My Listings</span><span class="nav-dot"></span></a><a class="nav-link" href="#activity" data-page="activity"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 15v-4m6 4V5m6 10V8"/></svg><span>My Activity</span></a></nav>
+          <details class="account-menu"><summary aria-label="More account options">More <span aria-hidden="true">&#8964;</span></summary><div class="account-menu-content"><div class="campus-card"><span class="campus-icon">UG</span><span><small>YOUR CAMPUS</small><strong>University of Ghana</strong></span><button class="verified-mark" id="verification-open" type="button" title="Campus verification" aria-label="Verify your campus">!</button></div><a class="nav-link" href="#requests" data-page="requests"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span>Campus requests</span></a>
+<a class="nav-link" href="#earnings" data-page="earnings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h16a2 2 0 0 1 2 2v10H5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2h13M21 11h-5a2 2 0 0 0 0 4h5" /><path d="M16 13h.01" /></svg><span>Estimated earnings</span></a>        <div class="sidebar-bottom">
           <button class="trust-mini verification-cta" id="verification-cta" type="button" aria-label="Verify to earn a campus badge"><span class="trust-mini-icon" aria-hidden="true">✓</span><span><strong>Your campus, your community</strong><small>Verify to earn a campus badge</small></span></button>
           <a class="nav-link" href="#profile-settings" data-page="profile-settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg><span>Profile &amp; Settings</span></a>
           <a class="nav-link" href="#help-support" data-page="help-support"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.6 9a2.5 2.5 0 1 1 4.3 1.8c-1.1 1-1.9 1.4-1.9 3M12 17.2h.01" /></svg><span>Help &amp; Support</span></a>
@@ -77,29 +72,29 @@
           <a class="admin-link" id="admin-link" href="admin.html" hidden>Admin dashboard <span aria-hidden="true">↗</span></a>
           <div class="profile"><div class="profile-avatar">AM</div><span class="profile-copy"><strong>Alex Morgan</strong><small>Student · University of Ghana</small></span><button class="icon-button" id="profile-menu" type="button" aria-label="Edit profile">⋯</button></div>
         </div>
-      </aside>
-      <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close navigation" hidden></button>
-      <main class="main-content">
-        <header class="topbar">
-          <button class="icon-button menu-toggle" id="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg></button>
-          <div class="breadcrumbs"><span>Skillmate</span><span class="crumb-slash">/</span><strong id="breadcrumb-title">Discover</strong></div>
-          <div class="topbar-actions">
+</div></details>
+        </div>
+        <div class="breadcrumbs" hidden><strong id="breadcrumb-title">Discover</strong></div>
+                  <div class="topbar-actions">
             <button class="icon-button notification-button" id="notifications-button" aria-haspopup="dialog" aria-controls="notifications-modal" type="button" aria-label="Notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></svg></button>
             <a class="student-profile-link" id="student-profile-link" href="#profile-settings" data-page-link="profile-settings" aria-label="Open your profile">You</a>
           </div>
-        </header>
 
+      </header>
+      <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close navigation" hidden></button>
+      <main class="main-content">
         <div class="page-content">
           <section class="view active-view" id="view-home" data-view="home">
             <div class="discover-intro">
               <p class="eyebrow" hidden><span class="demo-pill" hidden>STUDENT MARKETPLACE</span><time id="marketplace-date" hidden></time></p>
-              <h1>A little help, close by.</h1>
-              <p>Find the skills you need, from people on your campus.</p>
+              <h1>Find Skills &amp; Services<br />from <span>Students Like You</span></h1>
+              <p>Get help, collaborate, and make campus life easier.</p>
               <div class="discover-search">
-                <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg><input id="global-search" type="search" placeholder="What do you need help with?" aria-label="Search services, skills, or providers" aria-describedby="search-status" aria-controls="search-suggestions" aria-expanded="false" /><button class="search-clear" id="search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>&times;</button><kbd>Ctrl K</kbd></label>
+                <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg><input id="global-search" type="search" placeholder="Search for services (e.g., tutoring, design, editing...)" aria-label="Search services, skills, or providers" aria-describedby="search-status" aria-controls="search-suggestions" aria-expanded="false" /><button class="search-clear" id="search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>&times;</button><kbd>Ctrl K</kbd></label><button type="button" class="button marketplace-search-submit" id="marketplace-search-submit">Search <span aria-hidden="true">&#8594;</span></button>
                 <div class="search-suggestions" id="search-suggestions" role="group" aria-label="Search suggestions" hidden></div>
               </div>
             </div>
+            <div class="discovery-layout"><div class="discovery-main">
             <div class="marketplace-category-controls">
               <button class="marketplace-filter-trigger" id="marketplace-filter-trigger" type="button" aria-label="Show service filters" title="Show service filters" aria-expanded="false" aria-controls="marketplace-filters">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10m-7 5h4" /><circle cx="8" cy="7" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="12" cy="17" r="1.5" /></svg>
@@ -111,18 +106,25 @@
               <label>Min price (GH&#8373;)<input name="min" type="number" min="0" step="1" placeholder="Any" /></label>
               <label>Max price (GH&#8373;)<input name="max" type="number" min="0" step="1" placeholder="Any" /></label>
               <label>Delivery<select name="delivery"><option value="">Any delivery</option><option value="online">Online</option><option value="in_person">In person</option></select></label>
-              <label>Sort by<select name="sort"><option value="">Best match</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="rating">Highest rated</option></select></label>
+              <label>Sort by<select name="sort"><option value="">Best match</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="rating">Highest rated</option><option value="newest">Newest first</option></select></label>
               <label class="filter-toggle"><input name="verified" type="checkbox" /> Campus verified</label>
               <label class="filter-toggle"><input name="scheduled" type="checkbox" /> Published hours</label>
               <button class="subtle-button" type="reset">Clear filters</button>
             </form>
-            <div class="marketplace-heading"><h2 id="marketplace-heading">Services on your campus</h2><span id="marketplace-result-count" aria-live="polite"></span></div>
+            <div class="marketplace-heading"><div><h2 id="marketplace-heading">Featured Services</h2><p id="marketplace-description">Popular services from talented students on your campus.</p></div><span id="marketplace-result-count" aria-live="polite"></span></div>
             <p class="search-status" id="search-status" aria-live="polite" hidden></p>
             <div class="marketplace-grid" id="marketplace-grid"></div>
+            <section class="recent-services" id="recent-services" aria-labelledby="recent-heading"><div class="marketplace-heading"><div><h2 id="recent-heading">Recently Added</h2><p>New services from students around campus.</p></div><button class="subtle-button" type="button" id="recent-view-all">View All <span aria-hidden="true">&#8599;</span></button></div><div class="marketplace-grid" id="recent-grid"></div></section>
             <aside class="request-board-entry"><div><h2>Need help finding a service?</h2><p>Post your task and let students on your campus offer to help.</p></div><button class="button button-primary" type="button" data-new-request>Post what you need</button></aside>
             <section class="safety-note"><span class="safety-note-icon">✓</span><span><strong>Made for students. Built around trust.</strong><small>See campus badges, keep booking records, and report or block when needed. <button type="button" data-open="safety-modal">Read our safety tips</button></small></span></section>
+            </div><aside class="marketplace-activity" aria-label="My activity">
+              <section class="welcome-card"><span class="activity-avatar" data-activity-avatar aria-hidden="true"></span><p class="eyebrow">YOUR CAMPUS, CONNECTED</p><h2>Welcome back, <span data-student-name>student</span></h2><p>Discover services, book help, or offer your own skills.</p><span class="activity-campus" data-student-campus></span></section>
+              <section class="activity-card"><div class="activity-card-heading"><h2>Your Activity</h2><a href="#activity" data-page-link="activity" aria-label="View all activity">&#8599;</a></div><div class="activity-links"><a href="#bookings" data-page-link="bookings"><span>Upcoming Bookings</span><strong data-activity-count="bookings">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#messages" data-page-link="messages"><span>Unread Messages</span><strong data-activity-count="messages">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#saved" data-page-link="saved"><span>Saved Services</span><strong data-activity-count="saved">0</strong><span aria-hidden="true">&#8599;</span></a></div></section>
+              <section class="offer-skill-card"><span class="offer-icon" aria-hidden="true">&#10023;</span><h2>Offer Your Skill</h2><p>Turn what you're good at into opportunities for other students.</p><button type="button" class="button" data-open="service-modal">Create a Service <span aria-hidden="true">&#8599;</span></button></section>
+            </aside></div>
           </section>
 
+          <section class="view" id="view-activity" data-view="activity"><div class="view-heading"><div><p class="eyebrow">YOUR CAMPUS CONNECTIONS</p><h1>My Activity</h1><p>Your bookings, conversations, and account at a glance.</p></div></div><div class="activity-page-layout"><section class="activity-card"><h2>Your Activity</h2><div class="activity-links"><a href="#bookings" data-page-link="bookings"><span>Upcoming Bookings</span><strong data-activity-count="bookings">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#messages" data-page-link="messages"><span>Unread Messages</span><strong data-activity-count="messages">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#saved" data-page-link="saved"><span>Saved Services</span><strong data-activity-count="saved">0</strong><span aria-hidden="true">&#8599;</span></a></div><p class="activity-explanation">Upcoming bookings include pending and confirmed appointments that have not passed.</p></section><section class="activity-card"><h2>Your account</h2><p class="activity-account-name" data-student-full-name></p><p data-student-campus></p><p data-student-verification></p><div class="activity-links"><a href="#profile-settings" data-page-link="profile-settings">Profile &amp; Settings <span aria-hidden="true">&#8599;</span></a><a href="#provider" data-page-link="provider">My Listings <span aria-hidden="true">&#8599;</span></a><a href="#earnings" data-page-link="earnings">Estimated earnings <span aria-hidden="true">&#8599;</span></a><a href="#requests" data-page-link="requests">Campus requests <span aria-hidden="true">&#8599;</span></a><a href="#help-support" data-page-link="help-support">Help &amp; Support <span aria-hidden="true">&#8599;</span></a></div></section></div></section>
           <section class="view request-board" id="view-requests" data-view="requests">
             <div class="view-heading"><div><p class="eyebrow">HELP STARTS HERE</p><h1>Campus requests</h1><p>Tell your campus what you need, or offer your skills to another student.</p></div><button class="button button-primary" id="request-post-open" type="button">Post a request</button></div>
             <div class="request-board-toolbar"><label>Show<select id="request-board-filter"><option value="campus">Open requests on my campus</option><option value="mine">My requests</option><option value="responses">Requests I replied to</option></select></label><button class="subtle-button" id="request-board-refresh" type="button">Refresh</button></div>
@@ -153,7 +155,7 @@
           </section>
 
           <section class="view" id="view-provider" data-view="provider">
-            <div class="view-heading"><div><p class="eyebrow">YOUR SKILLS, YOUR BUSINESS</p><h1>My services</h1><p>Manage the work you offer to your campus community.</p></div><button class="button button-primary" type="button" data-open="service-modal">＋ Add a service</button></div>
+            <div class="view-heading"><div><p class="eyebrow">YOUR SKILLS, YOUR BUSINESS</p><h1>My Listings</h1><p>Manage the work you offer to your campus community.</p></div><button class="button button-primary" type="button" data-open="service-modal">＋ Add a service</button></div>
             <div class="provider-summary"><div class="provider-stat"><span>ACTIVE LISTINGS</span><strong id="active-listings-count">0</strong><small>Services visible to students</small></div><div class="provider-stat"><span>ACTIVE REQUESTS</span><strong id="provider-request-count">0</strong><small>Bookings to review</small></div><div class="provider-stat"><span>YOUR RATING</span><strong>—</strong><small>No reviews yet</small></div><div class="provider-stat"><span>THIS MONTH</span><strong id="provider-earnings">GH₵ 0</strong><small>Completed bookings</small></div></div>
             <article class="panel provider-profile-panel"><div class="provider-profile-main"><div class="profile-avatar profile-avatar-large">AM</div><div><span class="verified-pill">✓ Campus verified</span><h2>Alex Morgan</h2><p>Graphic designer &amp; laptop fixer · University of Ghana</p><div class="profile-tags"><span>Graphic design</span><span>Tech help</span><span>Available this week</span></div></div></div><button class="button button-outline" type="button" data-open="profile-modal">Edit profile</button></article>
             <details class="panel availability-panel" id="availability-settings">
@@ -404,10 +406,10 @@
     <script defer src="smart-search.js"></script>
     <script defer src="profile-completeness.js?v=2"></script>
     <script defer src="service-form-utils.js?v=2"></script>
-    <script defer src="marketplace-utils.js?v=2"></script>
+    <script defer src="marketplace-utils.js?v=3"></script>
     <script defer src="push-notification-platform.js?v=1"></script>
     <script defer src="marketplace-growth-utils.js?v=1"></script>
-    <script defer src="user.js?v=47"></script>
+    <script defer src="user.js?v=49"></script>
     <script defer src="marketplace-growth.js?v=7"></script>
     <script defer src="service-form.js?v=3"></script>
     <script defer src="notifications.js?v=1"></script>

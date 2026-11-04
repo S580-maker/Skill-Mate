@@ -78,6 +78,11 @@ from(){return {select(){return this;},eq(){return this;},single:async()=>({data:
 </script>`;
 const server = http.createServer((req, res) => {
   const name = new URL(req.url, "http://localhost").pathname.slice(1) || "index.html";
+  if (/^assets\/fonts\/[\w-]+\.woff2$/.test(name)) {
+    try { res.setHeader("Content-Type", "font/woff2"); res.end(fs.readFileSync(path.join(root, name))); }
+    catch { res.writeHead(404).end(); }
+    return;
+  }
   if (/^assets\/[\w-]+\.png$/.test(name)) {
     try {
       res.setHeader("Content-Type", "image/png");
@@ -378,6 +383,128 @@ async function main() {
   await call("Page.enable"); await call("Runtime.enable"); await call("Network.enable");
   await call("Page.bringToFront");
   await call("Network.setBlockedURLs", { urls: ["*supabase.co*", "*supabase.in*", "*fonts.googleapis.com*", "*fonts.gstatic.com*"] });
+  const verifyMobileTouch = async () => {
+    // Browser touch input uses hit testing; element.click() would bypass blocking overlays.
+    const tap = async selector => {
+      await evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:"center",behavior:"instant"})`);
+      await wait(60);
+      const point = await evaluate(`(() => {
+        const node = document.querySelector(${JSON.stringify(selector)});
+        const rect = node.getBoundingClientRect();
+        const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+        const hit = document.elementFromPoint(x,y);
+        return {x,y,hit:hit?.id || hit?.className || hit?.tagName,reachable:node===hit||node.contains(hit)};
+      })()`);
+      assert.equal(point.reachable, true, `Touch target ${selector} is blocked by ${point.hit}`);
+      await call("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: point.x, y: point.y }] });
+      await call("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await wait(350);
+    };
+    for (const width of [320, 390, 768, 1024]) {
+      await call("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: true });
+      await call("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+      await navigate("index.html");
+      await tap("#menu-toggle");
+      assert.equal(await evaluate('document.querySelector("#menu-toggle").getAttribute("aria-expanded")'), "true");
+      await tap('.side-nav [data-page="bookings"]');
+      assert.equal(await evaluate('state.activePage'), "bookings");
+      assert.equal(await evaluate('document.querySelector("#sidebar-backdrop").hidden'), true);
+      await tap("#menu-toggle");
+      await tap('.side-nav [data-page="home"]');
+      await tap('#category-strip [data-category="Tutoring"]');
+      assert.equal(await evaluate('selectedCategory'), "Tutoring", JSON.stringify(await evaluate('({page:state.activePage,active:document.activeElement?.outerHTML,category:document.querySelector(\'#category-strip [data-category="Tutoring"]\').outerHTML,dialogs:[...document.querySelectorAll("dialog[open]")].map(e=>e.id)})')));
+      await tap("#marketplace-grid h3 button");
+      assert.equal(await evaluate('document.querySelector("#provider-detail-modal").open'), true);
+      await tap('#provider-detail-modal [data-close]');
+      await tap("#global-search");
+      await call("Input.insertText", { text: "calculus" });
+      await tap("#marketplace-search-submit");
+      assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length'), 1);
+      await tap("#menu-toggle");
+      await tap(".account-menu > summary");
+      await tap('.account-menu [data-page="profile-settings"]');
+      assert.equal(await evaluate('state.activePage'), "profile-settings");
+      await tap("#notifications-button");
+      assert.equal(await evaluate('document.querySelector("#notifications-modal").open'), true);
+      await tap('#notifications-modal [data-close]');
+      await tap("#menu-toggle");
+      await tap('.side-nav [data-page="messages"]');
+      assert.equal(await evaluate('state.activePage'), "messages");
+      await checkWidth(`${width}:touch`);
+      console.log(`PASS real touch targets: navigation, categories, service details, search, account menu and notifications at ${width}px`);
+    }
+    await call("Emulation.setTouchEmulationEnabled", { enabled: false });
+  };
+  if (process.argv.includes("--touch-only")) {
+    await verifyMobileTouch();
+    assert.deepEqual(errors, [], "Uncaught browser errors");
+    console.log(`Screenshots: ${output}`);
+    return;
+  }
+  const verifyMarketplaceRedesign = async () => {
+    await call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await navigate("index.html");
+    await evaluate('document.fonts.ready');
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".side-nav")).flexDirection'), "row");
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".main-content")).marginLeft'), "0px");
+    assert.ok(await evaluate('document.querySelector(".marketplace-activity").getBoundingClientRect().left > document.querySelector(".discovery-main").getBoundingClientRect().left'));
+    assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#category-strip [data-category]")).map(n=>n.dataset.category)'), ["All", "Tutoring", "Design", "Writing", "Tech Support", "Media & Editing", "Events", "Lifestyle"]);
+    await evaluate('document.querySelector(\'#category-strip [data-category="Tech Support"]\').click()');
+    assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length'), 2);
+    await evaluate('document.querySelector(\'#category-strip [data-category="All"]\').click();globalSearch.value="calculus";document.querySelector("#marketplace-search-submit").click()');
+    assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length'), 1);
+    await evaluate('globalSearch.value="";renderMarketplace();window.__redesignOriginal={supabase:appSupabase,loaded:dashboardDataLoaded,providers:connectedProviders,services:connectedServices,bookings:state.bookings};appSupabase={};dashboardDataLoaded=true;connectedProviders=[seedProviders[0]];connectedServices=[{id:"old-fixture",providerId:"daniel",title:"Older service",category:"Tech help",description:"Older test listing",price:40,active:true,createdAt:"2025-01-01T10:00:00Z"},{id:"new-fixture",providerId:"daniel",title:"New service",category:"Tech help",description:"New test listing",price:60,active:true,createdAt:"2026-01-01T10:00:00Z"},{id:"undated-fixture",providerId:"daniel",title:"Undated service",category:"Tech help",price:50,active:true}];renderMarketplace()');
+    assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#recent-grid h3")).map(n=>n.textContent)'), ["New service", "Older service"], "Recent listings use real creation timestamps; undated rows are excluded");
+    assert.equal(await evaluate('document.querySelector("#recent-grid .listing-cover-button").dataset.service'), "new-fixture");
+    assert.equal(await evaluate('document.querySelector("#recent-grid [data-book]").dataset.service'), "new-fixture");
+    assert.equal(await evaluate('document.querySelector("#recent-grid .rating").textContent'), "New provider", "No fabricated rating for connected listings without reviews");
+    await evaluate('document.querySelector("#recent-view-all").click()');
+    assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#marketplace-grid h3")).map(n=>n.textContent)'), ["New service", "Older service", "Undated service"]);
+    await evaluate('appSupabase=window.__redesignOriginal.supabase;dashboardDataLoaded=window.__redesignOriginal.loaded;connectedProviders=window.__redesignOriginal.providers;connectedServices=window.__redesignOriginal.services;document.querySelector("#marketplace-filters").reset();state.bookings=[{id:"upcoming-fixture",providerId:"daniel",status:"Confirmed",date:"2035-01-01",time:"12:00"},{id:"past-fixture",providerId:"daniel",status:"Confirmed",date:"2020-01-01",time:"12:00"}];renderMarketplaceActivity()');
+    assert.equal(await evaluate('document.querySelector(\'[data-activity-count="bookings"]\').textContent'), "1");
+    await evaluate('document.querySelector(\'[data-activity-count="bookings"]\').closest("a").click()');
+    assert.equal(await evaluate('state.activePage'), "bookings");
+    assert.equal(await evaluate('bookingFilter'), "upcoming");
+    await evaluate('state.bookings=window.__redesignOriginal.bookings;bookingFilter="all";showPage("home");document.querySelector(".offer-skill-card button").click()');
+    assert.equal(await evaluate('document.querySelector("#service-modal").open'), true);
+    await evaluate('document.querySelector("#service-modal").close();document.querySelector(".side-nav [data-page=activity]").click()');
+    assert.equal(await evaluate('location.hash'), "#activity");
+    assert.equal(await evaluate('document.querySelector(".side-nav [data-page=activity]").getAttribute("aria-current")'), "page");
+    await evaluate('showPage("home");document.querySelector(".account-menu").open=true;document.querySelector("#verification-open").click()');
+    assert.equal(await evaluate('document.querySelector("#verification-modal").open'), true);
+    await evaluate('document.querySelector("#verification-modal").close();document.querySelector(".account-menu").open=false;renderAll()');
+    await wait(500);
+    await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await evaluate('document.querySelector("#menu-toggle").focus()');
+    await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
+    await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    assert.equal(await evaluate('document.querySelector("#menu-toggle").getAttribute("aria-expanded")'), "true", "Keyboard opens compact navigation");
+    assert.equal(await evaluate('document.activeElement.dataset.page'), "home", "Menu moves focus to the first destination");
+    await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, modifiers: 8 });
+    await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    assert.equal(await evaluate('document.activeElement.tagName'), "SUMMARY", "Shift Tab stays inside the open menu");
+    await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+    assert.equal(await evaluate('document.activeElement.id'), "menu-toggle", "Escape restores focus to menu trigger");
+    assert.equal(await evaluate('document.querySelector("#menu-toggle").getAttribute("aria-expanded")'), "false");
+    assert.ok(await evaluate('document.querySelector(".marketplace-activity").getBoundingClientRect().top >= document.querySelector(".discovery-main").getBoundingClientRect().bottom'), "Mobile activity sits below the marketplace");
+    await call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".provider-card")).transitionDuration'), "0s");
+    await call("Emulation.setEmulatedMedia", { features: [] });
+    await call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await navigate("index.html#activity");
+    assert.equal(await evaluate('state.activePage'), "activity", "My Activity survives a direct link or refresh");
+    await evaluate('showPage("home")');
+    console.log("PASS marketplace redesign: navigation, grouped categories, search button, dated services, activity counts, creation and verification");
+  };
+  if (process.argv.includes("--marketplace-only")) {
+    await verifyMarketplaceRedesign();
+    await wait(500);
+    await screenshot("marketplace-redesign-1440");
+    assert.deepEqual(errors, [], "Uncaught browser errors");
+    console.log(`Screenshots: ${output}`);
+    return;
+  }
   if (process.argv.includes("--growth-only")) {
     await verifyGrowthFlow();
     await verifyRequestPostingRetry();
@@ -410,35 +537,14 @@ async function main() {
     await call("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width <= 768 });
     await navigate("index.html");
     assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length'), 6);
-    if (width === 320) {
-      const mobileNav = await evaluate(`(()=>{const nav=document.querySelector(".mobile-nav");const box=nav.getBoundingClientRect();const probe=document.createElement("i");probe.style.color="var(--main)";nav.append(probe);const themeBlue=getComputedStyle(probe).color;probe.remove();return{display:getComputedStyle(nav).display,position:getComputedStyle(nav).position,width:box.width,rightGap:innerWidth-box.right,bottomGap:innerHeight-box.bottom,radius:getComputedStyle(nav).borderRadius,linkCount:nav.querySelectorAll("[data-page-link]").length,activeColor:getComputedStyle(nav.querySelector('[aria-current="page"]')).color,themeBlue,contentPadding:getComputedStyle(document.querySelector(".main-content")).paddingBottom};})()`);
-      assert.equal(mobileNav.display, "grid", "Mobile retains the four-destination navigation");
-      assert.equal(mobileNav.position, "fixed", "Mobile navigation stays fixed while browsing");
-      assert.ok(mobileNav.width <= width && mobileNav.rightGap >= 12 && mobileNav.bottomGap >= 8, `Floating navigation fits within the mobile safe area: ${JSON.stringify(mobileNav)}`);
-      assert.ok(parseFloat(mobileNav.radius) >= 100, "The mobile navigation uses a pill-shaped container");
-      assert.equal(mobileNav.linkCount, 4, "All four existing navigation destinations remain available");
-      assert.equal(mobileNav.activeColor, mobileNav.themeBlue, "The active destination uses the existing blue theme color");
-      assert.ok(parseFloat(mobileNav.contentPadding) >= 90, "Page content reserves space below the floating navigation");
-      const viewportOffset = await evaluate(`(()=>{const descriptor=Object.getOwnPropertyDescriptor(window,"visualViewport");try{Object.defineProperty(window,"visualViewport",{configurable:true,value:{height:innerHeight-80,offsetTop:10,addEventListener(){}}});syncChatVisualViewport();return getComputedStyle(document.documentElement).getPropertyValue("--mobile-nav-viewport-bottom").trim();}finally{if(descriptor)Object.defineProperty(window,"visualViewport",descriptor);else delete window.visualViewport;syncChatVisualViewport();}})()`);
-      assert.equal(viewportOffset, "70px", "The floating navigation follows changes to the visible mobile viewport");
-      await evaluate('document.body.classList.add("mobile-keyboard-open")');
-      assert.equal(await evaluate('getComputedStyle(document.querySelector(".mobile-nav")).display'), "none", "The floating navigation hides while a mobile keyboard is open");
-      await evaluate('document.body.classList.remove("mobile-keyboard-open")');
-      await evaluate("window.scrollTo({top:320,behavior:'instant'})");
-      await wait(60);
-      const dockAfterScrollDown = await evaluate(`(()=>{const nav=document.querySelector(".mobile-nav");const style=getComputedStyle(nav);const match=style.transform.match(/matrix\\(([^)]+)\\)/);return{scrollY:window.scrollY,hidden:nav.classList.contains("is-hidden"),display:style.display,opacity:style.opacity,verticalScale:match?Number(match[1].split(",")[3]):1};})()`);
-      assert.equal(dockAfterScrollDown.hidden, true, `The mobile dock hides while scrolling down: ${JSON.stringify(dockAfterScrollDown)}`);
-      await wait(500);
-      const closedDock = await evaluate(`(()=>{const nav=document.querySelector(".mobile-nav");const style=getComputedStyle(nav);const match=style.transform.match(/matrix\\(([^)]+)\\)/);return{opacity:style.opacity,verticalScale:match?Number(match[1].split(",")[3]):1};})()`);
-      assert.equal(Number(closedDock.opacity), 0, "The dock fades after closing toward a line");
-      assert.ok(closedDock.verticalScale < 0.1, "The dock closes vertically like an eye before disappearing");
-      assert.equal(await evaluate('document.querySelector(".mobile-nav").classList.contains("is-hidden")'), true, "The dock stays hidden after downward scrolling stops");
-      await evaluate("window.scrollTo({top:310,behavior:'instant'})");
-      await wait(60);
-      assert.equal(await evaluate('document.querySelector(".mobile-nav").classList.contains("is-hidden")'), true, "A small scroll adjustment does not make the dock jump back");
-      await evaluate("window.scrollTo({top:260,behavior:'instant'})");
-      await wait(60);
-      assert.equal(await evaluate('document.querySelector(".mobile-nav").classList.contains("is-hidden")'), false, "The mobile dock returns while scrolling up");
+    if (width <= 1024) {
+      assert.equal(await evaluate('getComputedStyle(document.querySelector("#sidebar")).display'), "none", "Compact navigation is collapsed by default");
+      await evaluate('document.querySelector("#menu-toggle").click()');
+      assert.equal(await evaluate('document.querySelector("#menu-toggle").getAttribute("aria-expanded")'), "true");
+      assert.equal(await evaluate('getComputedStyle(document.querySelector("#sidebar")).display'), "block");
+      await checkWidth(width + ":navigation");
+      await evaluate('document.querySelector("#sidebar-backdrop").click()');
+      assert.equal(await evaluate('document.querySelector("#menu-toggle").getAttribute("aria-expanded")'), "false");
     }
     if (width === 1440) {
       assert.equal(await evaluate('getComputedStyle(document.querySelector(".mobile-nav")).display'), "none", "The floating mobile navigation remains hidden on desktop");
@@ -450,9 +556,9 @@ async function main() {
       assert.equal(skeleton.coverCount, 2);
       if (width === 320) {
         assert.equal(skeleton.sidebarDisplay, "none", "Phone skeleton omits desktop sidebar");
-        assert.notEqual(skeleton.navDisplay, "none", "Phone skeleton includes the bottom navigation");
+        assert.equal(skeleton.navDisplay, "none", "Phone skeleton has no obsolete bottom dock");
       } else {
-        assert.notEqual(skeleton.sidebarDisplay, "none", "Desktop skeleton mirrors the application sidebar");
+        assert.equal(skeleton.sidebarDisplay, "none", "Desktop skeleton matches the layout without a permanent sidebar");
         assert.equal(skeleton.navDisplay, "none", "Desktop skeleton omits mobile navigation");
       }
       await evaluate('document.body.classList.remove("app-auth-pending");document.querySelector("#app-auth-status").hidden=true');
@@ -476,20 +582,20 @@ async function main() {
       await checkWidth("320:compact-chat");
       await evaluate(`(()=>{const original=window.__narrowChatOriginal;connectedServices=original.services;appUser=original.user;priceNegotiations=original.negotiations;activeConversationId=original.active;showPage(original.page);delete window.__narrowChatOriginal})()`);
     }
-    assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card [data-profile]").length'), 6, "Only provider avatar controls carry profile navigation");
-    assert.equal(await evaluate('document.querySelector("#marketplace-grid .provider-card .listing-cover-button").tagName'), "DIV", "The service image is not a profile navigation control");
-    assert.equal(await evaluate('document.querySelector("#marketplace-grid .provider-card h3 button") === null'), true, "The service title is not a profile navigation control");
+    assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card [data-profile]").length'), 18, "Covers, titles and avatars all open the existing details");
+    assert.equal(await evaluate('document.querySelector("#marketplace-grid .provider-card .listing-cover-button").tagName'), "BUTTON", "The service image opens the existing service details");
+    assert.equal(await evaluate('document.querySelector("#marketplace-grid .provider-card h3 button") === null'), false, "The service title is an accessible details control");
     if (width === 320) {
       await evaluate('document.querySelector("#marketplace-grid .provider-card .listing-cover-button").click()');
-      assert.equal(await evaluate('document.querySelector("#provider-detail-modal").open'), false, "Clicking the service image does not open provider details");
-      await evaluate('document.querySelector("#marketplace-grid .provider-card .provider-profile-trigger").click()');
+      assert.equal(await evaluate('document.querySelector("#provider-detail-modal").open'), true, "Clicking the service image opens existing details");
+      await evaluate('document.querySelector("#provider-detail-modal").close();document.querySelector("#marketplace-grid .provider-card .provider-profile-trigger").click()');
       await wait(250);
       assert.equal(await evaluate('document.querySelector("#provider-detail-modal").open'), true, "Clicking the provider avatar opens their profile");
       await evaluate('document.querySelector("#provider-detail-modal").close()');
     }
     await checkWidth(`${width}:discover`);
     if (width === 390 || width === 1440) await screenshot(`discover-${width}`);
-    for (const page of ["bookings", "messages", "profile-settings", "provider", "earnings", "saved", "help-support"]) {
+    for (const page of ["bookings", "messages", "profile-settings", "provider", "earnings", "saved", "help-support", "activity"]) {
       await evaluate(`showPage(${JSON.stringify(page)})`);
       await checkWidth(`${width}:${page}`);
     }
@@ -517,7 +623,7 @@ async function main() {
       assert.ok(await evaluate('document.querySelector(".chat-compose").getBoundingClientRect().bottom <= innerHeight + 1'), "Chat input stays above the viewport edge when the available height shrinks");
       await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 900, deviceScaleFactor: 1, mobile: true });
       await evaluate('document.querySelector("[data-chat-back]").click()');
-      assert.equal(await evaluate('getComputedStyle(document.querySelector(".mobile-nav")).display'), "grid");
+      assert.equal(await evaluate('getComputedStyle(document.querySelector(".marketplace-header")).display'), "flex");
     }
     console.log(`PASS layouts: ${width}px`);
   }
@@ -527,7 +633,7 @@ async function main() {
   await wait(140);
   const savedDiscoverScroll = await evaluate("window.scrollY");
   assert.ok(savedDiscoverScroll > 0, "The discovery page can be scrolled before navigating away");
-  await evaluate('document.querySelector(".mobile-nav [data-page-link=\\"bookings\\"]").click()');
+  await evaluate('document.querySelector("#menu-toggle").click();document.querySelector(".side-nav [data-page=bookings]").click()');
   assert.equal(await evaluate("location.hash"), "#bookings", "Selecting a mobile navigation item updates the route");
   assert.equal(await evaluate("document.title"), "My bookings | Skillmate", "The page title follows the selected section");
   await evaluate("window.history.back()");
@@ -579,9 +685,9 @@ async function main() {
   assert.equal(await evaluate('state.activePage'), "bookings");
   await evaluate('showPage("profile-settings");document.documentElement.dataset.theme="light";document.querySelector("[data-theme-toggle]").click();showPage("home")');
   assert.equal(await evaluate('document.documentElement.dataset.theme'), "dark");
-  assert.equal(await evaluate('getComputedStyle(document.querySelector(".mobile-nav")).display'), "grid");
-  assert.ok(await evaluate('document.querySelector(".mobile-nav").getBoundingClientRect().bottom <= innerHeight + 1'), "Navigation stays on screen after switching theme");
-  assert.ok(await evaluate('!!document.elementFromPoint(45,innerHeight-25).closest(".mobile-nav")'), "Toasts must not cover the navigation");
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".marketplace-header")).display'), "flex");
+  assert.ok(await evaluate('document.querySelector(".marketplace-header").getBoundingClientRect().bottom <= innerHeight + 1'), "Navigation stays on screen after switching theme");
+  assert.ok(await evaluate('!!document.elementFromPoint(45,25).closest(".marketplace-header")'), "Toasts must not cover the navigation");
   await screenshot("discover-dark-390");
   await evaluate('globalSearch.value="";renderMarketplace();openProviderProfile("akosua")');
   await checkWidth("390:provider-details");
@@ -669,7 +775,7 @@ async function main() {
   assert.ok(await evaluate('document.querySelector("#toast").textContent.includes("Review the booking details")'), "The request is blocked until the customer checks the review box");
   await evaluate('document.querySelector("#booking-modal").close();appUser=window.__previousAppUser;priceNegotiations=window.__previousNegotiations');
   await navigate("index.html?new=1");
-  assert.equal(await evaluate('document.querySelector(".side-nav [data-page=provider]").hidden'), true);
+  assert.equal(await evaluate('document.querySelector(".side-nav [data-page=provider]").hidden'), false);
   await evaluate('showPage("profile-settings");document.querySelector("#mode-switch").click()');
   assert.equal(await evaluate('document.querySelector("#service-modal").open'), true);
   await checkWidth("390:create-service"); await screenshot("add-service-390");
@@ -700,6 +806,8 @@ async function main() {
   await wait(150);
   assert.equal(await evaluate('JSON.parse(sessionStorage.getItem("onboarding-fixture")).onboarding_completed'), true);
   assert.equal(await evaluate('JSON.parse(sessionStorage.getItem("onboarding-fixture")).university'), "University of Ghana");
+  await verifyMobileTouch();
+  await verifyMarketplaceRedesign();
   await verifyPasswordRecoveryFlow();
   await verifyGrowthFlow();
   await verifyRequestPostingRetry();

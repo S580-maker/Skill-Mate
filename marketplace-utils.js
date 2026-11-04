@@ -4,12 +4,17 @@
   else root.skillmateMarketplace = utils;
 })(typeof window === "undefined" ? globalThis : window, function () {
   const categoryFamilies = {
+    Writing: ["Writing", "Writing & editing"],
+    "Tech Support": ["Tech Support", "Tech help"],
+    "Media & Editing": ["Media & Editing", "Photography"],
+    Events: ["Events", "Events & entertainment"],
+    Lifestyle: ["Lifestyle", "Hair & beauty", "Food", "Cleaning", "Laundry", "Fashion & tailoring", "Clothing alterations", "Fitness & wellness", "Errands & delivery", "Moving help"],
     Repairs: ["Repairs", "Appliance repair", "Bike repair", "Home maintenance"],
     "Fashion & tailoring": ["Fashion & tailoring", "Clothing alterations"],
     Cleaning: ["Cleaning", "Laundry"],
     "Errands & delivery": ["Errands & delivery", "Moving help"],
   };
-  const popularCategories = ["All", "Tech help", "Hair & beauty", "Tutoring", "Design", "Food"];
+  const popularCategories = ["All", "Tutoring", "Design", "Writing", "Tech Support", "Media & Editing", "Events", "Lifestyle"];
   function matchesCategory(category, selected) {
     return selected === "All" || (categoryFamilies[selected] || [selected]).includes(category);
   }
@@ -35,6 +40,7 @@
         groups: service.groups, deliveryMethod: service.deliveryMethod || "",
         estimatedDelivery: service.estimatedDelivery || "", priceType: service.priceType || "fixed",
         coverImagePath: service.coverImagePath || "", coverImage: service.coverImage || "",
+        createdAt: service.createdAt || "",
       })) : [provider];
     });
   }

@@ -21,7 +21,12 @@ const sessionCookieOptions = {
 
 app.disable("x-powered-by");
 app.set("trust proxy", process.env.TRUST_PROXY === "1");
-app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+// Allow framing (e.g. editor preview panes) outside production only.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  frameguard: process.env.NODE_ENV === "production" ? { action: "sameorigin" } : false
+}));
 app.use(express.json({ limit: "16kb" }));
 app.use(cookieParser());
 app.use(requestMetrics);

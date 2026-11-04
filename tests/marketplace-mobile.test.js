@@ -15,6 +15,23 @@ test("consolidated categories keep existing repair, laundry and tailoring listin
   assert.equal(matchesCategory("Food", "Repairs"), false);
 });
 
+test("marketplace navigation groups existing categories without changing listing data", () => {
+  for (const [listing, filter] of [["Tech help", "Tech Support"], ["Writing & editing", "Writing"], ["Photography", "Media & Editing"], ["Events & entertainment", "Events"], ["Hair & beauty", "Lifestyle"], ["Clothing alterations", "Lifestyle"], ["Food", "Lifestyle"]]) {
+    assert.ok(matchesCategory(listing, filter), `${listing} belongs to ${filter}`);
+  }
+  assert.equal(matchesCategory("Tutoring", "Tech Support"), false);
+  assert.equal(matchesCategory("Design", "Lifestyle"), false);
+});
+
+test("expanded services carry their own publication date without inheriting a provider's date", () => {
+  const rows = expandListings([{ id: "provider", createdAt: "2020-01-01" }], [
+    { id: "new", providerId: "provider", active: true, createdAt: "2026-01-01" },
+    { id: "undated", providerId: "provider", active: true },
+  ]);
+  assert.equal(rows[0].createdAt, "2026-01-01");
+  assert.equal(rows[1].createdAt, "");
+});
+
 test("every active service is discoverable while retaining the provider identity and its own booking ID", () => {
   const providers = [{ id: "p", name: "Student", service: "First listing", portfolio: ["Work"], coverImagePath: "first-cover" }];
   const services = [
