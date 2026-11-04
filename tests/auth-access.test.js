@@ -90,9 +90,10 @@ function otpFixture(fetchHandler = async () => ({ ok: false, json: async () => (
     console: { error() {} },
   };
   vm.createContext(context);
+  context.getResendRetryDelay = require("../auth-utils").getResendRetryDelay;
   vm.runInContext("let otpCountdownTimer = null;", context);
   vm.runInContext(source.slice(
-    source.indexOf("function getResendRetryDelay"),
+    source.indexOf("function startOtpCountdown"),
     source.indexOf("function showOtpChallenge"),
   ), context);
   vm.runInContext(source.slice(

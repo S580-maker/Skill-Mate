@@ -74,7 +74,7 @@ async function main() {
     await navigate();
     await evaluate('document.fonts.ready.then(() => true)');
     await wait(100);
-    assert.equal(await evaluate('document.fonts.check(\'400 14px "Poppins"\') && document.fonts.check(\'700 32px "Poppins"\')'), true, "Poppins loads locally");
+    assert.equal(await evaluate(`Array.from(document.fonts).some(f => f.family === "Plus Jakarta Sans" && f.status === "loaded") && [400,500,600,700,800].every(w => document.fonts.check(w + ' 14px "Plus Jakarta Sans"'))`), true, "Plus Jakarta Sans loads locally at all requested weights");
     assert.equal(await evaluate('location.pathname'), "/");
     const dimensions = await evaluate('({viewport:innerWidth,width:document.documentElement.scrollWidth})');
     assert.ok(dimensions.width <= width + 1, `${width}px: overflow ${JSON.stringify(dimensions)}`);

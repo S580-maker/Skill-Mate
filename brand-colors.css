@@ -1,0 +1,40 @@
+/* Shared brand palette. Status colors and theme behavior remain semantic. */
+:root {
+  --main:#102D72;
+  --accent:#102D72;
+  --dark:#102D72;
+  --bg:#F7F4EC;
+  --surface:#FFFFFF;
+  --nav-bg:#102D72;
+  --main-on-dark:#DCE4F3;
+  --on-dark:#F7F4EC;
+  --on-dark-muted:#DCE4F3;
+  --on-main:#F7F4EC;
+  --on-accent:#F7F4EC;
+  --blue:#102D72;
+  --blue-dark:#0C235A;
+  --paper:#F7F4EC;
+  --ink:#102D72;
+}
+:root[data-theme="dark"] {
+  --main:#9DB8F0;
+  --accent:#9DB8F0;
+  --dark:#F7F4EC;
+  --bg:#0B162E;
+  --surface:#142442;
+  --nav-bg:#102D72;
+  --on-main:#102D72;
+  --on-accent:#102D72;
+  --gold:#9DB8F0;
+  --gold-deep:#DCE4F3;
+  --gold-cream:#142442;
+  --gold-soft:#233758;
+}
+.auth-access { --auth-action:#102D72; --auth-action-hover:#0C235A; }
+.auth-access .auth-showcase { background:#102D72; }
+.auth-access .auth-showcase,.auth-access .showcase-copy h1 { color:#F7F4EC; }
+.auth-access .showcase-copy h1 em { color:#DCE4F3; }
+.discover-intro { background:linear-gradient(110deg,#163B8A,#102D72 90%); border-color:#102D72; }
+.offer-skill-card { background:linear-gradient(135deg,#163B8A,#102D72); }
+.aurora-blob--blue { background:radial-gradient(circle at 40% 40%,#102D7233,#102D7200 68%); }
+.aurora-blob--sky { background:radial-gradient(circle,#9DB8F033,#9DB8F000 70%); }

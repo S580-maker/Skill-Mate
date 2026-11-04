@@ -1,13 +1,13 @@
-/* Champagne-gold brand layer for the student dashboard. Loaded last by index.html. */
+/* Royal blue and soft cream brand layer for the student dashboard. Loaded last by index.html. */
 :root {
-  --gold:#d4af72;
-  --gold-deep:#8a6420;
-  --gold-soft:#f0dfbc;
-  --gold-cream:#fbf5e8;
-  --gold-line:#d4af7266;
-  --gold-glow:#d4af7240;
+  --gold:#102d72;
+  --gold-deep:#102d72;
+  --gold-soft:#e3e8f2;
+  --gold-cream:#f7f4ec;
+  --gold-line:#102d7266;
+  --gold-glow:#102d7240;
 }
-:root[data-theme="dark"] { --gold-deep:#e3c48d; --gold-cream:#1c2233; --gold-soft:#3a3120; }
+:root[data-theme="dark"] { --gold-deep:#dce4f3; --gold-cream:#1c2233; --gold-soft:#233758; }
 
 /* Sidebar */
 .sidebar { box-shadow:inset -1px 0 0 var(--gold-line); }
@@ -60,3 +60,7 @@
 
 /* Unrated providers have no star, so keep the first letter the normal colour */
 .rating.is-new::first-letter{color:inherit}
+
+.sidebar .nav-caption,.sidebar .nav-section-title,.sidebar .nav-count,
+.sidebar .campus-card > span:first-child,.sidebar .campus-avatar,.sidebar .trust-mini > span:first-child { color:#F7F4EC; }
+.safety-note-icon { color:#F7F4EC; }
