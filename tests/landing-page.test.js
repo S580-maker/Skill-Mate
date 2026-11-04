@@ -46,8 +46,8 @@ test("public homepage serves without a session while existing app routes remain 
 
 test("Vercel maps only the public root to the landing page and retains API rewrites", () => {
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, "../vercel.json"), "utf8"));
-  assert.deepEqual(config.rewrites.find(rule => rule.source === "/"), { source: "/", destination: "/landing.html" });
-  assert.ok(!config.redirects?.some(rule => rule.source === "/"));
+  assert.deepEqual(config.redirects.find(rule => rule.source === "/"), { source: "/", destination: "/landing.html", permanent: false });
+  assert.ok(!config.rewrites.some(rule => rule.source === "/"));
   assert.ok(config.rewrites.some(rule => rule.source === "/api/:path*" && rule.destination === "/api/index?path=:path*"));
   assert.ok(!config.rewrites.some(rule => rule.source === "/index.html" || rule.source === "/login.html"));
 });
