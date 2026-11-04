@@ -446,10 +446,34 @@ for (const scenario of ["healthy", "database failure", "restricted anonymous dat
   test(`health endpoint handles ${scenario}`, async () => {
     const context = {
       module: { exports: {} }, AbortSignal,
-      require: () => ({ getSupabaseConfig() {
-        if (scenario === "missing config") throw new Error("missing");
-        return { url: "https://test.invalid", anonKey: "public-key" };
-      } }),
+      require: (modulePath) => {
+        if (modulePath === "../supabase") return { getSupabaseConfig() {
+          if (scenario === "missing config") throw new Error("missing");
+          return { url: "https://test.invalid", anonKey: "public-key" };
+        } };
+        return { probeSupabase: async (config) => {
+          const check = async (path) => {
+            try {
+              const result = await context.fetch(`${config.url}${path}`);
+              if (result.ok) return { status: "ok", latencyMs: 1 };
+              if (path.startsWith("/rest/v1/") && result.status === 401) {
+                const body = await result.json();
+                if (body.code === "42501" && body.message === "permission denied for schema public") {
+                  return { status: "ok", latencyMs: 1 };
+                }
+              }
+              return { status: "unavailable", latencyMs: 1 };
+            } catch {
+              return { status: "unavailable", latencyMs: 1 };
+            }
+          };
+          const [auth, database] = await Promise.all([
+            check("/auth/v1/health"),
+            check("/rest/v1/profiles?select=id&limit=0"),
+          ]);
+          return { auth, database };
+        } };
+      },
       fetch: async url => {
         if (scenario === "timeout") throw new Error("timeout");
         if (scenario === "database failure" && url.includes("/rest/")) return { ok: false, status: 503 };

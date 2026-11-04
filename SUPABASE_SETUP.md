@@ -25,6 +25,10 @@ For existing projects, apply `supabase/migrations/20261102090000_otp_session_ver
 
 Configure `SUPABASE_SERVICE_ROLE_KEY` as a **server-only** environment variable for email OTP challenge/session storage and account closure. It must never be added to browser configuration, client-side environment variables, or public source control. Set it in the local server `.env` or the hosting provider's server environment (including Vercel Functions if deployed there). Account closure anonymizes the profile and authored content, deactivates listings, removes account storage files, replaces the account email, and permanently bans sign-in.
 
+Apply `supabase/migrations/20261107100000_marketplace_email_notifications.sql` after the initial schema and existing marketplace migrations, including `20261106100000_marketplace_growth.sql`. It adds a protected email outbox without storing message bodies, email addresses, or uploaded files. New messages are emailed only if still unread after 10 minutes; booking requests and status/time changes notify both participants. The sender checks each user's existing **Messages** and **Booking updates** preferences before delivery. Processed queue rows are automatically pruned after 7 days; terminal failures are pruned after 30 days.
+
+Apply `supabase/migrations/20261107110000_system_health_telemetry.sql` after the marketplace email migration on existing and new projects. It stores one compact database/storage/connection/auth-health sample every five minutes and automatically retains 30 days. The snapshots are inaccessible to browser roles.
+
 Support contact placeholders in the Help & Support page (`support@your-domain.example` and the WhatsApp number) should be replaced with your real support contact details before launch.
 
 New accounts must provide a university and student ID number. The ID number is stored in the private `student_identifiers` table and is readable only by its owner and administrators. This collects and stores the number; it does not check that the number is valid or confirm current enrollment. Do not describe an account as verified based on this field alone.
@@ -45,7 +49,7 @@ Deploy the updated application after the migration. If browser push notification
 
 ```powershell
 supabase functions deploy push-notification-webhook
-```
+  ```
 
 The existing `PUSH_DISPATCH_SECRET` and `PUSH_DISPATCH_URL` secrets are reused; do not put the provider's private minimum or a service-role key in the browser. The linked project's migration history has been reconciled against its existing schema. Before future database deployments, run `supabase migration list --linked` and `supabase db push --linked --dry-run`; do not replay `schema.sql` on an existing project.
 
@@ -146,13 +150,67 @@ Supabase Auth stores password verifiers using bcrypt with a unique random salt. 
    SMTP_USER=your-smtp-username
    SMTP_PASS=your-smtp-password
    SMTP_FROM=Skillmate <no-reply@your-domain.example>
+   CRON_SECRET=your-random-scheduler-secret
+   SUPABASE_DB_LIMIT_BYTES=your-plan-database-capacity-in-bytes
+   SUPABASE_STORAGE_LIMIT_BYTES=your-plan-storage-capacity-in-bytes
    VAPID_PUBLIC_KEY=your-vapid-public-key
    VAPID_PRIVATE_KEY=your-vapid-private-key
    VAPID_SUBJECT=mailto:admin@your-domain.example
    PUSH_DISPATCH_SECRET=your-random-webhook-secret
    ```
 
-  Use the Supabase **Project URL** and public **anon/publishable** key. Keep the service role key, OTP secret, and SMTP credentials server-only; never use them in client-side variables or frontend code. The app does not need a `PORT` variable on Vercel.
+  Use the Supabase **Project URL** and public **anon/publishable** key. Keep the service role key, OTP secret, SMTP credentials, and `CRON_SECRET` server-only; never use them in client-side variables or frontend code. Set `SUPABASE_DB_LIMIT_BYTES` and `SUPABASE_STORAGE_LIMIT_BYTES` to the limits for your current Supabase plan (bytes, positive integers); these are optional server-side configuration values, not Supabase credentials. The app does not need a `PORT` variable on Vercel.
+
+### Schedule marketplace email delivery
+
+The email worker is `POST /api/email-notifications` and requires the `CRON_SECRET` configured above. For dependable 10-minute unread checks on Vercel Hobby, schedule it from Supabase instead of adding a frequent Vercel Cron job:
+
+- In Supabase **Database → Extensions**, enable `pg_cron`, `pg_net`, and **Vault** if they are not already enabled.
+- In **Database → Vault**, create secrets named `skillmate_email_worker_url` (`https://your-domain.example/api/email-notifications`), `skillmate_system_health_url` (`https://your-domain.example/api/system-health-snapshot`), and `skillmate_email_worker_secret` (the exact `CRON_SECRET` value). Keep the token in Vault; do not commit it or paste it into application source.
+- In the Supabase SQL Editor, schedule the worker once:
+
+   ```sql
+   select cron.schedule(
+     'skillmate-marketplace-email',
+     '*/5 * * * *',
+     $$
+     select net.http_post(
+       url := (select decrypted_secret from vault.decrypted_secrets where name = 'skillmate_email_worker_url' limit 1),
+       headers := jsonb_build_object(
+         'Authorization',
+         'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'skillmate_email_worker_secret' limit 1)
+       ),
+       body := '{}'::jsonb
+     );
+     $$
+   );
+  ```
+
+  The queue delays message events for 10 minutes, so the five-minute schedule provides a short delivery window while coalescing notifications for each user. Database leases prevent overlapping runs from processing the same batch, and SMTP failures are retried with backoff. Do not schedule this endpoint more frequently than every five minutes.
+
+  Schedule the system-health collector once as well:
+
+  ```sql
+  select cron.schedule(
+    'skillmate-system-health',
+    '*/5 * * * *',
+    $$
+    select net.http_post(
+      url := (select decrypted_secret from vault.decrypted_secrets where name = 'skillmate_system_health_url' limit 1),
+      headers := jsonb_build_object(
+        'Authorization',
+        'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'skillmate_email_worker_secret' limit 1)
+      ),
+      body := '{}'::jsonb
+    );
+    $$
+  );
+  ```
+
+  The admin **System status** view shows live auth/database checks, measured database footprint, estimated bytes in Storage objects, active connections, probe latency, a 7-day sample history, and rule-based early warnings. It fits linear resource trends over the last 24 hours and warns at configured database/storage capacity thresholds or rising connection pressure; repeated auth/database probe failures and slow probes also alert. At least three samples are required for trend estimates. These signals can identify capacity/availability risk, not predict arbitrary code defects.
+
+  Supabase's Management API does not expose the project's plan quota limits. For that reason, the dashboard never guesses them: set the optional `SUPABASE_DB_LIMIT_BYTES` and `SUPABASE_STORAGE_LIMIT_BYTES` from your current plan to show quota percentages and runway forecasts. Actual observed database bytes and Storage object metadata are still shown without these limits; Storage bytes are an estimate and not a billing statement.
+
 3. Deploy the project. `vercel.json` routes the runtime Supabase configuration and session endpoints to Vercel Functions, and routes `/admin.html` through a server-side administrator-role check. The admin function includes the HTML file in its deployment bundle.
 4. Copy the final production domain from Vercel and add it to Supabase **Authentication → URL Configuration** as the Site URL. Add the exact production callback URLs shown above using your domain.
 5. Visit the Vercel URL, create/sign in to an account, and test the main marketplace and administrator route. Promote the intended admin account using the SQL in the next section.

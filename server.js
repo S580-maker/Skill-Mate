@@ -137,10 +137,13 @@ app.get("/api/push-config", (request, response) => {
   return handlePushConfig(request, response);
 });
 app.all("/api/push-subscriptions", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }, "push-subscriptions"), (request, response) => {
-app.all("/api/booking-reminders", require("./api/_lib/routes/booking-reminders"));
   const { handlePushSubscriptions } = require("./api/_lib/push");
   return handlePushSubscriptions(request, response);
 });
+app.all("/api/booking-reminders", require("./api/_lib/routes/booking-reminders"));
+app.all("/api/email-notifications", require("./api/_lib/routes/email-notifications"));
+app.get("/api/admin-observability", require("./api/_lib/routes/admin-observability"));
+app.all("/api/system-health-snapshot", require("./api/_lib/routes/system-health-snapshot"));
 app.post("/api/push-dispatch", (request, response) => {
   const { handlePushDispatch } = require("./api/_lib/push");
   return handlePushDispatch(request, response);

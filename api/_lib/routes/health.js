@@ -1,4 +1,5 @@
 const { getSupabaseConfig } = require("../supabase");
+const { probeSupabase } = require("../supabase-health");
 
 // Shared by the Vercel function and the Express route.
 module.exports = async function health(request, response) {
@@ -16,25 +17,10 @@ module.exports = async function health(request, response) {
       services: { auth: "unavailable", database: "unavailable" },
     });
   }
-  const check = async (path) => {
-    try {
-      const result = await fetch(`${config.url}${path}`, {
-        headers: { apikey: config.anonKey }, signal: AbortSignal.timeout(5000),
-      });
-      if (result.ok) return "ok";
-      if (path.startsWith("/rest/v1/") && result.status === 401) {
-        const body = await result.json();
-        if (body.code === "42501" && body.message === "permission denied for schema public") return "ok";
-      }
-      return "unavailable";
-    } catch { return "unavailable"; }
-  };
-  const [auth, database] = await Promise.all([
-    check("/auth/v1/health"), check("/rest/v1/profiles?select=id&limit=0"),
-  ]);
-  const healthy = auth === "ok" && database === "ok";
+  const services = await probeSupabase(config);
+  const healthy = services.auth.status === "ok" && services.database.status === "ok";
   return response.status(healthy ? 200 : 503).json({
     status: healthy ? "ok" : "degraded", supabaseConfigured: true,
-    services: { auth, database },
+    services: { auth: services.auth.status, database: services.database.status },
   });
 };

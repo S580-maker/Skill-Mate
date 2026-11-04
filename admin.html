@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=10" />
+    <link rel="stylesheet" href="styles.css?v=11" />
     <script src="theme.js?v=2"></script>
   </head>
   <body class="admin-locked">
@@ -317,6 +317,46 @@
                 <div><span>Supabase configuration</span><strong id="configuration-service-status">Checking…</strong></div>
               </div>
             </section>
+            <section class="panel operations-panel" aria-labelledby="operations-title">
+              <div class="panel-heading">
+                <div><h2 id="operations-title">Capacity &amp; failure signals</h2><p>Trend-based indicators from database telemetry; not a prediction of application-code defects.</p></div>
+                <button class="review-button" id="operations-refresh" type="button">Refresh telemetry</button>
+              </div>
+              <p class="operations-updated" id="operations-updated" role="status" aria-live="polite">Waiting for the first telemetry sample…</p>
+              <div class="operations-metrics" aria-label="Current Supabase resource usage">
+                <article class="operations-metric">
+                  <span>Database footprint</span><strong id="operations-database-usage">—</strong>
+                  <small id="operations-database-limit">Configured quota unavailable</small>
+                  <div class="operations-meter" id="operations-database-meter" hidden><span></span></div>
+                </article>
+                <article class="operations-metric">
+                  <span>Storage object bytes</span><strong id="operations-storage-usage">—</strong>
+                  <small id="operations-storage-limit">Configured quota unavailable</small>
+                  <div class="operations-meter" id="operations-storage-meter" hidden><span></span></div>
+                </article>
+                <article class="operations-metric">
+                  <span>Active database connections</span><strong id="operations-connections">—</strong>
+                  <small>Compared with PostgreSQL max_connections</small>
+                </article>
+                <article class="operations-metric">
+                  <span>Forecast quality</span><strong id="operations-sample-window">Insufficient history</strong>
+                  <small>5-minute samples; 24-hour trend window</small>
+                </article>
+              </div>
+              <div class="operations-alerts" id="operations-alerts" aria-live="polite">
+                <p>Enable the scheduled collector to build a baseline.</p>
+              </div>
+              <div class="operations-history-wrap">
+                <h3>Recent samples</h3>
+                <div class="operations-history-scroll">
+                  <table class="operations-history">
+                    <thead><tr><th scope="col">Sampled</th><th scope="col">Database</th><th scope="col">Storage</th><th scope="col">Connections</th><th scope="col">Auth / DB probe</th></tr></thead>
+                    <tbody id="operations-history"><tr><td colspan="5">No telemetry yet.</td></tr></tbody>
+                  </table>
+                </div>
+              </div>
+              <p class="operations-disclaimer">Usage is measured from PostgreSQL and Storage metadata. Supabase plan quotas are not exposed by the Management API; configure your plan limits server-side to enable quota percentages and runway estimates. Storage bytes are an object-metadata estimate, not a billing statement. Forecasts are deterministic trend/threshold alerts, not ML and not a substitute for application error tracking.</p>
+            </section>
             <footer class="page-footer"><span>© 2026 Skillmate. Built for student communities.</span></footer>
           </section>
         </div>
@@ -341,6 +381,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
     <script src="supabase-client.js?v=4"></script>
-    <script src="admin-auth.js?v=3-1"></script>
+    <script src="admin-auth.js?v=3-2"></script>
   </body>
 </html>

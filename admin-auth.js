@@ -87,6 +87,137 @@ async function refreshAdminSystemStatus() {
   }
 }
 
+function formatOperationsBytes(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes < 0) return "Unknown";
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const units = ["KB", "MB", "GB", "TB", "PB"];
+  let scaled = bytes;
+  let unitIndex = -1;
+  do {
+    scaled /= 1024;
+    unitIndex += 1;
+  } while (scaled >= 1024 && unitIndex < units.length - 1);
+  return `${scaled.toFixed(scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2)} ${units[unitIndex]}`;
+}
+
+function renderOperationsMeter(id, usage, limit, valueId, labelId) {
+  const meter = document.querySelector(`#${id}`);
+  const value = document.querySelector(`#${valueId}`);
+  const label = document.querySelector(`#${labelId}`);
+  const numericUsage = Number(usage);
+  const numericLimit = Number(limit);
+  value.textContent = formatOperationsBytes(numericUsage);
+  if (!Number.isFinite(numericLimit) || numericLimit <= 0) {
+    label.textContent = "Plan quota not configured";
+    meter.hidden = true;
+    return;
+  }
+  const percentage = Math.max(0, numericUsage / numericLimit * 100);
+  label.textContent = `${percentage.toFixed(1)}% of configured ${formatOperationsBytes(numericLimit)} limit`;
+  meter.hidden = false;
+  meter.setAttribute("aria-label", `${percentage.toFixed(1)} percent of configured quota used`);
+  meter.querySelector("span").style.width = `${Math.min(100, percentage)}%`;
+  meter.dataset.status = percentage >= 95 ? "critical" : percentage >= 80 ? "warning" : "ok";
+}
+
+function renderOperationsAlerts(analysis) {
+  const container = document.querySelector("#operations-alerts");
+  container.replaceChildren();
+  const alerts = analysis.alerts || [];
+  if (!alerts.length) {
+    const message = document.createElement("p");
+    message.textContent = analysis.sampleCount < 3
+      ? "No active capacity alert. At least 3 samples are needed before trend forecasts are available."
+      : "No configured capacity threshold is currently forecast to be crossed.";
+    container.append(message);
+    return;
+  }
+  for (const alert of alerts) {
+    const item = document.createElement("p");
+    item.className = "operations-alert";
+    item.dataset.severity = alert.severity;
+    item.textContent = `${alert.severity === "critical" ? "Critical" : "Warning"} · ${alert.message}`;
+    container.append(item);
+  }
+}
+
+function renderOperationsHistory(samples) {
+  const body = document.querySelector("#operations-history");
+  body.replaceChildren();
+  const recent = [...samples].sort((a, b) => Date.parse(b.sampled_at) - Date.parse(a.sampled_at)).slice(0, 12);
+  if (!recent.length) {
+    const row = body.insertRow();
+    const cell = row.insertCell();
+    cell.colSpan = 5;
+    cell.textContent = "No telemetry yet. Start the collector to record samples.";
+    return;
+  }
+  for (const sample of recent) {
+    const row = body.insertRow();
+    row.insertCell().textContent = new Date(sample.sampled_at).toLocaleString();
+    row.insertCell().textContent = formatOperationsBytes(sample.database_bytes);
+    row.insertCell().textContent = formatOperationsBytes(sample.storage_bytes);
+    row.insertCell().textContent = `${sample.active_connections} / ${sample.max_connections}`;
+    row.insertCell().textContent = `Auth ${sample.auth_ok ? "OK" : "FAIL"} · DB ${sample.database_ok ? "OK" : "FAIL"}`;
+  }
+}
+
+async function refreshAdminOperations() {
+  const button = document.querySelector("#operations-refresh");
+  const updated = document.querySelector("#operations-updated");
+  const activityView = document.querySelector("#activity");
+  if (!activityView || activityView.hidden || document.visibilityState === "hidden") return;
+  if (button) button.disabled = true;
+  updated.textContent = "Loading database telemetry…";
+  try {
+    const response = await fetch("/api/admin-observability", { cache: "no-store", credentials: "same-origin" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `Telemetry request failed (${response.status}).`);
+    const analysis = result.analysis;
+    const current = analysis?.current;
+    if (!current) {
+      updated.textContent = "No telemetry samples yet. Apply the system telemetry migration and schedule its collector.";
+      renderOperationsAlerts({ alerts: [], sampleCount: 0 });
+      renderOperationsHistory([]);
+      return;
+    }
+
+    renderOperationsMeter(
+      "operations-database-meter",
+      current.database_bytes,
+      result.limits?.databaseBytes,
+      "operations-database-usage",
+      "operations-database-limit",
+    );
+    renderOperationsMeter(
+      "operations-storage-meter",
+      current.storage_bytes,
+      result.limits?.storageBytes,
+      "operations-storage-usage",
+      "operations-storage-limit",
+    );
+    document.querySelector("#operations-connections").textContent =
+      `${current.active_connections} / ${current.max_connections}`;
+    document.querySelector("#operations-sample-window").textContent = analysis.sampleCount >= 3
+      ? `${analysis.sampleCount} samples · ${analysis.windowHours.toFixed(1)}h`
+      : `Insufficient history · ${analysis.sampleCount}/3`;
+    updated.textContent = `Latest sample ${new Date(current.sampled_at).toLocaleString()} · Auth ${current.auth_ok ? "OK" : "FAIL"} (${current.auth_probe_ms}ms) · DB ${current.database_ok ? "OK" : "FAIL"} (${current.database_probe_ms}ms)`;
+    renderOperationsAlerts(analysis);
+    renderOperationsHistory(result.samples || []);
+  } catch (error) {
+    console.error("Could not load capacity and failure signals.", error);
+    updated.textContent = error.message || "System telemetry is temporarily unavailable.";
+    const alert = document.createElement("p");
+    alert.className = "operations-alert";
+    alert.dataset.severity = "warning";
+    alert.textContent = "Check that the telemetry migration is applied, the server role key is configured, and the five-minute collector is scheduled.";
+    document.querySelector("#operations-alerts").replaceChildren(alert);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function fetchSupportTickets() {
   const status = document.querySelector("#support-queue-status");
   const rows = document.querySelector("#support-ticket-rows");
@@ -370,6 +501,17 @@ async function protectAdminDashboard() {
     adminStatus.hidden = true;
     refreshAdminSystemStatus();
     window.setInterval(refreshAdminSystemStatus, 60000);
+    refreshAdminOperations();
+    window.setInterval(refreshAdminOperations, 300000);
+    document.querySelector("#operations-refresh")?.addEventListener("click", refreshAdminOperations);
+    window.addEventListener("hashchange", () => {
+      if (window.location.hash === "#activity") refreshAdminOperations();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && window.location.hash === "#activity") {
+        refreshAdminOperations();
+      }
+    });
     const studentDashboardLink = document.createElement("a");
     studentDashboardLink.href = "index.html";
     studentDashboardLink.className = "student-dashboard-link";
