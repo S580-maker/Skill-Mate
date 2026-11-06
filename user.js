@@ -3203,6 +3203,35 @@ function openMessage(providerId, messageFor = "provider", serviceId) {
   document.querySelector("#message-first-text").value = "";
   openModal("message-modal");
 }
+function openProviderConversation(providerId) {
+  const provider = getProvider(providerId);
+  if (!provider || state.blocked.includes(providerId)) { showToast("You can’t message this student."); return; }
+  runAction(async () => {
+    let chat = state.messages.find((item) => item.providerId === providerId);
+    if (!chat) {
+      if (appSupabase) {
+        const { data: conversationId, error } = await appSupabase.rpc("start_conversation", {
+          p_other_user_id: providerId,
+          p_booking_id: null,
+        });
+        if (error) throw error;
+        await refreshSupabaseState();
+        chat = state.messages.find((item) => item.id === conversationId || item.providerId === providerId);
+        if (!chat) {
+          chat = { id: conversationId, providerId, name: provider.name, messages: [] };
+          state.messages.unshift(chat);
+        }
+      } else {
+        chat = { id: `chat-${providerId}-${Date.now()}`, providerId, name: provider.name, messages: [] };
+        state.messages.unshift(chat);
+      }
+    }
+    setActiveConversation(chat.id);
+    pendingReplyId = null;
+    showPage("messages", { openConversation: true });
+    document.querySelector('#chat-panel [name="message"]')?.focus();
+  }, "Could not open this conversation.", "Opening conversation…");
+}
 async function startConversation(providerId, text) {
   if (appSupabase) {
     let otherUserId = providerId;
@@ -3565,14 +3594,14 @@ document.querySelector("#provider-detail-modal").addEventListener("click", (even
   const button = event.target.closest("[data-book], [data-message], [data-report]");
   if (!button) return;
   if (button.dataset.book) { document.querySelector("#provider-detail-modal").close(); openBooking(button.dataset.book, button.dataset.service); }
-  if (button.dataset.message) { document.querySelector("#provider-detail-modal").close(); openMessage(button.dataset.message, "provider", button.dataset.service); }
+  if (button.dataset.message) { document.querySelector("#provider-detail-modal").close(); openProviderConversation(button.dataset.message); }
   if (button.dataset.report) openReport(button.dataset.report);
 });
 function handleCardAction(event) {
   const button = event.target.closest("button");
   if (!button) return;
   if (button.dataset.book) openBooking(button.dataset.book, button.dataset.service);
-  if (button.dataset.message) openMessage(button.dataset.message, "provider", button.dataset.service);
+  if (button.dataset.message) openProviderConversation(button.dataset.message);
   if (button.dataset.report) openReport(button.dataset.report);
   if (button.dataset.profile) {
     void openProviderProfile(button.dataset.profile, button.dataset.service).catch((error) => {
