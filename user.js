@@ -118,7 +118,6 @@ let negotiationBackendAvailable = true;
 let pendingReplyId = null;
 let messageMetadataAvailable = null;
 let messageMetadataWarningShown = false;
-let realtimeFallbackNoticeShown = false;
 const chatDrafts = new Map();
 const chatNegotiationServiceSelection = new Map();
 const conversationsOpeningNegotiation = new Set();
@@ -132,6 +131,7 @@ const realtimeFallbackChatIds = new Set();
 const messageChannelRetryTimers = new Map();
 const messageChannelRetryAttempts = new Map();
 const messagePresence = new Map();
+const messageConnectionStatusTimers = new Map();
 const conversationMessageRefreshes = new Set();
 const conversationMessageRefreshTimes = new Map();
 const hiddenMessageIds = new Set();
@@ -648,6 +648,8 @@ function unreadMessageCount(chat) {
 }
 function currentChatStatus(chat) {
   const presence = messagePresence.get(chat.id);
+  if (presence?.connection === "connecting") return "Connecting…";
+  if (presence?.connection === "restored") return "Connection restored";
   if (presence?.typing) return "typing…";
   if (presence?.online) return "online";
   const lastSeen = [...chat.messages].reverse().find((message) => message.senderId && message.senderId !== appUser?.id)?.createdAt;
@@ -662,13 +664,23 @@ function renderChatHeaderStatus() {
   const status = document.querySelector("#chat-status");
   if (!chat || !status) return;
   const presence = messagePresence.get(chat.id);
+  const header = status.closest(".chat-header");
   status.textContent = currentChatStatus(chat);
-  status.dataset.status = presence?.online ? "online" : presence?.typing ? "typing" : "offline";
+  status.dataset.status = presence?.connection || (presence?.online ? "online" : presence?.typing ? "typing" : "offline");
+  if (header) header.dataset.connection = presence?.connection || "connected";
+}
+function clearChatConnectionStatusTimer(chatId) {
+  const timer = messageConnectionStatusTimers.get(chatId);
+  if (timer !== undefined) {
+    window.clearTimeout(timer);
+    messageConnectionStatusTimers.delete(chatId);
+  }
 }
 function retryMessageChannel(chatId, channel) {
   if (messageChannels.get(chatId) !== channel) return;
   messageChannels.delete(chatId);
-  messagePresence.delete(chatId);
+  clearChatConnectionStatusTimer(chatId);
+  setChatPresenceStatus(chatId, { online: false, typing: false, connection: "connecting" });
   realtimeFallbackChatIds.add(chatId);
   const attempt = messageChannelRetryAttempts.get(chatId) || 0;
   const delay = Math.min(30000, 1000 * (2 ** attempt));
@@ -701,6 +713,7 @@ function syncMessageChannels() {
     if (!activeIds.has(id)) {
       messageChannels.delete(id);
       messagePresence.delete(id);
+      clearChatConnectionStatusTimer(id);
       appSupabase.removeChannel(channel).then((status) => {
         if (status !== "ok") console.warn("Could not remove an inactive Skillmate chat channel.", status, id);
       }).catch((error) => console.error("Could not clean up an inactive Skillmate chat channel.", error, id));
@@ -708,6 +721,7 @@ function syncMessageChannels() {
   }
   for (const chat of conversations) {
     if (messageChannels.has(chat.id) || messageChannelRetryTimers.has(chat.id)) continue;
+    setChatPresenceStatus(chat.id, { connection: "connecting" });
     const channel = appSupabase.channel(`skillmate-chat:${chat.id}`, { config: { private: true, presence: { key: appUser.id } } })
       .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${chat.id}` }, (payload) => {
         const delivery = payload.eventType === "INSERT" && payload.new?.sender_id !== appUser.id
@@ -738,7 +752,14 @@ function syncMessageChannels() {
         if (status === "SUBSCRIBED") {
           messageChannelRetryAttempts.delete(chat.id);
           realtimeFallbackChatIds.delete(chat.id);
-          realtimeFallbackNoticeShown = false;
+          clearChatConnectionStatusTimer(chat.id);
+          setChatPresenceStatus(chat.id, { connection: "restored" });
+          messageConnectionStatusTimers.set(chat.id, window.setTimeout(() => {
+            messageConnectionStatusTimers.delete(chat.id);
+            if (messagePresence.get(chat.id)?.connection === "restored") {
+              setChatPresenceStatus(chat.id, { connection: null });
+            }
+          }, 3000));
           const { error } = await channel.track({ user_id: appUser.id, typing: false, online_at: new Date().toISOString() });
           if (error) console.error("Could not publish Skillmate chat presence.", error);
           try {
@@ -751,10 +772,6 @@ function syncMessageChannels() {
           }
         } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
           console.warn(`Skillmate chat realtime channel ${status.toLowerCase()}; fallback polling is enabled while it reconnects.`, chat.id, error || "");
-          if (!realtimeFallbackNoticeShown) {
-            realtimeFallbackNoticeShown = true;
-            showToast("Live chat updates are unavailable. Messages will refresh periodically until the connection returns.");
-          }
           retryMessageChannel(chat.id, channel);
         }
       });
@@ -1555,7 +1572,9 @@ function renderChat(options = {}) {
   const status = document.createElement("small");
   status.id = "chat-status";
   status.textContent = currentChatStatus(chat);
-  status.dataset.status = messagePresence.get(chat.id)?.online ? "online" : "offline";
+  const connection = messagePresence.get(chat.id)?.connection;
+  status.dataset.status = connection || (messagePresence.get(chat.id)?.online ? "online" : "offline");
+  header.dataset.connection = connection || "connected";
   contact.append(name, status);
   const menu = document.createElement("details");
   menu.className = "chat-header-menu";
@@ -3215,10 +3234,10 @@ function openProviderConversation(providerId) {
           p_booking_id: null,
         });
         if (error) throw error;
-        await refreshSupabaseState();
-        chat = state.messages.find((item) => item.id === conversationId || item.providerId === providerId);
+        chat = state.messages.find((item) => item.id === conversationId);
         if (!chat) {
-          chat = { id: conversationId, providerId, name: provider.name, messages: [] };
+          const messages = await loadConversationMessages(conversationId, provider.name);
+          chat = { id: conversationId, providerId, name: provider.name, messages };
           state.messages.unshift(chat);
         }
       } else {

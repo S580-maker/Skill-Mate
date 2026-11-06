@@ -8,7 +8,12 @@ const start = source.indexOf("function openProviderConversation(");
 const end = source.indexOf("async function startConversation(", start);
 const openProviderConversationSource = source.slice(start, end);
 
-function createContext({ messages = [], appSupabase = null, refreshSupabaseState = async () => {} } = {}) {
+function createContext({
+  messages = [],
+  appSupabase = null,
+  loadConversationMessages = async () => [],
+  refreshSupabaseState = async () => {},
+} = {}) {
   const actions = [];
   let activeConversationId = null;
   let activePage = null;
@@ -19,6 +24,7 @@ function createContext({ messages = [], appSupabase = null, refreshSupabaseState
     state: { messages, blocked: [] },
     getProvider: id => id === provider.id ? provider : null,
     runAction: action => actions.push(action()),
+    loadConversationMessages,
     refreshSupabaseState,
     setActiveConversation: id => { activeConversationId = id; },
     showPage: (page, options) => { activePage = { page, options }; },
@@ -69,13 +75,24 @@ test("provider message action reuses an existing chat", async () => {
 
 test("provider message action creates a conversation in Supabase without sending a message", async () => {
   const rpcCalls = [];
+  let messageLoads = 0;
+  let dashboardRefreshes = 0;
   const appSupabase = {
     rpc: async (...args) => {
       rpcCalls.push(args);
       return { data: "conversation-1", error: null };
     },
   };
-  const fixture = createContext({ appSupabase });
+  const fixture = createContext({
+    appSupabase,
+    loadConversationMessages: async (id, name) => {
+      messageLoads++;
+      assert.equal(id, "conversation-1");
+      assert.equal(name, "Provider");
+      return [{ id: "message-1", text: "Hello" }];
+    },
+    refreshSupabaseState: async () => { dashboardRefreshes++; },
+  });
 
   fixture.context.openProviderConversation("provider-1");
   await Promise.all(fixture.actions);
@@ -86,6 +103,26 @@ test("provider message action creates a conversation in Supabase without sending
   assert.equal(rpcCalls[0][1].p_booking_id, null);
   assert.equal(fixture.context.state.messages.length, 1);
   assert.equal(fixture.context.state.messages[0].id, "conversation-1");
-  assert.equal(fixture.context.state.messages[0].messages.length, 0);
+  assert.equal(fixture.context.state.messages[0].messages[0].text, "Hello");
+  assert.equal(messageLoads, 1);
+  assert.equal(dashboardRefreshes, 0);
   assert.equal(fixture.activeConversation(), "conversation-1");
+});
+
+test("provider chat opening is not blocked by an unrelated dashboard refresh failure", async () => {
+  const appSupabase = {
+    rpc: async () => ({ data: "conversation-1", error: null }),
+  };
+  const fixture = createContext({
+    appSupabase,
+    loadConversationMessages: async () => [],
+    refreshSupabaseState: async () => { throw new Error("unrelated dashboard data failed"); },
+  });
+
+  fixture.context.openProviderConversation("provider-1");
+  await Promise.all(fixture.actions);
+
+  assert.equal(fixture.context.state.messages[0].id, "conversation-1");
+  assert.equal(fixture.activeConversation(), "conversation-1");
+  assert.equal(fixture.activePage().page, "messages");
 });

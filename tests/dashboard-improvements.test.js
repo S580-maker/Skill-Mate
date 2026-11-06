@@ -314,10 +314,12 @@ test("booking status appears immediately and reverts when Supabase rejects the u
 
 test("chat realtime subscribes only to the open conversation and refreshes the thread only while disconnected", async () => {
   const source = read("user.js");
-  const start = source.indexOf("function retryMessageChannel(");
+  const start = source.indexOf("function clearChatConnectionStatusTimer(");
   const end = source.indexOf("\nasync function broadcastTyping", start);
   const channels = new Map();
   const timers = new Map();
+  const presence = new Map();
+  const toasts = [];
   const intervalCalls = [];
   let nextTimer = 1;
   let messageRefreshes = 0;
@@ -343,18 +345,21 @@ test("chat realtime subscribes only to the open conversation and refreshes the t
     ], blocked: [] },
     activeConversationId: "open-chat",
     messageChannels: new Map(),
-    messagePresence: new Map(),
     messageChannelRetryTimers: new Map(),
     messageChannelRetryAttempts: new Map(),
+    messageConnectionStatusTimers: new Map(),
+    messagePresence: presence,
     realtimeFallbackChatIds: new Set(),
     presenceTypingTimers: new Map(),
-    realtimeFallbackNoticeShown: false,
     document: { hidden: false },
     dashboardDataLoaded: true,
     pendingActionCount: 0,
     activityRefreshInProgress: false,
     console: { warn() {}, error() {} },
-    showToast() {},
+    showToast(message) { toasts.push(message); },
+    setChatPresenceStatus(chatId, status) {
+      presence.set(chatId, { ...(presence.get(chatId) || {}), ...status });
+    },
     markConversationMessagesDelivered: async () => {},
     markConversationMessagesRead: async () => {},
     refreshLiveMessages: async () => { messageRefreshes++; },
@@ -370,6 +375,8 @@ test("chat realtime subscribes only to the open conversation and refreshes the t
   const firstChannel = channels.get("skillmate-chat:open-chat");
   await firstChannel.statusCallback("CHANNEL_ERROR", new Error("offline"));
   assert.ok(context.realtimeFallbackChatIds.has("open-chat"));
+  assert.equal(presence.get("open-chat").connection, "connecting");
+  assert.equal(toasts.length, 0, "connection recovery should not interrupt the user with a toast");
   assert.equal([...timers.values()][0].delay, 1000);
   const refreshStart = source.indexOf("async function refreshLiveActivity()");
   const refreshEnd = source.indexOf("function initialsFor", refreshStart);
@@ -381,6 +388,8 @@ test("chat realtime subscribes only to the open conversation and refreshes the t
   const recoveredChannel = channels.get("skillmate-chat:open-chat");
   await recoveredChannel.statusCallback("SUBSCRIBED");
   assert.equal(context.realtimeFallbackChatIds.has("open-chat"), false);
+  assert.equal(presence.get("open-chat").connection, "restored");
+  assert.equal([...timers.values()].at(-1).delay, 3000);
   await context.refreshLiveActivity();
   assert.equal(messageRefreshes, 1);
 });
