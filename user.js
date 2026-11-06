@@ -1076,6 +1076,9 @@ function publishServiceToMarketplace(service) {
   renderMarketplace();
 }
 window.skillmateOnServicePublished = publishServiceToMarketplace;
+function latestMarketplaceListings(listings) {
+  return listings.slice(0, 2);
+}
 function renderMarketplace(targetId = "marketplace-grid", providers = appSupabase ? connectedProviders : seedProviders) {
   const target = document.getElementById(targetId);
   if (!target) return;
@@ -1101,7 +1104,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   ));
   const newestFirst = targetId === "recent-grid" || document.querySelector('#marketplace-filters [name="sort"]')?.value === "newest";
   if (newestFirst && targetId !== "saved-grid") visible.sort((left, right) => (Date.parse(right.createdAt) || 0) - (Date.parse(left.createdAt) || 0));
-  if (targetId === "recent-grid") visible.splice(4);
+  if (targetId === "recent-grid") visible = latestMarketplaceListings(visible);
   if (targetId === "marketplace-grid") {
     document.querySelector("#marketplace-result-count").textContent = `${visible.length} ${visible.length === 1 ? "service" : "services"}`;
     document.querySelector("#marketplace-heading").textContent = query ? "Search results" : newestFirst ? "Recently Added" : selectedCategory === "All" ? "Featured Services" : selectedCategory;

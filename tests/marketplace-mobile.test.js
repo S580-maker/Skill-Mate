@@ -32,6 +32,23 @@ test("expanded services carry their own publication date without inheriting a pr
   assert.equal(rows[1].createdAt, "");
 });
 
+test("Recently Added shows only the two newest listings", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "user.js"), "utf8");
+  const start = source.indexOf("function latestMarketplaceListings(");
+  const end = source.indexOf("\nfunction renderMarketplace(", start);
+  const context = {};
+  vm.createContext(context);
+  vm.runInContext(source.slice(start, end), context);
+  const listings = [
+    { id: "newest" },
+    { id: "second-newest" },
+    { id: "third-newest" },
+  ];
+
+  assert.deepEqual(context.latestMarketplaceListings(listings).map(listing => listing.id), ["newest", "second-newest"]);
+  assert.equal(listings.length, 3, "limiting Recently Added must not mutate the marketplace listings");
+});
+
 test("every active service is discoverable while retaining the provider identity and its own booking ID", () => {
   const providers = [{ id: "p", name: "Student", service: "First listing", portfolio: ["Work"], coverImagePath: "first-cover" }];
   const services = [
