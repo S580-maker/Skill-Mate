@@ -25,10 +25,12 @@ test("marketplace navigation groups existing categories without changing listing
 
 test("expanded services carry their own publication date without inheriting a provider's date", () => {
   const rows = expandListings([{ id: "provider", createdAt: "2020-01-01" }], [
-    { id: "new", providerId: "provider", active: true, createdAt: "2026-01-01" },
+    { id: "new", providerId: "provider", active: true, createdAt: "2026-01-01", priceType: "range", minimumPrice: 20 },
     { id: "undated", providerId: "provider", active: true },
   ]);
   assert.equal(rows[0].createdAt, "2026-01-01");
+  assert.equal(rows[0].minimumPrice, 20);
+  assert.equal(rows[0].priceType, "range");
   assert.equal(rows[1].createdAt, "");
 });
 

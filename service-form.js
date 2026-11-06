@@ -68,9 +68,20 @@
   }
   function updateNegotiationFields() {
     const mode = form.querySelector('[name="service-negotiation-mode"]:checked')?.value || "";
-    const needsMinimum = mode === "negotiation" || mode === "hybrid";
+    const isRange = mode === "range";
+    const needsMinimum = ["negotiation", "hybrid", "range"].includes(mode);
     byId("minimum-price-field").hidden = !needsMinimum;
     byId("minimum-price").required = needsMinimum;
+    byId("price-label").textContent = isRange ? "Highest price (GH₵)" : "Listed price (GH₵)";
+    byId("price-hint").textContent = isRange
+      ? "This is the high end of your public range. The service description should explain what this estimate covers."
+      : mode === "fixed"
+        ? "The price covers the scope described above."
+        : "This is the listed price. Your minimum stays private.";
+    byId("minimum-price-label").textContent = isRange ? "Lowest price in range (GH₵)" : "Minimum acceptable price (GH₵)";
+    byId("minimum-price-hint").textContent = isRange
+      ? "Public. Students will see this as the low end of your range."
+      : "Private. Offers below this amount cannot be accepted.";
   }
   async function checkSchema(token) {
     if (!appSupabase) return;
@@ -130,7 +141,9 @@
       ? "This is the final price for the scope described above."
       : mode === "negotiation"
         ? "Discuss price in chat or make a formal offer. Your minimum stays private; the listed service scope stays the same."
-        : "Negotiate price and service scope. Your minimum stays private; use the offer note to record agreed changes.";
+        : mode === "range"
+          ? "Set a public low and high estimate. Customers requesting extras will receive a specific quote before they book."
+          : "Discuss a custom price and scope in chat. Your minimum stays private.";
   }
   function setReview(value, focus = true) {
     reviewing = value;
@@ -145,10 +158,12 @@
       byId("review-name").textContent = draft.title;
       byId("review-category").textContent = draft.category;
       byId("review-description").textContent = draft.description;
-      byId("review-price").textContent = currency(draft.price);
+      byId("review-price").textContent = draft.negotiationMode === "range"
+        ? `${currency(draft.minimumPrice)}–${currency(draft.price)}`
+        : currency(draft.price);
       byId("review-symbol").textContent = getCategoryIcon(draft.category);
       const tags = [utils.deliveryLabels[draft.deliveryMethod], draft.estimatedDelivery, draft.groups && "Groups welcome"].filter(Boolean);
-      tags.push({ fixed: "Fixed Price", negotiation: "Negotiable", hybrid: "Negotiable · price & scope" }[draft.negotiationMode]);
+      tags.push({ fixed: "Fixed Price", negotiation: "Negotiable", hybrid: "Negotiable", range: "Price range" }[draft.negotiationMode]);
       byId("review-tags").replaceChildren(...tags.map(text => {
         const tag = document.createElement("span"); tag.textContent = text; return tag;
       }));
@@ -169,6 +184,12 @@
       negotiationMode: form.querySelector('[name="service-negotiation-mode"]:checked')?.value || "",
       minimumPrice: byId("minimum-price").value,
     };
+  }
+  function savedNegotiationMode(draft) {
+    if (draft.negotiationMode === "range") return "hybrid";
+    if (existing?.negotiationMode === "hybrid" && existing.priceType !== "range"
+        && draft.negotiationMode === "negotiation") return "hybrid";
+    return draft.negotiationMode;
   }
   function validate() {
     clearErrors();
@@ -202,10 +223,11 @@
     byId("category").value = service?.category || serviceCategories[0];
     byId("description").value = service?.description || "";
     byId("price").value = service?.price ?? "";
-    const mode = utils.normalizeNegotiationMode(service?.negotiationMode || service?.negotiation_mode);
+    const storedMode = utils.normalizeNegotiationMode(service?.negotiationMode || service?.negotiation_mode);
+    const mode = service?.priceType === "range" ? "range" : storedMode === "hybrid" ? "negotiation" : storedMode;
     const selectedMode = form.querySelector(`[name="service-negotiation-mode"][value="${mode}"]`);
     if (selectedMode) selectedMode.checked = true;
-    byId("minimum-price").value = "";
+    byId("minimum-price").value = service?.minimumPrice ?? "";
     byId("delivery").value = service?.deliveryMethod || "";
     byId("estimate").value = service?.estimatedDelivery || "";
     byId("group").checked = Boolean(service?.groups);
@@ -345,18 +367,23 @@
           p_delivery_method: payload.delivery_method || null,
           p_estimated_delivery: payload.estimated_delivery || null,
           p_price_type: payload.price_type || "fixed",
-          p_mode: draft.negotiationMode,
-          p_minimum_price: ["negotiation", "hybrid"].includes(draft.negotiationMode) ? Number(draft.minimumPrice) : null,
+          p_mode: savedNegotiationMode(draft),
+          p_minimum_price: ["negotiation", "hybrid", "range"].includes(draft.negotiationMode) ? Number(draft.minimumPrice) : null,
         });
         const data = Array.isArray(result) ? result[0] : result;
         if (error || !data) throw new Error("We couldn't save your service and negotiation settings. Check your connection and try again. Your details are still here.");
         saved = { id: data.id, title: data.title, category: data.category, price: Number(data.price), description: data.description,
           providerId: appUser.id, currency: data.currency || "GHS", createdAt: data.created_at || existing?.createdAt || new Date().toISOString(),
-          groups: data.accepts_groups, active: data.is_active, ...utils.metadata(data), negotiationMode: draft.negotiationMode };
+          groups: data.accepts_groups, active: data.is_active, ...utils.metadata(data),
+          negotiationMode: savedNegotiationMode(draft),
+          minimumPrice: draft.negotiationMode === "range" ? Number(draft.minimumPrice) : null };
         unusedCoverCandidates.delete(saved.coverImagePath);
         if (existing?.coverImagePath && existing.coverImagePath !== saved.coverImagePath) unusedCoverCandidates.add(existing.coverImagePath);
       } else {
-        saved = { id: draftId, ...draft, price: Number(draft.price), active: existing?.active ?? true,
+        saved = { id: draftId, ...draft, negotiationMode: savedNegotiationMode(draft),
+          priceType: draft.negotiationMode === "range" ? "range" : "fixed",
+          minimumPrice: ["negotiation", "hybrid", "range"].includes(draft.negotiationMode) ? Number(draft.minimumPrice) : null,
+          price: Number(draft.price), active: existing?.active ?? true,
           coverImage: coverFile ? await readImage(coverFile) : coverUrl };
         const nextServices = [saved, ...state.services.filter(service => service.id !== saved.id)];
         // Let storage failures reach the form rather than claiming the draft was saved.

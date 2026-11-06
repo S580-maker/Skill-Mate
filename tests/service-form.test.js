@@ -18,7 +18,7 @@ test("service validation accepts decimal prices and rejects invalid prices, cate
   for (const name of ["title", "category", "description", "delivery", "estimate"]) assert.ok(errors[name]);
 });
 
-test("service negotiation mode is required and private minimums must be valid", () => {
+test("pricing mode is required and price minimums or range bounds must be valid", () => {
   assert.ok(utils.validate({ ...valid(), negotiationMode: "" }, ["Design"], true)["negotiation-mode"]);
   assert.deepEqual(utils.validate({ ...valid(), negotiationMode: "fixed" }, ["Design"], true), {});
   assert.deepEqual(utils.validate({ ...valid(), negotiationMode: "negotiation", minimumPrice: "12.50" }, ["Design"], true), {});
@@ -26,10 +26,13 @@ test("service negotiation mode is required and private minimums must be valid", 
     assert.ok(utils.validate({ ...valid(), negotiationMode: "hybrid", minimumPrice }, ["Design"], true)["minimum-price"]);
   }
   assert.deepEqual(utils.validate({ ...valid(), negotiationMode: "hybrid", minimumPrice: "12.50" }, ["Design"], true), {});
+  assert.deepEqual(utils.validate({ ...valid(), negotiationMode: "range", minimumPrice: "12.50" }, ["Design"], true), {});
+  assert.ok(utils.validate({ ...valid(), negotiationMode: "range", minimumPrice: "35.51" }, ["Design"], true)["minimum-price"]);
   assert.equal(utils.normalizeNegotiationMode("controlled"), "negotiation");
   assert.equal(utils.normalizeNegotiationMode("chat"), "negotiation");
   assert.equal(utils.normalizeNegotiationMode("fixed"), "fixed");
   assert.equal(utils.metadata({ price_type: "starting" }).priceType, "fixed");
+  assert.equal(utils.metadata({ price_type: "range", price_range_min: 12 }).minimumPrice, 12);
 });
 
 test("legacy service payloads contain only existing columns; migrated payloads preserve every new field", () => {
@@ -127,7 +130,7 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
   const opener = element("opener");
   let saveFails = failSave;
   const form = get("form");
-  const negotiationModeValues = ["fixed", "negotiation", "hybrid"];
+  const negotiationModeValues = ["fixed", "negotiation", "range"];
   const negotiationModes = negotiationModeValues.map(value => {
     const radio = element(`service-negotiation-mode-${value}`);
     radio.value = value;
@@ -246,6 +249,18 @@ test("Fixed Price listings save without a private minimum", async () => {
   assert.equal(f.rpcCalls[0].args.p_minimum_price, null);
 });
 
+test("price ranges publish a public low and high bound using the scoped quote workflow", async () => {
+  const f = fixture(); await f.prepare(); f.fill();
+  f.get("negotiation-mode-negotiation").checked = false;
+  f.get("negotiation-mode-range").checked = true;
+  await f.get("form").fire("submit"); await f.get("form").fire("submit");
+  assert.equal(f.writes[0].payload.price_type, "range");
+  assert.equal(f.rpcCalls[0].args.p_mode, "hybrid");
+  assert.equal(f.rpcCalls[0].args.p_minimum_price, 20);
+  assert.equal(f.publishedServices[0].priceType, "range");
+  assert.equal(f.publishedServices[0].minimumPrice, 20);
+});
+
 test("pricing type is saved independently for each service", async () => {
   const f = fixture();
   await f.prepare({ id: "fixed-service", negotiationMode: "fixed" });
@@ -282,7 +297,7 @@ test("editing a listing restores its negotiation mode and private minimum", asyn
   const f = fixture();
   await f.prepare({ id: "existing-id", title: "Existing service", category: "Design", price: 50,
     description: "Existing description", negotiationMode: "hybrid" });
-  assert.equal(f.get("negotiation-mode-hybrid").checked, true);
+  assert.equal(f.get("negotiation-mode-negotiation").checked, true);
   assert.equal(f.get("minimum-price").value, 21);
   assert.equal(f.get("minimum-price-field").hidden, false);
 });
@@ -346,7 +361,9 @@ test("service editor markup has unique IDs and resolves field error and label re
   for (const match of modal.matchAll(/(?:aria-describedby|aria-labelledby|for)="([^"]+)"/g)) {
     for (const id of match[1].split(" ")) assert.ok(allIds.includes(id), `Missing reference ${id}`);
   }
-  assert.match(modal, /Pricing &amp; negotiation/);
+  assert.match(modal, /<legend>Pricing<\/legend>/);
+  assert.match(modal, /<strong>Price range<\/strong>/);
+  assert.doesNotMatch(modal, /Negotiate both price and service scope/);
   assert.doesNotMatch(modal, /service-price-type|Starting price|Controlled Negotiation/);
-  assert.deepEqual([...modal.matchAll(/name="service-negotiation-mode" type="radio" value="([^"]+)"/g)].map(match => match[1]), ["fixed", "negotiation", "hybrid"]);
+  assert.deepEqual([...modal.matchAll(/name="service-negotiation-mode" type="radio" value="([^"]+)"/g)].map(match => match[1]), ["fixed", "negotiation", "range"]);
 });

@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="landing-fonts.css?v=3" />
     <link rel="preload" href="user.css?v=33" as="style" />
     <link rel="stylesheet" href="user.css?v=33" />
-    <link rel="stylesheet" href="app-refresh.css?v=12" />
+    <link rel="stylesheet" href="app-refresh.css?v=13" />
     <link rel="stylesheet" href="marketplace-growth.css?v=11" />
   <link rel="stylesheet" href="student-gold.css?v=4" />
     <link rel="stylesheet" href="marketplace-redesign.css?v=3" />
@@ -307,7 +307,7 @@
           <div><span>AGREED SCOPE</span><p id="booking-scope-summary"></p></div>
           <div class="booking-agreement-prices"><span>Original listing <strong id="booking-original-price"></strong></span><span>Agreed price <strong id="booking-agreed-price"></strong></span></div>
         </section>
-        <section class="booking-input-section" aria-label="Appointment details">
+        <section class="booking-input-section" id="booking-appointment-details" aria-label="Appointment details">
           <div class="booking-date-time form-row">
             <label>Preferred date<input id="booking-date" type="date" required aria-describedby="booking-availability-note" /></label>
             <label>Preferred time<input id="booking-time" type="time" value="10:00" required aria-describedby="booking-availability-note" /></label>
@@ -318,7 +318,8 @@
         </section>
         <details class="booking-instructions" id="booking-instructions">
           <summary>Add instructions <span>(optional)</span></summary>
-          <label for="booking-note">Anything the provider should know?</label>
+          <label for="booking-note" id="booking-note-label">Anything the provider should know?</label>
+          <small id="booking-custom-quote-hint" hidden>Describe the extras you want. The provider will send a specific quote for you to accept before booking.</small>
           <textarea id="booking-note" rows="2" maxlength="1000" placeholder="Share a helpful detail"></textarea>
         </details>
         <label class="booking-confirm-check" id="booking-confirm-label" hidden><input id="booking-confirm-details" type="checkbox" /><span>I’ve reviewed the agreed service scope and price. I understand this is a request and the provider still needs to confirm.</span></label>
@@ -352,15 +353,15 @@
             <div class="service-field"><label for="service-category">Category</label><select id="service-category" required aria-describedby="service-category-error"></select><small id="service-category-error" class="service-field-error" hidden></small></div>
             <div class="service-field"><div class="service-label-row"><label for="service-description">What will students get?</label><span id="service-description-count">0 / 2,000</span></div><textarea id="service-description" rows="4" required minlength="10" maxlength="2000" aria-describedby="service-description-hint service-description-count service-description-error"></textarea><small class="service-helper" id="service-description-hint"><em>A little detail builds trust. Include the scope, deliverables and any extras.</em></small><small id="service-description-error" class="service-field-error" hidden></small></div>
             <div class="service-field"><label for="service-delivery">Delivery method</label><select id="service-delivery" data-service-extended aria-describedby="service-delivery-error"><option value="">Choose how you work</option><option value="online">Online</option><option value="in_person">In person</option><option value="both">Both</option></select><small id="service-delivery-error" class="service-field-error" hidden></small></div>
-            <div class="service-field"><label for="service-price">Listed price (GH₵)</label><input id="service-price" type="number" inputmode="decimal" min="0.01" max="99999999.99" step="0.01" required placeholder="50.00" aria-describedby="service-price-hint service-price-error" /><small id="service-price-error" class="service-field-error" hidden></small></div>
+            <div class="service-field"><label for="service-price" id="service-price-label">Listed price (GH₵)</label><input id="service-price" type="number" inputmode="decimal" min="0.01" max="99999999.99" step="0.01" required placeholder="50.00" aria-describedby="service-price-hint service-price-error" /><small id="service-price-error" class="service-field-error" hidden></small></div>
             <small class="service-helper" id="service-price-hint">The price covers the scope described above.</small>
             <fieldset class="service-negotiation">
-              <legend>Pricing &amp; negotiation</legend>
+              <legend>Pricing</legend>
               <label class="service-negotiation-choice"><input id="service-negotiation-mode-fixed" name="service-negotiation-mode" type="radio" value="fixed" required /><span><strong>Fixed Price</strong><small>This is the final price for the listed service. No price discussion or proposal actions appear in chat.</small></span></label>
               <label class="service-negotiation-choice"><input id="service-negotiation-mode-negotiation" name="service-negotiation-mode" type="radio" value="negotiation" required /><span><strong>Negotiable</strong><small>Discuss the price in chat or make formal offers. The agreed service stays as listed.</small></span></label>
-              <label class="service-negotiation-choice"><input id="service-negotiation-mode-hybrid" name="service-negotiation-mode" type="radio" value="hybrid" required /><span><strong>Negotiable · price &amp; scope</strong><small>Negotiate both price and service scope. Use the offer note to describe agreed changes.</small></span></label>
+              <label class="service-negotiation-choice"><input id="service-negotiation-mode-range" name="service-negotiation-mode" type="radio" value="range" required /><span><strong>Price range</strong><small>Show a low-to-high estimate for the scope listed. Customers can request extras and you’ll send a quote for them to accept before booking.</small></span></label>
               <small id="service-negotiation-mode-error" class="service-field-error" hidden></small>
-              <div id="service-minimum-price-field" class="service-field" hidden><label for="service-minimum-price">Minimum acceptable price (GH₵)</label><input id="service-minimum-price" type="number" inputmode="decimal" min="0.01" max="99999999.99" step="0.01" placeholder="30.00" aria-describedby="service-minimum-price-hint service-minimum-price-error" /><small id="service-minimum-price-hint" class="service-helper">Private. Offers below this amount cannot be accepted.</small><small id="service-minimum-price-error" class="service-field-error" hidden></small></div>
+              <div id="service-minimum-price-field" class="service-field" hidden><label for="service-minimum-price" id="service-minimum-price-label">Minimum acceptable price (GH₵)</label><input id="service-minimum-price" type="number" inputmode="decimal" min="0.01" max="99999999.99" step="0.01" placeholder="30.00" aria-describedby="service-minimum-price-hint service-minimum-price-error" /><small id="service-minimum-price-hint" class="service-helper">Private. Offers below this amount cannot be accepted.</small><small id="service-minimum-price-error" class="service-field-error" hidden></small></div>
             </fieldset>
             <details class="service-options" id="service-options">
               <summary>Show your work <span>Add a photo, delivery estimate &amp; group options</span></summary>
@@ -408,13 +409,13 @@
     <script defer src="supabase-client.js?v=4"></script>
     <script defer src="smart-search.js"></script>
     <script defer src="profile-completeness.js?v=2"></script>
-    <script defer src="service-form-utils.js?v=2"></script>
-    <script defer src="marketplace-utils.js?v=3"></script>
+    <script defer src="service-form-utils.js?v=3"></script>
+    <script defer src="marketplace-utils.js?v=4"></script>
     <script defer src="push-notification-platform.js?v=1"></script>
     <script defer src="marketplace-growth-utils.js?v=1"></script>
     <script defer src="user.js?v=52"></script>
     <script defer src="marketplace-growth.js?v=7"></script>
-    <script defer src="service-form.js?v=3"></script>
+    <script defer src="service-form.js?v=4"></script>
     <script defer src="notifications.js?v=1"></script>
   </body>
 </html>

@@ -39,6 +39,7 @@
         description: service.description, price: service.price, currency: service.currency,
         groups: service.groups, deliveryMethod: service.deliveryMethod || "",
         estimatedDelivery: service.estimatedDelivery || "", priceType: service.priceType || "fixed",
+        minimumPrice: service.minimumPrice ?? null,
         coverImagePath: service.coverImagePath || "", coverImage: service.coverImage || "",
         createdAt: service.createdAt || "",
       })) : [provider];

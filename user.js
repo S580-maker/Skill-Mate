@@ -1037,6 +1037,7 @@ function publishServiceToMarketplace(service) {
     deliveryMethod: service.deliveryMethod || "",
     estimatedDelivery: service.estimatedDelivery || "",
     priceType: service.priceType || "fixed",
+    minimumPrice: service.minimumPrice ?? null,
     coverImagePath: service.coverImagePath || "",
     coverImage: service.coverImage || "",
     negotiationMode: service.negotiationMode || "negotiation",
@@ -1123,7 +1124,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
         <h3><button type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">${escapeHTML(provider.service)}</button></h3><p class="provider-description">${escapeHTML(provider.description)}</p>
         <div class="provider-card-person"><button class="provider-profile-trigger" type="button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="View ${escapeHTML(provider.name)}’s provider profile">${providerAvatarMarkup(provider)}</button><span><strong>${escapeHTML(provider.name)}</strong><small>${provider.verified ? '<i class="verified-dot">✓</i> Campus verified · ' : ""}${escapeHTML(provider.campus)}</small></span></div>
         ${serviceDetailLabel(provider) ? `<p class="service-delivery-label">${escapeHTML(serviceDetailLabel(provider))}</p>` : ""}
-        <div class="provider-card-footer"><span class="price"><small>Price</small>${currency(provider.price)}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">Request booking</button></span>`}</div>
+        <div class="provider-card-footer"><span class="price"><small>Price</small>${escapeHTML(servicePriceLabel(provider))}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">${provider.priceType === "range" ? "Request a quote" : "Request booking"}</button></span>`}</div>
       </div>
     </article>`).join("") : `<div class="empty-card"><span aria-hidden="true">⌕</span><strong>${targetId === "saved-grid" ? "Your shortlist starts here" : "No services found"}</strong><small>${targetId === "saved-grid" ? "Tap the heart on a service to save its provider for later." : "Try another skill or browse all categories."}</small><button class="button button-outline" type="button" ${targetId === "saved-grid" ? 'data-page-link="home"' : 'data-clear-search'}>Explore services</button></div>`;
   if (targetId === "recent-grid" && !visible.length) target.innerHTML = '<p class="recent-empty">No recently published services to show yet.</p>';
@@ -1467,7 +1468,9 @@ function createPriceNegotiationPanel(chat) {
   }
   const listedPrice = document.createElement("small");
   listedPrice.className = "chat-negotiation-listed-price";
-  listedPrice.textContent = selectedService.negotiationMode === "fixed"
+  listedPrice.textContent = selectedService.priceType === "range" && negotiation?.state !== "agreed"
+    ? `Price range · ${servicePriceLabel(selectedService)}`
+    : selectedService.negotiationMode === "fixed"
     ? `Fixed price · ${currency(selectedService.price)}`
     : negotiation?.state === "agreed"
       ? `${currency(negotiation.listedPrice ?? selectedService.price)} → ${currency(negotiation.agreedPrice)}`
@@ -1850,7 +1853,15 @@ function serviceCoverUrl(service) {
   return !appSupabase && /^data:image\/(png|webp|jpeg);base64,/.test(service.coverImage || "") ? service.coverImage : "";
 }
 function servicePriceLabel(service) {
+  if (service?.priceType === "range" && service.minimumPrice !== null
+      && service.minimumPrice !== undefined && service.minimumPrice !== ""
+      && Number.isFinite(Number(service.minimumPrice))) {
+    return `${currency(service.minimumPrice)}–${currency(service.price)}`;
+  }
   return currency(service.price);
+}
+function serviceUsesPriceRange(service) {
+  return service?.priceType === "range";
 }
 function serviceDetailLabel(service) {
   return [window.skillmateServiceUtils.deliveryLabels[service.deliveryMethod], service.estimatedDelivery].filter(Boolean).join(" · ");
@@ -2119,7 +2130,7 @@ async function loadSupabaseState() {
   const [
     ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations,
     savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory,
-    verification, groupedMessages, ownStudentIdentifier,
+    verification, groupedMessages, ownStudentIdentifier, ownNegotiationSettings,
   ] = await Promise.all([
     loadAccountProfile(appUser.id),
     loadAllRows(() => appSupabase.from("provider_directory").select("*").order("service_id", { ascending: true })),
@@ -2145,11 +2156,15 @@ async function loadSupabaseState() {
     appSupabase.from("verification_requests").select("id, status").eq("student_id", appUser.id).eq("status", "open").maybeSingle(),
     groupedMessagesRequest,
     appSupabase.from("student_identifiers").select("student_id_number").eq("student_id", appUser.id).maybeSingle(),
+    loadAllRows(() => appSupabase.from("service_negotiation_settings")
+      .select("service_id, minimum_price").eq("provider_id", appUser.id).order("service_id", { ascending: true })),
   ]);
-  const results = [ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations, savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory, verification, ownStudentIdentifier];
+  const results = [ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations, savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory, verification, ownStudentIdentifier, ownNegotiationSettings];
   const failed = results.find((result) => result.error);
   if (failed) throw failed.error;
   await refreshPriceNegotiations();
+  const ownMinimumByService = new Map((ownNegotiationSettings.data || [])
+    .map(item => [item.service_id, Number(item.minimum_price)]));
 
   const profile = ownProfile.data;
   if (!profile.onboarding_completed) {
@@ -2179,6 +2194,7 @@ async function loadSupabaseState() {
     id: service.id, providerId: service.provider_id, title: service.title, category: service.category, createdAt: service.created_at || "",
     description: service.description, price: Number(service.price), groups: service.accepts_groups,
     active: service.is_active, currency: service.currency, negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(service.negotiation_mode), ...window.skillmateServiceUtils.metadata(service),
+    minimumPrice: ownMinimumByService.get(service.id) ?? null,
   })));
   const providerMap = new Map();
   for (const row of directory.data || []) {
@@ -2202,6 +2218,7 @@ async function loadSupabaseState() {
       currency: ownActiveService.currency, rating: 0, reviews: 0, bookings: 0,
       color: "blue", verified: profile.campus_verified, available: "Message to ask",
       groups: ownActiveService.accepts_groups, portfolio: [], negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(ownActiveService.negotiation_mode), ...window.skillmateServiceUtils.metadata(ownActiveService),
+      minimumPrice: ownMinimumByService.get(ownActiveService.id) ?? null,
       skills: profile.skills || [], cvPath: profile.cv_path || "", cvName: profile.cv_name || "",
     });
   }
@@ -2995,7 +3012,8 @@ function openBooking(providerId, serviceId, negotiationId = "") {
 function updateBookingLocationVisibility() {
   const isOtherLocation = document.querySelector("#booking-location-type").value === "other";
   document.querySelector("#booking-location-details").hidden = !isOtherLocation;
-  document.querySelector("#booking-location").required = isOtherLocation;
+  document.querySelector("#booking-location").required = isOtherLocation
+    && !document.querySelector("#booking-appointment-details").hidden;
 }
 function updateBookingLocationOptions(service) {
   const locationType = document.querySelector("#booking-location-type");
@@ -3012,6 +3030,33 @@ function updateBookingLocationOptions(service) {
   else if (service.deliveryMethod === "in_person") locationType.value = "campus";
   else locationType.value = "";
   updateBookingLocationVisibility();
+}
+function updateBookingRequestMode(service, hasAgreement) {
+  const isQuoteRequest = serviceUsesPriceRange(service) && !hasAgreement;
+  document.querySelector("#booking-title").textContent = isQuoteRequest ? "Request a custom quote" : "Request this service";
+  document.querySelector("#booking-appointment-details").hidden = isQuoteRequest;
+  document.querySelector("#booking-date").required = !isQuoteRequest;
+  document.querySelector("#booking-time").required = !isQuoteRequest;
+  document.querySelector("#booking-location-type").required = !isQuoteRequest;
+  document.querySelector("#booking-note").required = isQuoteRequest;
+  document.querySelector("#booking-note-label").textContent = isQuoteRequest
+    ? "What would you like included?"
+    : "Anything the provider should know?";
+  document.querySelector("#booking-note").placeholder = isQuoteRequest
+    ? "For example: I’d like 20 edited photos instead of the 10 included. Please quote the extra cost."
+    : "Share a helpful detail";
+  document.querySelector("#booking-custom-quote-hint").hidden = !isQuoteRequest;
+  document.querySelector("#booking-instructions").open = isQuoteRequest;
+  const instructionsSummary = document.querySelector("#booking-instructions summary");
+  instructionsSummary.childNodes[0].textContent = isQuoteRequest ? "Describe your request " : "Add instructions ";
+  instructionsSummary.querySelector("span").textContent = isQuoteRequest ? "(required)" : "(optional)";
+  document.querySelector("#booking-negotiate").parentElement.hidden = isQuoteRequest || !["negotiation", "hybrid"].includes(service.negotiationMode) || hasAgreement;
+  document.querySelector("#booking-submit").textContent = isQuoteRequest ? "Request a Quote" : "Send Booking Request";
+  document.querySelector("#booking-availability-note").textContent = isQuoteRequest
+    ? "This is not a booking. Accept the provider’s exact quote and scope before choosing an appointment."
+    : hasAgreement
+      ? "The provider must confirm this agreed booking request."
+      : "The provider must confirm your requested appointment.";
 }
 function bookingLocationValue() {
   const locationType = document.querySelector("#booking-location-type").value;
@@ -3040,13 +3085,14 @@ function updateBookingSummary() {
   document.querySelector("#booking-provider-name").textContent = getProvider(providerId)?.name || "";
   const negotiationMode = window.skillmateServiceUtils.normalizeNegotiationMode(service.negotiationMode);
   const isNegotiable = ["negotiation", "hybrid"].includes(negotiationMode);
-  document.querySelector("#booking-negotiable-badge").textContent = negotiation ? "Agreed" : isNegotiable ? "Negotiable" : "Fixed price";
-  document.querySelector("#booking-price-label").textContent = negotiation ? "Agreed price" : "Listed price";
-  document.querySelector("#booking-price").textContent = currency(negotiation?.agreedPrice ?? service.price);
-  document.querySelector("#booking-negotiation-option").hidden = !isNegotiable || Boolean(negotiation);
-  document.querySelector("#booking-availability-note").textContent = negotiation
-    ? "The provider must confirm this agreed booking request."
-    : "The provider must confirm your requested appointment.";
+  const isRangeQuote = serviceUsesPriceRange(service) && !negotiation;
+  document.querySelector("#booking-negotiable-badge").textContent = negotiation ? "Agreed" : isRangeQuote ? "Quote required" : isNegotiable ? "Negotiable" : "Fixed price";
+  document.querySelector("#booking-price-label").textContent = negotiation ? "Agreed price" : isRangeQuote ? "Estimated range" : "Listed price";
+  document.querySelector("#booking-price").textContent = negotiation ? currency(negotiation.agreedPrice) : servicePriceLabel(service);
+  document.querySelector("#booking-price-detail").textContent = isRangeQuote
+    ? "Your exact price is confirmed after the provider reviews your requested scope."
+    : "";
+  updateBookingRequestMode(service, Boolean(negotiation));
   updateBookingLocationOptions(service);
   if (negotiation) {
     document.querySelector("#booking-provider-summary").textContent = getProvider(negotiation.providerId)?.name || "Your provider";
@@ -3093,13 +3139,18 @@ function openPriceOfferForm({ providerId, serviceId, action = "initial", negotia
   const service = connectedServices.find(item => item.id === serviceId);
   const messageLabel = document.querySelector("#price-offer-message").closest("label");
   messageLabel.hidden = action === "proposal" && service?.negotiationMode !== "hybrid" && !chatProposal;
+  document.querySelector("#price-offer-message").required = service?.priceType === "range";
   const messageHint = messageLabel.querySelector(".label-hint");
-  if (messageHint) messageHint.textContent = service?.negotiationMode === "hybrid"
-    ? "(optional · describe scope changes)"
+  if (messageHint) messageHint.textContent = service?.priceType === "range"
+    ? "(required · state the exact scope included)"
+    : service?.negotiationMode === "hybrid"
+      ? "(optional · describe scope changes)"
     : "(optional · price only; listed scope stays the same)";
   document.querySelector("#price-offer-message").value = "";
-  document.querySelector("#price-offer-message").placeholder = service?.negotiationMode === "hybrid"
-    ? "Describe any agreed changes to the service scope."
+  document.querySelector("#price-offer-message").placeholder = service?.priceType === "range"
+    ? "Describe exactly what this quote includes, including the requested extras."
+    : service?.negotiationMode === "hybrid"
+      ? "Describe any agreed changes to the service scope."
     : "Add a note about your price offer.";
   document.querySelector("#price-offer-title").textContent = action === "counter" ? "Send a counteroffer" : action === "proposal" ? "Send a formal price proposal" : "Make a price offer";
   document.querySelector("#price-offer-description").textContent = description
@@ -3120,7 +3171,7 @@ function exposePriceActionError(error) {
   }
   return error;
 }
-async function openServiceDiscussion(providerId, serviceId, triggerButton) {
+async function openServiceDiscussion(providerId, serviceId, triggerButton, initialMessage = "") {
   if (!appSupabase) {
     showToast("Price discussion requires a connected Skillmate account.", "error");
     return;
@@ -3150,36 +3201,44 @@ async function openServiceDiscussion(providerId, serviceId, triggerButton) {
       if (modal.open) modal.close();
     }
     showPage("messages", { openConversation: true });
+    let quoteRequestSent = false;
+    let quoteMessageSent = false;
     try {
-      const [negotiationResult, messagesResult] = await Promise.allSettled([
-        appSupabase.rpc("create_price_negotiation", {
-          p_service_id: serviceId, p_conversation_id: conversationId,
-          p_initial_amount: null, p_message: "",
-        }).then(result => {
-          if (result.error) throw result.error;
-          return result.data;
-        }),
-        loadConversationMessages(conversationId, provider.name),
-      ]);
-      if (messagesResult.status === "fulfilled") {
-        chat.messages = messagesResult.value;
-        conversationMessageRefreshTimes.set(conversationId, Date.now());
-        cacheConversationMessages(state.messages);
+      const { data: negotiationId, error: negotiationError } = await appSupabase.rpc("create_price_negotiation", {
+        p_service_id: serviceId, p_conversation_id: conversationId,
+        p_initial_amount: null, p_message: "",
+      });
+      if (negotiationError) throw negotiationError;
+      if (initialMessage) {
+        const service = connectedServices.find(item => item.id === serviceId);
+        const { error: messageError } = await appSupabase.from("messages").insert({
+          conversation_id: conversationId, sender_id: appUser.id,
+          body: `Custom quote request for ${service?.title || "this service"}: ${initialMessage}`,
+        });
+        if (messageError) throw messageError;
+        quoteMessageSent = true;
       }
-      if (negotiationResult.status === "rejected") throw negotiationResult.reason;
-      if (messagesResult.status === "rejected") throw messagesResult.reason;
-      const negotiation = await loadConversationPriceNegotiation(negotiationResult.value);
+      chat.messages = await loadConversationMessages(conversationId, provider.name);
+      conversationMessageRefreshTimes.set(conversationId, Date.now());
+      cacheConversationMessages(state.messages);
+      const negotiation = await loadConversationPriceNegotiation(negotiationId);
       priceNegotiations = [
         negotiation,
         ...priceNegotiations.filter(item => item.id !== negotiation.id),
       ];
+      quoteRequestSent = Boolean(initialMessage);
     } catch (error) {
       console.error("Could not finish loading the Skillmate price discussion.", error);
-      showToast("Chat is open, but the price discussion could not finish loading. You can still message the provider.", "error");
+      showToast(initialMessage
+        ? quoteMessageSent
+          ? "Quote request sent, but the conversation could not refresh. Reopen it to see the provider’s response."
+          : "Chat is open, but your quote request could not be sent. Try again from this conversation."
+        : "Chat is open, but the price discussion could not finish loading. You can still message the provider.", "error");
     } finally {
       conversationsOpeningNegotiation.delete(conversationId);
       if (activeConversationId === conversationId && state.activePage === "messages") renderConversations();
     }
+    if (quoteRequestSent) showToast("Quote request sent. Accept the provider’s exact price and scope before booking.", "success");
   }, "Could not open price discussion.", "Opening your conversation…", {
     friendlyFailureMessage: "Could not open the price discussion. Check that the migration is applied and try again.",
     submitButton: triggerButton,
@@ -3276,7 +3335,7 @@ async function openProviderProfile(providerId, serviceId) {
       <p class="showcase-bio">${escapeHTML(provider.bio || provider.description || "A student sharing their skills with the campus community.")}</p>
       <div class="showcase-stats"><div><strong>${escapeHTML(rating.rating)}</strong><span>${rating.count} ${rating.count === 1 ? "review" : "reviews"}</span></div><i></i><div><strong>${Number(provider.bookings) || 0}</strong><span>completed works</span></div><i></i><div><strong>${services.length}</strong><span>${services.length === 1 ? "service" : "services"}</span></div></div>
     </header>
-    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>01</span><h3>Services</h3></div>${services.map((service) => `<div class="detail-service"><span><strong>${escapeHTML(service.title)}</strong><small>${escapeHTML(service.category)} · ${servicePriceLabel(service)}</small><small>${escapeHTML(serviceDetailLabel(service))}</small>${service.providerId !== appUser?.id ? `<small>${service.negotiationMode === "fixed" ? "Fixed Price" : service.negotiationMode === "hybrid" ? "Hybrid · price + scope" : "Negotiation · price only"}</small>${service.negotiationMode !== "fixed" ? `<span class="detail-negotiation-actions"><button class="button button-small button-outline" type="button" data-negotiation-action="offer" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Make an offer</button><button class="button button-small button-outline" type="button" data-negotiation-action="discuss" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Discuss price</button></span>` : ""}` : ""}</span>${service.groups ? '<span class="detail-group-tag">Group bookings welcome</span>' : ""}</div>`).join("")}</section>
+    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>01</span><h3>Services</h3></div>${services.map((service) => `<div class="detail-service"><span><strong>${escapeHTML(service.title)}</strong><small>${escapeHTML(service.category)} · ${servicePriceLabel(service)}</small><small>${escapeHTML(serviceDetailLabel(service))}</small>${service.providerId !== appUser?.id ? `<small>${service.priceType === "range" ? "Price range · custom quote required" : service.negotiationMode === "fixed" ? "Fixed Price" : service.negotiationMode === "hybrid" ? "Custom price & scope" : "Negotiation · price only"}</small>${service.negotiationMode !== "fixed" ? `<span class="detail-negotiation-actions"><button class="button button-small button-outline" type="button" data-negotiation-action="offer" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Make an offer</button><button class="button button-small button-outline" type="button" data-negotiation-action="discuss" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Discuss price</button></span>` : ""}` : ""}</span>${service.groups ? '<span class="detail-group-tag">Group bookings welcome</span>' : ""}</div>`).join("")}</section>
     <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>02</span><h3>Education &amp; skills</h3></div><p class="showcase-education"><strong>${escapeHTML(provider.course || "Student")}</strong><span>${escapeHTML(provider.campus)}</span></p><div class="showcase-skills">${skills.length ? skills.map(skill => `<span>${escapeHTML(skill)}</span>`).join("") : '<span>Skills and specialities shared through listed services</span>'}</div>${cvUrl ? `<a class="showcase-cv-link" href="${escapeHTML(cvUrl)}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">↗</span><span><strong>View professional CV</strong><small>${escapeHTML(provider.cvName || "PDF document")} · Secure link expires in 15 minutes</small></span></a>` : ""}</section>
     <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>03</span><h3>Selected work</h3></div><div class="showcase-work-grid">${portfolioMarkup || '<p class="detail-empty">No work samples added yet. Ask the provider about their experience.</p>'}</div></section>
     <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>04</span><h3>Student reviews</h3><span class="showcase-review-score">${rating.count ? `★ ${escapeHTML(rating.rating)}` : "NEW"}</span></div><div class="showcase-review-list">${reviewMarkup || '<p class="detail-empty">No reviews yet. Completed work can be reviewed by the customer.</p>'}</div></section>
@@ -3843,6 +3902,31 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
   const providerId = document.querySelector("#booking-provider-id").value;
   const service = providerServices(providerId).find((item) => item.id === document.querySelector("#booking-service").value);
   if (!service) { showToast("Choose an available service first."); return; }
+  const negotiationId = document.querySelector("#booking-negotiation-id").value;
+  if (serviceUsesPriceRange(service) && !negotiationId) {
+    const request = document.querySelector("#booking-note").value.trim();
+    if (!request) {
+      showToast("Describe the extras you want so the provider can quote them.", "error");
+      document.querySelector("#booking-note").focus();
+      return;
+    }
+    if (appSupabase) {
+      if (!negotiationBackendAvailable) {
+        showToast("Custom quotes are unavailable until the latest Supabase migration has been applied.", "error");
+        return;
+      }
+      openServiceDiscussion(providerId, service.id, document.querySelector("#booking-submit"), request);
+    } else {
+      runAction(async () => {
+        await startConversation(providerId, `Custom quote request for ${service.title}: ${request}`);
+        event.target.closest("dialog").close();
+        renderConversations();
+        showPage("messages", { openConversation: true });
+        showToast("Quote request shared in chat. Agree on a price and scope before making a booking.", "success");
+      }, "Could not send your quote request.");
+    }
+    return;
+  }
   const locationType = document.querySelector("#booking-location-type").value;
   if (!locationType) { showToast("Choose where the service will take place.", "error"); return; }
   if (locationType === "other" && !document.querySelector("#booking-location").value.trim()) {
@@ -3857,7 +3941,6 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
     showToast("Choose a future appointment date and time.");
     return;
   }
-  const negotiationId = document.querySelector("#booking-negotiation-id").value;
   if (appSupabase) {
     const negotiation = negotiationId
       ? priceNegotiations.find(item => item.id === negotiationId && item.state === "agreed"

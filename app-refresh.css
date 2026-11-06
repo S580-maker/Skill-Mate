@@ -402,6 +402,7 @@ body:has(dialog[open]) { overflow: hidden; }
 .booking-service-switch[hidden], .booking-location-details[hidden], .booking-negotiation-option[hidden] { display: none; }
 #booking-modal .booking-service-switch select { min-height: 42px; }
 .booking-input-section { display: grid; gap: 12px; }
+.booking-input-section[hidden] { display: none; }
 .booking-date-time { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
 .booking-date-time > label, .booking-location-label, .booking-location-details { display: grid; min-width: 0; gap: 5px; color: var(--dark); font-size: 12px; font-weight: 600; }
 #booking-modal .booking-date-time input, #booking-modal .booking-input-section select, #booking-modal .booking-input-section input { min-height: 46px; }
@@ -409,6 +410,7 @@ body:has(dialog[open]) { overflow: hidden; }
 .booking-instructions summary { width: fit-content; min-height: 36px; align-content: center; color: var(--main); font-size: 12px; font-weight: 600; cursor: pointer; }
 .booking-instructions summary span { color: var(--muted); font-weight: 400; }
 .booking-instructions > label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 500; }
+.booking-instructions > #booking-custom-quote-hint { color: var(--muted); font-size: 12px; }
 #booking-modal .booking-instructions textarea { min-height: 68px; resize: vertical; }
 #booking-modal .booking-confirm-check { margin: 0; font-size: 12px; }
 .booking-negotiation-option { display: block; }

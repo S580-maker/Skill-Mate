@@ -35,12 +35,14 @@
     if (draft.description.length < 10 || draft.description.length > 2000) errors.description = "Use between 10 and 2,000 characters to describe your service.";
     if (extended && !deliveryLabels[draft.deliveryMethod]) errors.delivery = "Choose how you will deliver your service.";
     if (extended && draft.estimatedDelivery.length > 80) errors.estimate = "Keep your delivery estimate to 80 characters or fewer.";
-    if (!["fixed", "negotiation", "hybrid"].includes(draft.negotiationMode)) errors["negotiation-mode"] = "Choose a pricing and negotiation option.";
-    if (["negotiation", "hybrid"].includes(draft.negotiationMode)
+    if (!["fixed", "negotiation", "hybrid", "range"].includes(draft.negotiationMode)) errors["negotiation-mode"] = "Choose a pricing option.";
+    if (["negotiation", "hybrid", "range"].includes(draft.negotiationMode)
       && (!/^\d+(?:\.\d{1,2})?$/.test(String(draft.minimumPrice))
         || Number(draft.minimumPrice) <= 0
         || Number(draft.minimumPrice) > Number(draft.price))) {
-      errors["minimum-price"] = "Enter a minimum price above GH₵ 0 and no higher than your listed price.";
+      errors["minimum-price"] = draft.negotiationMode === "range"
+        ? "Enter the low end of your range above GH₵ 0 and no higher than the high end."
+        : "Enter a minimum price above GH₵ 0 and no higher than your listed price.";
     }
     return errors;
   }
@@ -91,14 +93,15 @@
   }
   function metadata(row) {
     return { coverImagePath: row.cover_image_path || null, deliveryMethod: row.delivery_method || "",
-      estimatedDelivery: row.estimated_delivery || "", priceType: "fixed",
+      estimatedDelivery: row.estimated_delivery || "", priceType: row.price_type === "range" ? "range" : "fixed",
+      minimumPrice: row.price_range_min ?? row.minimum_price ?? null,
       negotiationMode: normalizeNegotiationMode(row.negotiation_mode) };
   }
   function payload(draft, userId, coverPath, extended) {
     const result = { provider_id: userId, title: draft.title, category: draft.category,
       price: Number(draft.price), description: draft.description, accepts_groups: draft.groups };
     if (extended) Object.assign(result, { cover_image_path: coverPath || null, delivery_method: draft.deliveryMethod,
-      estimated_delivery: draft.estimatedDelivery || null, price_type: "fixed" });
+      estimated_delivery: draft.estimatedDelivery || null, price_type: draft.negotiationMode === "range" ? "range" : "fixed" });
     return result;
   }
   const api = { MAX_IMAGE_BYTES, deliveryLabels, example, validate, validateImageHeader, compressImageFile, normalizeNegotiationMode, metadata, payload };
