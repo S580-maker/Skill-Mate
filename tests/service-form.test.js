@@ -122,6 +122,7 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
   const writes = [];
   const rpcCalls = [];
   const messages = [];
+  const publishedServices = [];
   const close = element("close");
   const opener = element("opener");
   let saveFails = failSave;
@@ -187,7 +188,10 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
     },
   };
   const context = {
-    window: { skillmateServiceUtils: utils },
+    window: {
+      skillmateServiceUtils: utils,
+      skillmateOnServicePublished: service => publishedServices.push(service),
+    },
     document: { getElementById: get, activeElement: opener, querySelector: () => opener, createElement: () => element() },
     appSupabase: demo ? null : supabase, appUser: { id: "owner" },
     crypto: { randomUUID: () => "new-draft-id" }, URL: { revokeObjectURL() {} },
@@ -198,7 +202,7 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
     showToast: text => messages.push(text),
   };
   vm.runInNewContext(read("service-form.js"), context);
-  return { get, context, writes, rpcCalls, messages, opener,
+  return { get, context, writes, rpcCalls, messages, publishedServices, opener,
     fail(value) { saveFails = value; },
     async prepare(service) {
       context.window.skillmateServiceEditor.prepare(service);
@@ -225,6 +229,9 @@ test("publishing requires preview first and writes all new details only on confi
   assert.equal(f.rpcCalls[0].name, "save_service_listing");
   assert.equal(f.rpcCalls[0].args.p_mode, "negotiation");
   assert.equal(f.rpcCalls[0].args.p_minimum_price, 20);
+  assert.equal(f.publishedServices.length, 1);
+  assert.equal(f.publishedServices[0].id, "new-draft-id");
+  assert.equal(f.publishedServices[0].active, true);
   assert.equal(f.get("modal").open, false);
   assert.equal(f.opener.focused, true);
 });

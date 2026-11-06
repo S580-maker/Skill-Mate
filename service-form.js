@@ -351,6 +351,7 @@
         const data = Array.isArray(result) ? result[0] : result;
         if (error || !data) throw new Error("We couldn't save your service and negotiation settings. Check your connection and try again. Your details are still here.");
         saved = { id: data.id, title: data.title, category: data.category, price: Number(data.price), description: data.description,
+          providerId: appUser.id, currency: data.currency || "GHS", createdAt: data.created_at || existing?.createdAt || new Date().toISOString(),
           groups: data.accepts_groups, active: data.is_active, ...utils.metadata(data), negotiationMode: draft.negotiationMode };
         unusedCoverCandidates.delete(saved.coverImagePath);
         if (existing?.coverImagePath && existing.coverImagePath !== saved.coverImagePath) unusedCoverCandidates.add(existing.coverImagePath);
@@ -362,6 +363,12 @@
         localStorage.setItem(storageKey, JSON.stringify({ ...state, services: nextServices }));
       }
       state.services = [saved, ...state.services.filter(service => service.id !== saved.id)];
+      try {
+        window.skillmateOnServicePublished?.(saved);
+      } catch (error) {
+        console.error("Your service was saved, but Discover could not be updated immediately.", error);
+        showToast("Your service was saved, but Discover could not refresh. Reload to see the latest listings.", "error");
+      }
       setBusy(false);
       modal.close();
       renderListings();

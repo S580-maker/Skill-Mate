@@ -998,8 +998,84 @@ function listingImage(provider) {
   return window.skillmateMarketplace.safeImageUrl(serviceCoverUrl(provider) || work?.image);
 }
 function marketplaceEntries(providers) {
-  return appSupabase ? window.skillmateMarketplace.expandListings(providers, connectedServices) : providers;
+  if (appSupabase) return window.skillmateMarketplace.expandListings(providers, connectedServices);
+  const activeServices = (state.services || []).filter((service) => service.active !== false)
+    .map((service) => ({ ...service, providerId: ownProviderId() }));
+  if (!activeServices.length) return providers;
+  const providerId = ownProviderId();
+  const ownProvider = {
+    id: providerId,
+    name: state.profile.name || "Student",
+    initials: initialsFor(state.profile.name || "Student"),
+    avatarUrl: state.profile.avatarUrl || "",
+    campus: state.profile.university || "Campus not set",
+    course: state.profile.course || "Student",
+    bio: state.profile.bio || "",
+    verified: state.profile.verified,
+    color: "blue",
+    bookings: 0,
+    portfolio: state.portfolio || [],
+  };
+  return window.skillmateMarketplace.expandListings(
+    [...providers.filter((provider) => provider.id !== providerId), ownProvider],
+    activeServices,
+  );
 }
+function publishServiceToMarketplace(service) {
+  if (!appSupabase || !appUser?.id || !service?.id) return;
+  const publishedService = {
+    id: service.id,
+    providerId: appUser.id,
+    title: service.title,
+    category: service.category,
+    description: service.description,
+    price: Number(service.price),
+    currency: service.currency || "GHS",
+    groups: Boolean(service.groups),
+    active: service.active !== false,
+    createdAt: service.createdAt || new Date().toISOString(),
+    deliveryMethod: service.deliveryMethod || "",
+    estimatedDelivery: service.estimatedDelivery || "",
+    priceType: service.priceType || "fixed",
+    coverImagePath: service.coverImagePath || "",
+    coverImage: service.coverImage || "",
+    negotiationMode: service.negotiationMode || "negotiation",
+  };
+  connectedServices = [publishedService, ...connectedServices.filter((item) => item.id !== publishedService.id)];
+  if (publishedService.active && !connectedProviders.some((provider) => provider.id === appUser.id)) {
+    const name = state.profile.name || "Student";
+    connectedProviders = [{
+      id: appUser.id,
+      name,
+      initials: initialsFor(name),
+      avatarUrl: state.profile.avatarUrl || "",
+      campus: state.profile.university || "Campus not set",
+      course: state.profile.course || "Student",
+      bio: state.profile.bio || "",
+      category: publishedService.category,
+      service: publishedService.title,
+      description: publishedService.description,
+      price: publishedService.price,
+      currency: publishedService.currency,
+      rating: 0,
+      reviews: 0,
+      bookings: 0,
+      color: "blue",
+      verified: state.profile.verified,
+      available: "Message to ask",
+      groups: publishedService.groups,
+      portfolio: [],
+      ...window.skillmateServiceUtils.metadata({
+        cover_image_path: publishedService.coverImagePath,
+        delivery_method: publishedService.deliveryMethod,
+        estimated_delivery: publishedService.estimatedDelivery,
+        negotiation_mode: publishedService.negotiationMode,
+      }),
+    }, ...connectedProviders];
+  }
+  renderMarketplace();
+}
+window.skillmateOnServicePublished = publishServiceToMarketplace;
 function renderMarketplace(targetId = "marketplace-grid", providers = appSupabase ? connectedProviders : seedProviders) {
   const target = document.getElementById(targetId);
   if (!target) return;
