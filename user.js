@@ -1097,7 +1097,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
     if (targetId !== "saved-grid" && !window.skillmateMarketplace.matchesCategory(provider.category, selectedCategory)) return false;
     return (targetId === "saved-grid" || !window.skillmateGrowth || window.skillmateGrowth.matches(provider)) && window.skillmateSmartSearch.matches(provider, query);
   });
-  const visible = window.skillmateMarketplace.sortByCampus(matching, campus, (left, right) => (
+  let visible = window.skillmateMarketplace.sortByCampus(matching, campus, (left, right) => (
     (targetId !== "saved-grid" && window.skillmateGrowth?.compare(left, right)) || (query
       ? marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query)
       : Number(right.bookings || 0) - Number(left.bookings || 0))

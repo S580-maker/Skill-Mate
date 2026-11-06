@@ -36,6 +36,8 @@ test("Recently Added shows only the two newest listings", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "user.js"), "utf8");
   const start = source.indexOf("function latestMarketplaceListings(");
   const end = source.indexOf("\nfunction renderMarketplace(", start);
+  const renderStart = source.indexOf("function renderMarketplace(");
+  const renderEnd = source.indexOf("\nfunction renderSearchSuggestions(", renderStart);
   const context = {};
   vm.createContext(context);
   vm.runInContext(source.slice(start, end), context);
@@ -47,6 +49,7 @@ test("Recently Added shows only the two newest listings", () => {
 
   assert.deepEqual(context.latestMarketplaceListings(listings).map(listing => listing.id), ["newest", "second-newest"]);
   assert.equal(listings.length, 3, "limiting Recently Added must not mutate the marketplace listings");
+  assert.match(source.slice(renderStart, renderEnd), /let visible = window\.skillmateMarketplace\.sortByCampus/);
 });
 
 test("every active service is discoverable while retaining the provider identity and its own booking ID", () => {
