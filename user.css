@@ -228,6 +228,7 @@ h1 > span { color: var(--main); font-family: "Plus Jakarta Sans", sans-serif; fo
 .provider-card-body { padding: 12px 13px 11px; }
 .provider-card-person { display: flex; align-items: center; gap: 8px; }
 .provider-avatar { display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; border: 2px solid var(--border); border-radius: 50%; box-shadow: 0 0 0 1px var(--shadow-color); font-size: 12px; font-weight: 700; }
+.provider-avatar.is-verified { border-color: var(--success); box-shadow: 0 0 0 2px var(--success); }
 .avatar-blue { color: var(--main); background: var(--bg); }.avatar-rose { color: var(--main); background: var(--bg); }.avatar-violet { color: var(--main); background: var(--bg); }.avatar-mint { color: var(--main); background: var(--bg); }.avatar-peach { color: var(--main); background: var(--bg); }.avatar-sky { color: var(--main); background: var(--bg); }
 .provider-card-person > span:nth-child(2) { display: grid; min-width: 0; flex: 1; gap: 3px; }
 .provider-card-person > span:nth-child(2) strong { overflow: hidden; color: var(--dark); font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
@@ -1452,6 +1453,7 @@ body { font-size: 14px; line-height: 1.5; }
 .provider-profile-trigger { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; padding: 0; border: 0; border-radius: 50%; color: inherit; background: transparent; cursor: pointer; }
 .provider-profile-trigger .provider-avatar { transition: transform 140ms ease, box-shadow 140ms ease; }
 .provider-profile-trigger:hover .provider-avatar { transform: scale(1.06); box-shadow: 0 0 0 3px color-mix(in srgb, var(--main) 20%, transparent); }
+.provider-profile-trigger:hover .provider-avatar.is-verified { box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 35%, transparent); }
 .provider-profile-trigger:focus-visible { border-radius: 10px; outline: 2px solid var(--main); outline-offset: 4px; }
 @media (max-width: 600px) {
   .provider-detail-modal { width: calc(100vw - 12px); max-height: 96dvh; border-radius: 17px; }

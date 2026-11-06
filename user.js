@@ -974,7 +974,7 @@ function marketplaceSearchScore(provider, query) {
 }
 function providerAvatarMarkup(provider) {
   const image = window.skillmateMarketplace.safeImageUrl(provider.avatarUrl);
-  return `<span class="provider-avatar avatar-${escapeHTML(provider.color)}"><span>${escapeHTML(provider.initials)}</span>${image ? `<img src="${escapeHTML(image)}" alt="" loading="lazy" decoding="async" />` : ""}</span>`;
+  return `<span class="provider-avatar avatar-${escapeHTML(provider.color)}${provider.verified ? " is-verified" : ""}"><span>${escapeHTML(provider.initials)}</span>${image ? `<img src="${escapeHTML(image)}" alt="" loading="lazy" decoding="async" />` : ""}</span>`;
 }
 function listingImage(provider) {
   const work = (provider.portfolio || []).find(item => typeof item === "object" && item.image);
