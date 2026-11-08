@@ -61,13 +61,17 @@
   }
   function bookingProgress(booking, providerView) {
     if (["Cancelled", "Declined"].includes(booking.status)) return { step: -1, next: booking.status === "Cancelled" ? "This booking was cancelled." : "This request was declined. You can choose another provider." };
-    if (booking.status === "Completed") return { step: 3, next: "Work completed. You can leave a review or book again." };
+    if (booking.status === "Completed") return { step: 4, next: "Work completed. You can leave a review or book again." };
+    if (booking.status === "Awaiting verification") return {
+      step: 3,
+      next: providerView ? "The client needs to verify that the work is complete." : "Your provider marked the work complete. Confirm when you are satisfied with the service.",
+    };
     if (booking.status === "In progress" || booking.workStartedAt) return { step: 2, next: providerView ? "Mark complete when the agreed work is finished." : "Your provider has started the work." };
     if (booking.status === "Confirmed") return { step: 1, next: providerView ? "Start the work when the appointment begins." : "Your appointment is confirmed. Message your provider if plans change." };
     return { step: 0, next: booking.pendingAppointmentProposalId ? (providerView ? "Waiting for the customer to respond to your time suggestion." : "Please accept or decline the suggested time.") : providerView ? "Your reply is needed. Accept or decline this request." : "Waiting for the provider to confirm your request." };
   }
   function metrics(bookings) {
-    const confirmed = bookings.filter(item => ["Confirmed", "In progress", "Completed"].includes(item.status)).length;
+    const confirmed = bookings.filter(item => ["Confirmed", "In progress", "Awaiting verification", "Completed"].includes(item.status)).length;
     const completed = bookings.filter(item => item.status === "Completed");
     const counts = new Map();
     completed.forEach(item => { if (item.customerId) counts.set(item.customerId, (counts.get(item.customerId) || 0) + 1); });

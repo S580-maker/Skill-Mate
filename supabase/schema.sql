@@ -67,6 +67,7 @@ create table public.bookings (
   agreed_price numeric(10,2) not null check (agreed_price > 0),
   currency char(3) not null default 'GHS',
   status public.booking_status not null default 'pending',
+  provider_completed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (customer_id <> provider_id)
@@ -311,6 +312,7 @@ as $$
 declare
   v_service_title text;
   v_recipient_id uuid;
+  v_completion_requested boolean;
 begin
   select title into v_service_title from public.services where id = new.service_id;
   if tg_op = 'INSERT' then
@@ -321,11 +323,21 @@ begin
       select 1 from public.profiles
       where id = new.provider_id and notify_booking_updates
     );
-  elsif old.status is distinct from new.status then
+  elsif old.status is distinct from new.status
+     or old.provider_completed_at is distinct from new.provider_completed_at then
     v_recipient_id := case when auth.uid() = new.customer_id then new.provider_id else new.customer_id end;
+    v_completion_requested := old.provider_completed_at is distinct from new.provider_completed_at
+      and new.provider_completed_at is not null;
     insert into public.notifications (user_id, kind, title, body, target_path)
-    select v_recipient_id, 'booking_update', 'Booking updated',
-      coalesce(v_service_title, 'Your booking') || ' is now ' || new.status::text || '.', 'bookings'
+    select v_recipient_id, 'booking_update',
+      case when v_completion_requested then 'Completion needs your verification' else 'Booking updated' end,
+      case when v_completion_requested
+        then coalesce(v_service_title, 'Your booking') || ' was marked complete. Please verify the work.'
+        when new.status = 'completed'
+        then coalesce(v_service_title, 'Your booking') || ' was verified as complete.'
+        else coalesce(v_service_title, 'Your booking') || ' is now ' || new.status::text || '.'
+      end,
+      'bookings'
     where exists (
       select 1 from public.profiles
       where id = v_recipient_id and notify_booking_updates
@@ -339,7 +351,7 @@ create trigger booking_created_notification
 after insert on public.bookings
 for each row execute function public.notify_booking_participants();
 create trigger booking_status_notification
-after update of status on public.bookings
+after update of status, provider_completed_at on public.bookings
 for each row execute function public.notify_booking_participants();
 
 create function public.notify_message_recipient()
@@ -950,10 +962,21 @@ begin
       null;
     elsif v_booking.provider_id = v_user_id
        and v_booking.status = 'confirmed'
+       and v_booking.provider_completed_at is null
+       and p_status = 'completed' then
+      update public.bookings
+      set provider_completed_at = now()
+      where id = v_booking.id
+      returning * into v_booking;
+      return v_booking;
+    elsif v_booking.customer_id = v_user_id
+       and v_booking.status = 'confirmed'
+       and v_booking.provider_completed_at is not null
        and p_status = 'completed' then
       null;
     elsif v_booking.customer_id = v_user_id
        and v_booking.status in ('pending', 'confirmed')
+       and v_booking.provider_completed_at is null
        and v_booking.group_booking_id is null
        and p_status = 'cancelled' then
       null;

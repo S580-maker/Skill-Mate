@@ -316,6 +316,7 @@ h1 > span { color: var(--main); font-family: "Plus Jakarta Sans", sans-serif; fo
 .booking-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
 .status { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 5px; font-size: 12px; font-weight: 600; }
 .status-confirmed, .status-completed { color: var(--main); background: var(--bg); }
+.status-awaiting-verification { color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--surface)); }
 .status-pending { color: var(--main); background: var(--bg); }
 .status-declined { color: var(--main); background: var(--bg); }
 .messages-layout { display: grid; height: clamp(480px, calc(100dvh - 260px), 780px); min-height: 420px; grid-template-columns: minmax(280px,340px) minmax(0,1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }

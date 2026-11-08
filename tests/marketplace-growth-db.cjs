@@ -43,6 +43,7 @@ async function main() {
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261106100000_marketplace_growth.sql"), "utf8"));
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261107100000_marketplace_email_notifications.sql"), "utf8"));
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261107110000_system_health_telemetry.sql"), "utf8"));
+  await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261107120000_client_completion_verification.sql"), "utf8"));
   console.log("PASS all database migrations compile against PostgreSQL");
   for (const [name, id] of Object.entries(users)) {
     await db.query("insert into auth.users(id,email,raw_user_meta_data) values($1,$2,$3)", [id, `${name}@example.test`, JSON.stringify({ full_name: name, university: name === "outsider" ? "Other University" : "University of Ghana" })]);
@@ -74,8 +75,24 @@ async function main() {
   await asUser("provider");
   await db.query("select public.start_booking_work($1)", [first]);
   assert.ok((await rows("select work_started_at from public.booking_directory where id=$1", [first]))[0].work_started_at);
-  await db.query("select public.update_booking_status($1,'completed')", [first]);
   await asUser("customer");
+  await rejects("select public.update_booking_status($1,'completed')", [first], /cannot make that booking status change/);
+  await asUser("provider");
+  await db.query("select public.update_booking_status($1,'completed')", [first]);
+  const pendingVerification = (await rows("select status, provider_completed_at from public.booking_directory where id=$1", [first]))[0];
+  assert.equal(pendingVerification.status, "confirmed");
+  assert.ok(pendingVerification.provider_completed_at);
+  await rejects("select public.start_booking_work($1)", [first], /Only the provider can start a confirmed booking/);
+  await rejects("select public.propose_booking_appointment($1,now()+interval '1 day')", [first], /active booking/);
+  await asUser("customer");
+  const completionNotification = (await rows(
+    "select title, body from public.notifications where user_id=$1 and booking_id=$2 order by created_at desc limit 1",
+    [users.customer, first],
+  ))[0];
+  assert.equal(completionNotification.title, "Completion needs your verification");
+  assert.match(completionNotification.body, /marked complete.*verify the work/i);
+  await db.query("select public.update_booking_status($1,'completed')", [first]);
+  assert.equal((await rows("select status from public.booking_directory where id=$1", [first]))[0].status, "completed");
   const second = await makeBooking("10:00");
   assert.ok(second, "An outstanding review never blocks a new booking at the database");
   await asUser("responder");

@@ -1219,7 +1219,11 @@ function renderBookingList(targetId, list, options = {}) {
     const appointmentProposalPending = Boolean(booking.pendingAppointmentProposalId);
     const actions = providerView
       ? `${booking.status === "Pending" ? `${appointmentProposalPending ? "" : `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button>`}<button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : ["Confirmed", "In progress"].includes(booking.status) ? `${booking.status === "Confirmed" && window.skillmateGrowth?.canStartWork() ? `<button class="button button-small button-primary" data-decision="In progress" data-booking-id="${escapeHTML(booking.id)}">Start work</button>` : ""}<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : ""}${["Pending", "Confirmed"].includes(status) && !appointmentProposalPending ? `<button class="subtle-button" data-propose-appointment="${escapeHTML(booking.id)}">Suggest another time</button>` : ""}<button class="subtle-button" data-message="customer:${escapeHTML(booking.id)}">Message student</button>`
-      : `${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-primary review-required-button" data-review="${escapeHTML(booking.id)}">Leave a review</button>` : ""}${appointmentProposalPending ? `<button class="button button-small button-primary" data-appointment-response="accept" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Accept suggested time</button><button class="button button-small button-outline" data-appointment-response="reject" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Keep original time</button>` : ""}${!booking.groupId && ["Pending", "Confirmed"].includes(status) ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
+      : `${status === "Awaiting verification" ? `<button class="button button-small button-primary" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Confirm completion</button>` : ""}${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-primary review-required-button" data-review="${escapeHTML(booking.id)}">Leave a review</button>` : ""}${appointmentProposalPending ? `<button class="button button-small button-primary" data-appointment-response="accept" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Accept suggested time</button><button class="button button-small button-outline" data-appointment-response="reject" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Keep original time</button>` : ""}${!booking.groupId && ["Pending", "Confirmed"].includes(status) ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
+    const statusLabel = status === "Awaiting verification"
+      ? providerView ? "Awaiting client verification" : "Verify completion"
+      : status === "Pending" ? providerView ? appointmentProposalPending ? "Time change awaiting customer" : "Needs your reply" : "Awaiting confirmation"
+      : status;
     const repeatAction = !providerView && status === "Completed" ? `<button class="button button-small button-outline" data-rebook="${escapeHTML(booking.id)}">Book again</button>` : "";
     const progress = window.skillmateGrowth?.progress(booking, providerView) || "";
     const priceChatAction = booking.priceNegotiationId
@@ -1236,7 +1240,7 @@ function renderBookingList(targetId, list, options = {}) {
       ? `<small class="booking-note">Arrangement: ${escapeHTML(booking.requestedLocation)}</small>` : "";
     const agreedScope = booking.scopeSnapshot
       ? `<div class="booking-location"><strong>${booking.priceAgreementId ? "Agreed service scope" : "Service details"}</strong><small>${escapeHTML(booking.scopeSnapshot)}</small></div>` : "";
-    return `<article class="booking-card${!providerView && status === "Completed" && !booking.reviewed ? " booking-awaiting-review" : ""}" data-booking-card-id="${escapeHTML(booking.id)}"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span>${booking.priceAgreementId ? '<span class="booking-type-pill">Agreed price</span>' : ""}<span class="status status-${escapeHTML(status.toLowerCase())}">${escapeHTML(status === "Pending" ? providerView ? appointmentProposalPending ? "Time change awaiting customer" : "Needs your reply" : "Awaiting confirmation" : status)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${appointmentSuggestion}${listedPriceNote}${requestedArrangement}${booking.note ? `<small class="booking-note">Instructions: “${escapeHTML(booking.note)}”</small>` : ""}${agreedScope}${progress}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${repeatAction}${priceChatAction}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
+    return `<article class="booking-card${!providerView && status === "Completed" && !booking.reviewed ? " booking-awaiting-review" : ""}" data-booking-card-id="${escapeHTML(booking.id)}"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span>${booking.priceAgreementId ? '<span class="booking-type-pill">Agreed price</span>' : ""}<span class="status status-${escapeHTML(status.toLowerCase().replaceAll(" ", "-"))}">${escapeHTML(statusLabel)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${appointmentSuggestion}${listedPriceNote}${requestedArrangement}${booking.note ? `<small class="booking-note">Instructions: “${escapeHTML(booking.note)}”</small>` : ""}${agreedScope}${progress}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${repeatAction}${priceChatAction}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
   }).join("") : '<div class="empty-card"><span>◷</span><strong>Nothing here just yet</strong><small>Your bookings and requests will appear here.</small></div>';
 }
 function resizeChatInput(input) {
@@ -2007,6 +2011,11 @@ function renderAll() {
 function toLocalStatus(status) {
   return ({ pending: "Pending", confirmed: "Confirmed", declined: "Declined", completed: "Completed", cancelled: "Cancelled" })[status] || status;
 }
+function toLocalBookingStatus(booking) {
+  if (booking.status === "confirmed" && booking.provider_completed_at) return "Awaiting verification";
+  if (booking.status === "confirmed" && booking.work_started_at) return "In progress";
+  return toLocalStatus(booking.status);
+}
 function toDatabaseStatus(status) {
   return ({ Pending: "pending", Confirmed: "confirmed", Declined: "declined", Completed: "completed", Cancelled: "cancelled" })[status] || status.toLowerCase();
 }
@@ -2232,7 +2241,7 @@ async function loadSupabaseState() {
   }
   state.bookings = (bookings.data || []).map((booking) => {
     const otherUserId = booking.customer_id === appUser.id ? booking.provider_id : booking.customer_id;
-    const status = booking.status === "confirmed" && booking.work_started_at ? "In progress" : toLocalStatus(booking.status);
+    const status = toLocalBookingStatus(booking);
     return {
       id: booking.id, serviceId: booking.service_id, providerId: booking.provider_id, customerId: booking.customer_id,
       workStartedAt: booking.work_started_at || null, durationMinutes: booking.duration_minutes || 60,
@@ -2316,7 +2325,7 @@ async function refreshLiveBookings() {
   }
   state.bookings = (bookings.data || []).map((booking) => {
     const otherUserId = booking.customer_id === appUser.id ? booking.provider_id : booking.customer_id;
-    const status = booking.status === "confirmed" && booking.work_started_at ? "In progress" : toLocalStatus(booking.status);
+    const status = toLocalBookingStatus(booking);
     return {
       id: booking.id, serviceId: booking.service_id, providerId: booking.provider_id, customerId: booking.customer_id,
       workStartedAt: booking.work_started_at || null, durationMinutes: booking.duration_minutes || 60,
@@ -2411,7 +2420,7 @@ async function persistBookingStatus(bookingId, status) {
   const booking = state.bookings.find((item) => item.id === bookingId);
   const previousStatus = booking?.status;
   if (booking) {
-    booking.status = status;
+    booking.status = status === "Completed" && isOwnBooking(booking) ? "Awaiting verification" : status;
     renderAll();
   }
   try {
@@ -5400,6 +5409,11 @@ document.querySelector("#user-booking-list").addEventListener("click", (event) =
   if (decision) {
     const booking = state.bookings.find((item) => item.id === decision.dataset.bookingId);
     if (!booking) return;
+    if (decision.dataset.decision === "Completed" && !isOwnBooking(booking)
+      && !window.confirm("Confirm that the provider has completed this service?")) return;
+    const completionMessage = isOwnBooking(booking)
+      ? "Marked complete. The client must verify the service."
+      : "Service completion verified.";
     if (appSupabase) {
       runAction(async () => {
         await persistBookingStatus(booking.id, decision.dataset.decision);
@@ -5408,11 +5422,12 @@ document.querySelector("#user-booking-list").addEventListener("click", (event) =
           : decision.dataset.decision === "Declined"
             ? "Booking request declined."
             : decision.dataset.decision === "Completed"
-              ? "Booking marked as completed."
+              ? completionMessage
               : decision.dataset.decision === "In progress" ? "Work started. The customer can see the update." : "Booking cancelled.");
       }, "Could not update this booking.");
     } else {
-      booking.status = decision.dataset.decision;
+      booking.status = decision.dataset.decision === "Completed" && isOwnBooking(booking)
+        ? "Awaiting verification" : decision.dataset.decision;
       if (booking.status === "In progress") booking.workStartedAt = new Date().toISOString();
       saveState();
       renderAll();
@@ -5421,7 +5436,7 @@ document.querySelector("#user-booking-list").addEventListener("click", (event) =
         : decision.dataset.decision === "Declined"
           ? "Booking request declined."
           : decision.dataset.decision === "Completed"
-            ? "Booking marked as completed."
+            ? completionMessage
             : decision.dataset.decision === "In progress" ? "Work started. The customer can see the update." : "Booking cancelled.");
     }
     return;
@@ -5476,11 +5491,12 @@ document.querySelector("#earnings-list").addEventListener("click", (event) => {
   if (appSupabase) {
     runAction(async () => {
       await persistBookingStatus(booking.id, button.dataset.decision);
-      showToast("Booking updated.");
+      showToast(isOwnBooking(booking) ? "Marked complete. The client must verify the service." : "Service completion verified.");
     }, "Could not update this booking.");
     return;
   }
-  booking.status = button.dataset.decision;
+  booking.status = button.dataset.decision === "Completed" && isOwnBooking(booking)
+    ? "Awaiting verification" : button.dataset.decision;
   if (booking.status === "In progress") booking.workStartedAt = new Date().toISOString();
   saveState();
   renderEarnings();

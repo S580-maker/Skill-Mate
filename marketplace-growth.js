@@ -104,7 +104,7 @@
     reviewDismissed() { return reviewDismissal === reviewKey(); },
     progress(booking, providerView) {
       const progress = utils.bookingProgress(booking, providerView);
-      const stages = ["Requested", "Confirmed", "In progress", "Completed"];
+      const stages = ["Requested", "Confirmed", "In progress", "Client verification", "Completed"];
       return `${progress.step < 0 ? "" : `<ol class="booking-progress" aria-label="Booking progress">${stages.map((label, index) => `<li${index === progress.step ? ' aria-current="step"' : ""} class="${index < progress.step ? "is-done" : ""}">${index < progress.step ? "✓ " : ""}${label}</li>`).join("")}</ol>`}<small class="booking-next-step">${escapeHTML(progress.next)}</small>`;
     },
     canStartWork() { return !appSupabase || schedulesAvailable; },

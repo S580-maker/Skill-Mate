@@ -38,7 +38,7 @@ test("booking progress distinguishes provider and customer next steps", () => {
   assert.equal(utils.bookingProgress({ status: "Pending" }, true).step, 0);
   assert.match(utils.bookingProgress({ status: "Pending" }, false).next, /Waiting/);
   assert.equal(utils.bookingProgress({ status: "Confirmed", workStartedAt: "2026-11-09" }, false).step, 2);
-  assert.equal(utils.bookingProgress({ status: "Completed" }, false).step, 3);
+  assert.equal(utils.bookingProgress({ status: "Completed" }, false).step, 4);
   assert.equal(utils.bookingProgress({ status: "Cancelled" }, false).step, -1);
 });
 test("provider results count repeat completed customers without counting requests as completed", () => {
