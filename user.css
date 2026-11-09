@@ -567,6 +567,9 @@ textarea:focus-visible, summary:focus-visible {
 }
 @keyframes field-error-in { from { transform: translateY(-3px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .skeleton {
+  display: block;
+  min-width: 0;
+  flex-shrink: 0;
   position: relative;
   overflow: hidden;
   border-radius: 6px;
@@ -581,6 +584,21 @@ textarea:focus-visible, summary:focus-visible {
   animation: skeleton-shimmer 1.3s linear infinite;
 }
 @keyframes skeleton-shimmer { to { transform: translateX(100%); } }
+.content-loading-placeholder { width: 100%; grid-column: 1 / -1; list-style: none; }
+.content-skeletons { display: grid; width: 100%; grid-column: 1 / -1; gap: 16px; }
+.content-skeleton { display: flex; gap: 16px; min-width: 0; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.content-skeleton-art { width: 48px; height: 48px; border-radius: 12px; background: color-mix(in srgb, var(--main) 10%, var(--surface)); }
+.content-skeleton-copy { display: grid; align-content: center; flex: 1; min-width: 0; gap: 12px; }
+.content-skeleton-copy .skeleton { width: 90%; height: 12px; background: color-mix(in srgb, var(--main) 10%, var(--surface)); }
+.content-skeleton-copy .skeleton:first-child { width: 60%; height: 18px; }
+.content-skeleton-copy .skeleton:last-child { width: 40%; }
+.content-skeletons--cards { grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }
+.content-skeletons--cards .content-skeleton { display: block; padding: 0; overflow: hidden; }
+.content-skeletons--cards .content-skeleton-art { width: 100%; height: 150px; border-radius: 0; }
+.content-skeletons--cards .content-skeleton-copy { padding: 20px; }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; transform: none; }
+}
 .conversation-item .person-avatar { background-color: var(--main-soft); }
 .portfolio-image { width: 100%; height: 100%; object-fit: cover; background: var(--main-soft); }
 img[loading="lazy"] { background-color: var(--main-soft); }

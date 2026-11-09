@@ -326,6 +326,24 @@ test("rapid duplicate submissions produce only one database write", async () => 
   assert.equal(f.writes.length, 1);
 });
 
+test("a listing updates before persistence finishes and a rejected edit restores the previous listing", async () => {
+  const f = fixture();
+  const previous = { id: "existing-id", title: "Previous title", category: "Design", active: false };
+  f.context.state.services = [previous];
+  await f.prepare(previous); f.fill();
+  await f.get("form").fire("submit");
+  let finish;
+  f.context.appSupabase.rpc = () => new Promise(resolve => { finish = resolve; });
+  const saving = f.get("form").fire("submit");
+  assert.equal(f.context.state.services[0].title, "Campus posters");
+  assert.equal(f.context.state.services[0].pending, true);
+  assert.equal(f.context.state.services[0].active, false);
+  finish({ error: { message: "offline" } });
+  await saving;
+  assert.equal(f.context.state.services[0], previous);
+  assert.equal(f.get("title").value, "Campus posters", "the draft remains available for retry");
+});
+
 test("post-save refresh failure is reported as saved rather than as a failed publication", async () => {
   const f = fixture({ failRefresh: true }); await f.prepare(); f.fill();
   await f.get("form").fire("submit"); await f.get("form").fire("submit");

@@ -9,6 +9,9 @@
     if (loading) return;
     if (reset) { offset = 0; list.replaceChildren(); }
     loading = true;
+    const finishLoading = typeof window !== "undefined" && window.skillmateLoading
+      ? window.skillmateLoading.show(list, { count: 3, label: "Loading notifications" })
+      : () => {};
     more.disabled = true;
     status.textContent = "Loading notifications…";
     try {
@@ -23,6 +26,7 @@
       }
       const { data, error } = result;
       if (error) throw error;
+      finishLoading();
       for (const item of data || []) {
         const row = document.createElement("li");
         row.className = "notification-item";
@@ -106,6 +110,7 @@
       more.hidden = false;
       more.textContent = "Try again";
     } finally {
+      finishLoading();
       loading = false;
       more.disabled = false;
     }

@@ -146,6 +146,7 @@ let dashboardDataLoaded = false;
 const pendingProviderSaves = new Set();
 const pendingGroupActions = new Set();
 const pendingServiceToggles = new Set();
+const pendingBookingStatuses = new Map();
 const DASHBOARD_LOAD_ESTIMATE_KEY = "skillmate-dashboard-load-estimate-ms-v1";
 const ACTION_LOAD_ESTIMATE_MS = 15000;
 let dashboardLoadEstimateMs = ACTION_LOAD_ESTIMATE_MS;
@@ -1085,7 +1086,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   if (!target) return;
   if (appSupabase && !dashboardDataLoaded && targetId === "marketplace-grid") {
     target.setAttribute("aria-busy", "true");
-    target.innerHTML = '<div class="marketplace-loading" role="status"><span class="loading-spinner" aria-hidden="true"></span> Finding services on your campus…</div>';
+    target.innerHTML = window.skillmateLoading.markup({ count: 6, variant: "cards", label: "Finding services on your campus" });
     return;
   }
   target.removeAttribute("aria-busy");
@@ -1242,6 +1243,13 @@ function renderBookingList(targetId, list, options = {}) {
       ? `<div class="booking-location"><strong>${booking.priceAgreementId ? "Agreed service scope" : "Service details"}</strong><small>${escapeHTML(booking.scopeSnapshot)}</small></div>` : "";
     return `<article class="booking-card${!providerView && status === "Completed" && !booking.reviewed ? " booking-awaiting-review" : ""}" data-booking-card-id="${escapeHTML(booking.id)}"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span>${booking.priceAgreementId ? '<span class="booking-type-pill">Agreed price</span>' : ""}<span class="status status-${escapeHTML(status.toLowerCase().replaceAll(" ", "-"))}">${escapeHTML(statusLabel)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${appointmentSuggestion}${listedPriceNote}${requestedArrangement}${booking.note ? `<small class="booking-note">Instructions: “${escapeHTML(booking.note)}”</small>` : ""}${agreedScope}${progress}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${repeatAction}${priceChatAction}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
   }).join("") : '<div class="empty-card"><span>◷</span><strong>Nothing here just yet</strong><small>Your bookings and requests will appear here.</small></div>';
+  target.querySelectorAll("[data-decision], [data-propose-appointment], [data-review]").forEach(button => {
+    const id = button.dataset.bookingId || button.dataset.proposeAppointment || button.dataset.review;
+    if (pendingBookingStatuses.has(id) || id?.startsWith("pending-booking-")) {
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+    }
+  });
 }
 function resizeChatInput(input) {
   input.style.height = "auto";
@@ -1872,11 +1880,11 @@ function serviceDetailLabel(service) {
 }
 function renderListings() {
   const target = document.querySelector("#listing-list");
-  target.innerHTML = state.services.length ? state.services.map((service) => `<article class="listing-card">${serviceCoverUrl(service) ? `<img class="service-list-cover" src="${escapeHTML(serviceCoverUrl(service))}" alt="" loading="lazy" />` : `<span class="service-list-icon">${getCategoryIcon(service.category)}</span>`}<div class="listing-copy"><div class="listing-title"><strong>${escapeHTML(service.title)}</strong><span class="listing-status ${service.active ? "listing-active" : "listing-paused"}">${service.active ? "Active" : "Paused"}</span></div><small>${escapeHTML(service.category)} ${service.groups ? "· Open to groups" : ""}</small><p>${escapeHTML(service.description)}</p><small>${escapeHTML(serviceDetailLabel(service))}</small></div><strong class="listing-price">${servicePriceLabel(service)}</strong><div class="listing-actions"><button class="button button-small button-outline" type="button" data-edit-service="${escapeHTML(service.id)}">Edit</button><button class="subtle-button" type="button" data-toggle-service="${escapeHTML(service.id)}" ${pendingServiceToggles.has(service.id) ? "disabled aria-busy=\"true\"" : ""}>${service.active ? "Pause" : "Activate"}</button></div></article>`).join("") : '<div class="empty-card"><strong>Your first service starts here</strong><small>List a skill to help students find and book you.</small><button class="button button-primary button-small" type="button" data-open="service-modal">Add a service</button></div>';
+  target.innerHTML = state.services.length ? state.services.map((service) => `<article class="listing-card">${serviceCoverUrl(service) ? `<img class="service-list-cover" src="${escapeHTML(serviceCoverUrl(service))}" alt="" loading="lazy" />` : `<span class="service-list-icon">${getCategoryIcon(service.category)}</span>`}<div class="listing-copy"><div class="listing-title"><strong>${escapeHTML(service.title)}</strong><span class="listing-status ${service.active ? "listing-active" : "listing-paused"}">${service.pending ? "Saving..." : service.active ? "Active" : "Paused"}</span></div><small>${escapeHTML(service.category)} ${service.groups ? "· Open to groups" : ""}</small><p>${escapeHTML(service.description)}</p><small>${escapeHTML(serviceDetailLabel(service))}</small></div><strong class="listing-price">${servicePriceLabel(service)}</strong><div class="listing-actions"><button class="button button-small button-outline" type="button" data-edit-service="${escapeHTML(service.id)}" ${service.pending ? "disabled" : ""}>Edit</button><button class="subtle-button" type="button" data-toggle-service="${escapeHTML(service.id)}" ${service.pending || pendingServiceToggles.has(service.id) ? "disabled aria-busy=\"true\"" : ""}>${service.active ? "Pause" : "Activate"}</button></div></article>`).join("") : '<div class="empty-card"><strong>Your first service starts here</strong><small>List a skill to help students find and book you.</small><button class="button button-primary button-small" type="button" data-open="service-modal">Add a service</button></div>';
 }
 function renderPortfolio() {
   const target = document.querySelector("#portfolio-grid");
-  target.innerHTML = state.portfolio.length ? state.portfolio.map((item) => `<article class="portfolio-item">${item.image ? `<img class="portfolio-art portfolio-image" src="${escapeHTML(item.image)}" alt="" width="96" height="72" loading="lazy" decoding="async" />` : `<span class="portfolio-art">${getCategoryIcon("Design")}</span>`}<div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.description)}</small></div><button type="button" class="portfolio-remove" data-remove-work="${escapeHTML(item.id)}" aria-label="Remove ${escapeHTML(item.title)}">×</button></article>`).join("") : '<div class="empty-card"><strong>Your portfolio is ready to grow</strong><small>Add examples of your best work.</small></div>';
+  target.innerHTML = state.portfolio.length ? state.portfolio.map((item) => `<article class="portfolio-item">${item.image ? `<img class="portfolio-art portfolio-image" src="${escapeHTML(item.image)}" alt="" width="96" height="72" loading="lazy" decoding="async" />` : `<span class="portfolio-art">${getCategoryIcon("Design")}</span>`}<div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.description)}</small></div><button type="button" class="portfolio-remove" ${item.pending ? "disabled aria-busy=\"true\"" : ""} data-remove-work="${escapeHTML(item.id)}" aria-label="Remove ${escapeHTML(item.title)}">×</button></article>`).join("") : '<div class="empty-card"><strong>Your portfolio is ready to grow</strong><small>Add examples of your best work.</small></div>';
 }
 function renderEarnings() {
   const completed = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Completed");
@@ -1891,6 +1899,9 @@ function bookingsForActiveFilter() {
   return bookings;
 }
 function renderBookingActivity() {
+  for (const booking of state.bookings) {
+    if (pendingBookingStatuses.has(booking.id)) booking.status = pendingBookingStatuses.get(booking.id);
+  }
   window.skillmateGrowth?.render();
   renderBookingList("user-booking-list", bookingsForActiveFilter());
   const pendingReviews = pendingCustomerReviews();
@@ -1930,6 +1941,9 @@ function renderMarketplaceActivity() {
   document.querySelectorAll("[data-student-verification]").forEach(node => { node.textContent = profile.verified ? "Campus verified" : "Campus verification is available in your account menu."; });
 }
 function renderAll() {
+  for (const booking of state.bookings) {
+    if (pendingBookingStatuses.has(booking.id)) booking.status = pendingBookingStatuses.get(booking.id);
+  }
   window.skillmateGrowth?.render();
   if (typeof window.renderProfileCompleteness === "function") {
     window.renderProfileCompleteness(state.profile);
@@ -2068,6 +2082,15 @@ async function refreshSupabaseState() {
     dashboardRefreshPromise = null;
   });
   return dashboardRefreshPromise;
+}
+async function reconcileSavedChange() {
+  // Persistence already succeeded. A failed follow-up read must not undo it.
+  try {
+    await refreshSupabaseState();
+  } catch (error) {
+    console.error("Change saved, but account data could not be refreshed.", error);
+    showToast("Your change was saved. Some details could not refresh; reload to sync them.", "error");
+  }
 }
 async function refreshPriceNegotiations() {
   if (!negotiationBackendAvailable) return;
@@ -2417,10 +2440,14 @@ function initialsFor(name = "Student") {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 async function persistBookingStatus(bookingId, status) {
+  if (pendingBookingStatuses.has(bookingId)) return;
   const booking = state.bookings.find((item) => item.id === bookingId);
   const previousStatus = booking?.status;
+  const previousWorkStartedAt = booking?.workStartedAt;
+  pendingBookingStatuses.set(bookingId, status);
   if (booking) {
     booking.status = status === "Completed" && isOwnBooking(booking) ? "Awaiting verification" : status;
+    if (status === "In progress") booking.workStartedAt = new Date().toISOString();
     renderAll();
   }
   try {
@@ -2432,8 +2459,11 @@ async function persistBookingStatus(bookingId, status) {
     const { error } = result;
     if (error) throw error;
   } catch (error) {
-    if (booking) {
-      booking.status = previousStatus;
+    pendingBookingStatuses.delete(bookingId);
+    const currentBooking = state.bookings.find(item => item.id === bookingId);
+    if (currentBooking) {
+      currentBooking.status = previousStatus;
+      currentBooking.workStartedAt = previousWorkStartedAt;
       renderAll();
     }
     throw error;
@@ -2443,6 +2473,9 @@ async function persistBookingStatus(bookingId, status) {
   } catch (error) {
     console.error("Booking status was saved, but the latest account data could not be refreshed.", error);
   }
+  const currentBooking = state.bookings.find(item => item.id === bookingId);
+  if (currentBooking) currentBooking.status = status;
+  pendingBookingStatuses.delete(bookingId);
   renderAll();
 }
 function handleAppointmentActions(event) {
@@ -2584,15 +2617,11 @@ function startDashboardLoading() {
   } catch (error) {
     console.warn("Could not read the dashboard loading-time estimate.", error);
   }
+  document.querySelector("#app-auth-status").hidden = false;
+  document.querySelector("#dashboard-loading-skeleton").hidden = false;
   window.setTimeout(() => {
     if (!document.body.classList.contains("app-auth-pending")) return;
-    const status = document.querySelector("#app-auth-status");
-    status.hidden = false;
     document.querySelector("#dashboard-loading-skeleton").hidden = false;
-  }, 1000);
-  window.setTimeout(() => {
-    if (!document.body.classList.contains("app-auth-pending")) return;
-    document.querySelector("#dashboard-loading-skeleton").hidden = true;
     document.querySelector("#dashboard-loading-progress").hidden = false;
     updateDashboardLoadingProgress();
     dashboardLoadingInterval = window.setInterval(updateDashboardLoadingProgress, 1000);
@@ -3317,11 +3346,23 @@ async function openProviderProfile(providerId, serviceId) {
   const services = providerServices(providerId);
   const selectedService = services.find(service => service.id === serviceId) || services[0];
   const profile = document.querySelector("#provider-detail-content");
+  const requestId = crypto.randomUUID();
+  profile.dataset.requestId = requestId;
+  profile.innerHTML = window.skillmateLoading.markup({ count: 4, label: "Loading provider details" });
+  document.querySelector("#provider-detail-title").textContent = selectedService?.title || provider.service;
+  document.querySelector("#provider-detail-book").disabled = true;
+  document.querySelector("#provider-detail-message").disabled = true;
+  document.querySelector("#provider-detail-report").disabled = true;
+  openModal("provider-detail-modal");
   let cvUrl = "";
   if (appSupabase && provider.cvPath
     && /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.pdf$/i.test(provider.cvPath)
     && provider.cvPath.startsWith(`${providerId}/`)) {
-    const { data, error } = await appSupabase.storage.from("provider-cvs").createSignedUrl(provider.cvPath, 900);
+    let data, error;
+    try {
+      ({ data, error } = await appSupabase.storage.from("provider-cvs").createSignedUrl(provider.cvPath, 900));
+    } catch (failure) { error = failure; }
+    if (profile.dataset.requestId !== requestId) return;
     if (error) {
       console.error("Could not create a signed provider CV link.", error);
       showToast("This provider’s CV could not be opened right now.", "error");
@@ -3355,7 +3396,9 @@ async function openProviderProfile(providerId, serviceId) {
   document.querySelector("#provider-detail-message").dataset.message = providerId;
   document.querySelector("#provider-detail-message").dataset.service = selectedService?.id || "";
   document.querySelector("#provider-detail-report").dataset.report = providerId;
-  openModal("provider-detail-modal");
+  document.querySelector("#provider-detail-book").disabled = false;
+  document.querySelector("#provider-detail-message").disabled = false;
+  document.querySelector("#provider-detail-report").disabled = false;
 }
 function openMessage(providerId, messageFor = "provider", serviceId) {
   const provider = providerId.startsWith("customer:") ? getProvider(providerId) : getProvider(providerId);
@@ -3791,6 +3834,7 @@ function handleCardAction(event) {
       renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders)
         .filter((provider) => state.saved.includes(provider.id)));
     }
+    renderMarketplaceActivity();
     setProviderSaveButtonsBusy(id, true);
     void runAction(async () => {
       try {
@@ -3804,7 +3848,7 @@ function handleCardAction(event) {
             : appSupabase.from("saved_services").delete().eq("user_id", appUser.id).eq("service_id", service.id)));
           const failed = changes.find((result) => result.error);
           if (failed) throw failed.error;
-          await refreshSupabaseState();
+          await reconcileSavedChange();
           renderAll();
         } else {
           saveState();
@@ -3862,7 +3906,7 @@ document.querySelector("#group-grid").addEventListener("click", (event) => {
       try {
         const { error } = await appSupabase.rpc(wasJoined ? "leave_group_booking" : "join_group_booking", { p_group_id: group.id });
         if (error) throw error;
-        await refreshSupabaseState();
+        await reconcileSavedChange();
         renderAll();
       } catch (error) {
         Object.assign(group, previousGroup);
@@ -3974,6 +4018,8 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
     };
     state.bookings.unshift(pendingBooking);
     renderAll();
+    event.target.closest("dialog").close();
+    showPage("bookings");
     runAction(async () => {
       try {
         const result = negotiationId
@@ -3991,16 +4037,15 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
           });
         const { error } = result;
         if (error) throw error;
-        await refreshSupabaseState();
+        await reconcileSavedChange();
         bookingDrafts.delete(bookingDraftKey);
-        event.target.closest("dialog").close();
         renderAll();
-        showPage("bookings");
         showToast("Booking request sent. You can track it in My bookings.", "success");
       } catch (error) {
         state.bookings = state.bookings.filter((booking) => booking.id !== temporaryId);
         renderAll();
         window.skillmateGrowth?.refreshSlots();
+        if (!document.querySelector("dialog[open]")) openModal("booking-modal");
         throw error;
       }
     }, "Could not send the booking request.").finally(() => {
@@ -4428,13 +4473,13 @@ document.querySelector("#listing-list").addEventListener("click", (event) => {
   const toggle = event.target.closest("[data-toggle-service]");
   if (edit) {
     const service = state.services.find((item) => item.id === edit.dataset.editService);
-    if (!service) return;
+    if (!service || service.pending) return;
     window.skillmateServiceEditor.prepare(service);
     openModal("service-modal");
   }
   if (toggle) {
     const service = state.services.find((item) => item.id === toggle.dataset.toggleService);
-    if (!service) return;
+    if (!service || service.pending) return;
     if (appSupabase) {
       if (pendingServiceToggles.has(service.id)) return;
       pendingServiceToggles.add(service.id);
@@ -4446,7 +4491,7 @@ document.querySelector("#listing-list").addEventListener("click", (event) => {
           const { error } = await appSupabase.from("services").update({ is_active: service.active })
             .eq("id", service.id).eq("provider_id", appUser.id);
           if (error) throw error;
-          await refreshSupabaseState();
+          await reconcileSavedChange();
           populateServiceSelects();
           renderAll();
         } catch (error) {
@@ -5190,6 +5235,7 @@ document.querySelector("#portfolio-form").addEventListener("submit", async (even
   if (file && !["image/jpeg", "image/png", "image/webp"].includes(file.type)) { showToast("Choose a JPG, PNG or WebP image for your portfolio."); return; }
   if (file && file.size > 1000000) { showToast("Please choose an image smaller than 1 MB."); return; }
   if (appSupabase) {
+    const pendingItem = { id: crypto.randomUUID(), title: document.querySelector("#portfolio-title").value.trim(), description: document.querySelector("#portfolio-description").value.trim(), image: "", pending: true };
     runAction(async () => {
       let imagePath = null;
       if (file) {
@@ -5203,8 +5249,8 @@ document.querySelector("#portfolio-form").addEventListener("submit", async (even
         if (uploadError) throw uploadError;
       }
       const { error } = await appSupabase.from("portfolio_items").insert({
-        provider_id: appUser.id, title: document.querySelector("#portfolio-title").value.trim(),
-        description: document.querySelector("#portfolio-description").value.trim(), image_path: imagePath,
+        id: pendingItem.id, provider_id: appUser.id, title: pendingItem.title,
+        description: pendingItem.description, image_path: imagePath,
       });
       if (error) {
         if (imagePath) {
@@ -5213,12 +5259,22 @@ document.querySelector("#portfolio-form").addEventListener("submit", async (even
         }
         throw error;
       }
-      await refreshSupabaseState();
+      pendingItem.pending = false;
+      await reconcileSavedChange();
       renderPortfolio();
       event.target.closest("dialog").close();
       event.target.reset();
       showToast("Portfolio item added to your profile.");
-    }, "Could not add this portfolio item.");
+    }, "Could not add this portfolio item.", "Adding portfolio item…", {
+      optimistic: () => {
+        state.portfolio.unshift(pendingItem);
+        if (file) void readImage(file).then(image => {
+          if (state.portfolio.includes(pendingItem)) { pendingItem.image = image; renderPortfolio(); }
+        }).catch(error => console.warn("Portfolio preview could not be read.", error));
+      },
+      rollback: () => { state.portfolio = state.portfolio.filter(item => item.id !== pendingItem.id); },
+      renderOptimistic: renderPortfolio,
+    });
     return;
   }
   let image = "";
@@ -5240,9 +5296,12 @@ document.querySelector("#portfolio-form").addEventListener("submit", async (even
 document.querySelector("#portfolio-grid").addEventListener("click", (event) => {
   const button = event.target.closest("[data-remove-work]");
   if (!button) return;
+  if (state.portfolio.find(item => item.id === button.dataset.removeWork)?.pending) return;
   if (appSupabase) {
+    const removedItem = state.portfolio.find(item => item.id === button.dataset.removeWork);
+    const removedIndex = state.portfolio.indexOf(removedItem);
     runAction(async () => {
-      const item = state.portfolio.find((entry) => entry.id === button.dataset.removeWork);
+      const item = removedItem;
       const { error } = await appSupabase.from("portfolio_items").delete()
         .eq("id", button.dataset.removeWork).eq("provider_id", appUser.id);
       if (error) throw error;
@@ -5250,10 +5309,16 @@ document.querySelector("#portfolio-grid").addEventListener("click", (event) => {
         const { error: storageError } = await appSupabase.storage.from("portfolio-images").remove([item.imagePath]);
         if (storageError) console.error("Portfolio item was removed, but its image could not be deleted.", storageError);
       }
-      await refreshSupabaseState();
+      await reconcileSavedChange();
       renderPortfolio();
       showToast("Portfolio item removed.");
-    }, "Could not remove this portfolio item.");
+    }, "Could not remove this portfolio item.", "Removing portfolio item…", {
+      optimistic: () => { state.portfolio = state.portfolio.filter(item => item.id !== button.dataset.removeWork); },
+      rollback: () => {
+        if (removedItem && !state.portfolio.some(item => item.id === removedItem.id)) state.portfolio.splice(Math.max(0, removedIndex), 0, removedItem);
+      },
+      renderOptimistic: renderPortfolio,
+    });
     return;
   }
   state.portfolio = state.portfolio.filter((item) => item.id !== button.dataset.removeWork);
@@ -5376,15 +5441,20 @@ document.querySelector("#blocked-list").addEventListener("click", (event) => {
   const button = event.target.closest("[data-unblock]");
   if (!button) return;
   if (appSupabase) {
+    const id = button.dataset.unblock;
     runAction(async () => {
       const { error } = await appSupabase.from("user_blocks").delete()
         .eq("blocker_id", appUser.id).eq("blocked_id", button.dataset.unblock);
       if (error) throw error;
-      await refreshSupabaseState();
+      await reconcileSavedChange();
       renderAll();
       renderBlocked();
       showToast("Student unblocked.");
-    }, "Could not unblock this student.");
+    }, "Could not unblock this student.", "Unblocking student…", {
+      optimistic: () => { state.blocked = state.blocked.filter(blockedId => blockedId !== id); },
+      rollback: () => { if (!state.blocked.includes(id)) state.blocked.push(id); },
+      renderOptimistic: () => { renderAll(); renderBlocked(); },
+    });
     return;
   }
   state.blocked = state.blocked.filter((id) => id !== button.dataset.unblock);
@@ -5455,18 +5525,28 @@ document.querySelector("#review-form").addEventListener("submit", (event) => {
   const booking = state.bookings.find((item) => item.id === document.querySelector("#review-booking-id").value);
   if (!booking) return;
   if (appSupabase) {
+    const review = { bookingId: booking.id, providerId: booking.providerId, rating: Number(document.querySelector("#review-rating").value), text: document.querySelector("#review-text").value.trim(), date: new Date().toISOString() };
+    const wasReviewed = booking.reviewed;
     runAction(async () => {
       const { error } = await appSupabase.from("reviews").insert({
         booking_id: booking.id, reviewer_id: appUser.id, provider_id: booking.providerId,
-        rating: Number(document.querySelector("#review-rating").value),
-        body: document.querySelector("#review-text").value.trim(),
+        rating: review.rating,
+        body: review.text,
       });
       if (error) throw error;
-      await refreshSupabaseState();
+      await reconcileSavedChange();
       renderAll();
       event.target.closest("dialog").close();
       showToast("Thank you. Your review has been added.");
-    }, "Could not post your review.");
+    }, "Could not post your review.", "Posting review…", {
+      optimistic: () => { booking.reviewed = true; state.reviews.unshift(review); },
+      rollback: () => {
+        const current = state.bookings.find(item => item.id === booking.id);
+        if (current) current.reviewed = wasReviewed;
+        state.reviews = state.reviews.filter(item => item !== review);
+      },
+      renderOptimistic: renderAll,
+    });
     return;
   }
   booking.reviewed = true;

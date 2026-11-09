@@ -341,6 +341,11 @@
     if (!reviewing) { setReview(true); return; }
     const draft = readDraft();
     const operationGeneration = generation;
+    const previousListing = state.services.find(service => service.id === draftId);
+    const optimisticListing = { ...existing, ...draft, id: draftId, price: Number(draft.price),
+      active: existing?.active ?? true, coverImage: coverUrl, pending: true };
+    state.services = [optimisticListing, ...state.services.filter(service => service.id !== draftId)];
+    renderListings();
     setBusy(true);
     submit.textContent = "Saving…";
     showFeedback("Saving your service…", "loading");
@@ -408,6 +413,9 @@
         showToast("Your service was saved. The dashboard could not refresh; reload to see the latest listings.", "error");
       }
     } catch (error) {
+      state.services = state.services.filter(service => service.id !== draftId);
+      if (previousListing) state.services.unshift(previousListing);
+      renderListings();
       showFeedback(error.message || "Could not save your service. Your details are still here.");
       feedback.focus?.();
     } finally {

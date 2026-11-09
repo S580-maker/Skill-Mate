@@ -125,7 +125,7 @@ test("concurrent dashboard refreshes share one load and release after errors", a
   await assert.rejects(third);
 });
 
-test("dashboard loading waits one second for a skeleton, then shows progress and an ETA after ten seconds", () => {
+test("dashboard skeleton appears immediately and stays visible with progress during slow loads", () => {
   const source = read("user.js");
   const elements = new Map();
   const get = selector => {
@@ -166,14 +166,13 @@ test("dashboard loading waits one second for a skeleton, then shows progress and
   ), context);
 
   context.startDashboardLoading();
-  assert.equal(get("#app-auth-status").hidden, true, "Fast starts do not flash a loading screen");
+  assert.equal(get("#app-auth-status").hidden, false, "Startup has no blank screen");
   now += 1000;
-  timers.get(1000)();
   assert.equal(get("#app-auth-status").hidden, false);
   assert.equal(get("#dashboard-loading-skeleton").hidden, false);
   now += 9000;
   timers.get(10000)();
-  assert.equal(get("#dashboard-loading-skeleton").hidden, true);
+  assert.equal(get("#dashboard-loading-skeleton").hidden, false);
   assert.equal(get("#dashboard-loading-progress").hidden, false);
   assert.equal(get("#dashboard-loading-bar").value, 67);
   assert.equal(get("#dashboard-loading-elapsed").textContent, "10 seconds elapsed");
@@ -294,6 +293,7 @@ test("booking status appears immediately and reverts when Supabase rejects the u
   let renders = 0;
   const context = {
     appSupabase: { rpc: () => new Promise((_, reject) => { rejectWrite = reject; }) },
+    pendingBookingStatuses: new Map(),
     state: { bookings: [booking] },
     toDatabaseStatus: value => value,
     renderAll: () => { renders++; },
@@ -306,10 +306,25 @@ test("booking status appears immediately and reverts when Supabase rejects the u
   const update = context.persistBookingStatus("booking-1", "Confirmed");
   assert.equal(booking.status, "Confirmed");
   assert.equal(renders, 1);
+  await context.persistBookingStatus("booking-1", "Completed");
+  assert.equal(booking.status, "Confirmed", "a second status action waits for the current write");
   rejectWrite(new Error("offline"));
   await assert.rejects(update, /offline/);
   assert.equal(booking.status, "Pending");
   assert.equal(renders, 2);
+});
+
+test("failed reconciliation preserves a confirmed change and reports that it was saved", async () => {
+  const source = read("user.js");
+  const notices = [];
+  const context = {
+    refreshSupabaseState: async () => { throw new Error("offline"); },
+    console: { error() {} }, showToast: message => notices.push(message),
+  };
+  vm.createContext(context);
+  vm.runInContext(source.slice(source.indexOf("async function reconcileSavedChange"), source.indexOf("async function refreshPriceNegotiations")), context);
+  await context.reconcileSavedChange();
+  assert.match(notices[0], /change was saved/);
 });
 
 test("chat realtime subscribes only to the open conversation and refreshes the thread only while disconnected", async () => {

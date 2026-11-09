@@ -43,14 +43,19 @@
       responses = Array.isArray(data.responses) ? data.responses : [];
     } catch { /* Start with an empty demo board. */ }
   }
-  async function write(form, feedbackId, work) {
+  async function write(form, feedbackId, work, { optimistic, rollback, render } = {}) {
     if (form.dataset.saving) return;
     form.dataset.saving = "true";
     const submit = form.querySelector('[type="submit"]');
     submit.disabled = true;
     feedback(feedbackId, "Saving…");
-    try { await work(); }
+    let applied = false;
+    try {
+      if (optimistic) { applied = true; optimistic(); render?.(); }
+      await work();
+    }
     catch (error) {
+      if (applied) { rollback?.(); render?.(); }
       feedback(feedbackId, error.message || "Could not save. Your details are still here; please try again.", true);
       if (feedbackId === "#availability-feedback") $("#availability-summary-status").textContent = "Not saved";
     }
@@ -180,6 +185,9 @@
       if (appSupabase && !appUser) return;
       boardLoading = (async () => {
       $("#request-board-refresh").disabled = true;
+      const finishLoading = !requests.length && window.skillmateLoading
+        ? window.skillmateLoading.show($("#request-board-grid"), { count: 6, variant: "cards", label: "Loading campus requests" })
+        : () => {};
       feedback("#request-board-feedback", "Loading campus requests…");
       try {
         if (appSupabase) {
@@ -195,7 +203,7 @@
       } catch {
         feedback("#request-board-feedback", "Campus requests could not load. Try Refresh in a moment.", true);
         $("#request-board-grid").innerHTML = '<div class="empty-card"><strong>Requests are temporarily unavailable</strong><small>Your existing bookings and messages are still available.</small></div>';
-      } finally { $("#request-board-refresh").disabled = false; }
+      } finally { finishLoading(); $("#request-board-refresh").disabled = false; }
       })();
       try { return await boardLoading; }
       finally { boardLoading = null; }
@@ -248,12 +256,23 @@
       || schedule.blocked_dates.some(date => !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0,10) !== date)) {
       feedback("#availability-feedback", "Check the time zone, working hours and dates off. Each day must fit a full appointment.", true); return;
     }
+    const previousSchedule = schedules.find(item => item.provider_id === schedule.provider_id);
     write(event.target, "#availability-feedback", async () => {
       if (appSupabase) await rpc("save_provider_availability", { p_timezone: schedule.timezone, p_slot_minutes: schedule.slot_minutes, p_weekly_hours: schedule.weekly_hours, p_blocked_dates: schedule.blocked_dates, p_is_published: schedule.is_published });
       schedules = schedules.filter(item => item.provider_id !== schedule.provider_id).concat(schedule);
       saveDemo(); renderMarketplace();
       feedback("#availability-feedback", schedule.is_published ? "Your hours are published. Existing appointments keep their agreed time and length." : "Your hours are saved privately. Students can request a preferred time.");
       $("#availability-summary-status").textContent = schedule.is_published ? "Published" : "Saved privately";
+    }, {
+      optimistic: () => {
+        schedules = schedules.filter(item => item.provider_id !== schedule.provider_id).concat(schedule);
+        $("#availability-summary-status").textContent = schedule.is_published ? "Publishing…" : "Saving privately…";
+      },
+      rollback: () => {
+        schedules = schedules.filter(item => item.provider_id !== schedule.provider_id);
+        if (previousSchedule) schedules.push(previousSchedule);
+      },
+      render: renderMarketplace,
     });
   });
   $("#booking-date").addEventListener("change", growth.refreshSlots);
@@ -329,11 +348,19 @@
       $("#request-report-form").reset(); $("#request-report-id").value = button.dataset.reportRequest; feedback("#request-report-feedback", ""); openModal("request-report-modal");
     } else if (button.dataset.closeRequest) {
       button.disabled = true;
+      const request = requests.find(item => item.id === button.dataset.closeRequest);
+      const previousStatus = request?.status;
+      if (request) { request.status = "closed"; renderBoard(); }
       try {
         if (appSupabase) await rpc("close_campus_request", { p_request_id: button.dataset.closeRequest, p_remove: false });
         else requests.find(item => item.id === button.dataset.closeRequest).status = "closed";
         saveDemo(); await growth.refreshBoard();
-      } catch (error) { showToast(error.message, "error"); } finally { button.disabled = false; }
+      } catch (error) {
+        const current = requests.find(item => item.id === button.dataset.closeRequest);
+        if (current) current.status = previousStatus;
+        renderBoard();
+        showToast(error.message, "error");
+      } finally { button.disabled = false; }
     } else if (button.dataset.requestChat) {
       if (!appSupabase) { showToast("A connected account is needed to message a responder."); return; }
       button.disabled = true;
