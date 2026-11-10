@@ -1313,6 +1313,8 @@ body { font-size: 14px; line-height: 1.5; }
 .provider-detail-modal { width: min(940px, calc(100vw - 32px)); max-height: min(92dvh, 980px); overflow: hidden; }
 .provider-detail-modal .modal-frame { max-height: calc(min(92dvh, 980px) - 2px); overflow-y: auto; padding: 22px; }
 #provider-detail-content { gap: 24px; }
+.showcase-cv-status { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-height: 76px; margin-top: 16px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.showcase-cv-status .showcase-cv-link { width: 100%; margin-top: 0; }
 .showcase-hero { position: relative; overflow: hidden; display: grid; gap: 18px; padding: clamp(22px, 5vw, 42px); border: 1px solid rgba(157, 184, 240, .25); border-radius:var(--radius-xl); color: #fbf7ef; background: radial-gradient(ellipse at 91% 4%, rgba(157, 184, 240, .3), transparent 35%), linear-gradient(132deg, #121c2d 0%, #1b2c3c 55%, #263c4b 100%); box-shadow: 0 18px 48px rgba(20, 32, 48, .16); }
 .showcase-orbit { position: absolute; top: -110px; right: -72px; width: 270px; height: 270px; border: 1px solid rgba(247, 244, 236, .24); border-radius: 50%; pointer-events: none; }
 .showcase-orbit::after { position: absolute; inset: 20px; border: 1px solid rgba(247, 244, 236, .12); border-radius: inherit; content: ""; }

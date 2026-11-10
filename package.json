@@ -13,6 +13,7 @@
     "test": "node --test tests/*.test.js",
     "test:ui": "node tests/browser-mobile-smoke.cjs",
     "test:loading": "node tests/loading-states-browser-checks.cjs",
+    "test:loading:regressions": "node tests/loading-review-regressions.cjs",
     "test:landing": "node tests/browser-landing-smoke.cjs",
     "test:load": "node tests/local-load-test.cjs",
     "test:db": "node tests/marketplace-growth-db.cjs"

@@ -1,0 +1,15 @@
+{
+  "default-src": ["'self'"],
+  "script-src": ["'self'"],
+  "script-src-attr": ["'none'"],
+  "style-src": ["'self'", "'unsafe-inline'"],
+  "img-src": ["'self'", "data:", "blob:", "https:"],
+  "font-src": ["'self'"],
+  "connect-src": ["'self'", "https:", "wss:"],
+  "media-src": ["'self'", "blob:", "https:"],
+  "worker-src": ["'self'"],
+  "object-src": ["'none'"],
+  "base-uri": ["'self'"],
+  "form-action": ["'self'"],
+  "frame-ancestors": ["'self'"]
+}

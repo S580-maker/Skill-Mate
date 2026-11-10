@@ -1113,7 +1113,6 @@ async function retryDashboardData() {
   dashboardLoadError = null;
   dashboardDataLoaded = false;
   renderAll();
-  renderMarketplace("saved-grid", []);
   try {
     await refreshSupabaseState();
   } catch (retryError) {
@@ -1122,7 +1121,6 @@ async function retryDashboardData() {
   }
   dashboardDataLoaded = true;
   renderAll();
-  renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders).filter(provider => state.saved.includes(provider.id)));
   // The retry button was replaced, so hand focus to the retry button again or to the refreshed region.
   const origin = originId && document.getElementById(originId);
   if (origin && (document.activeElement === document.body || origin.contains(document.activeElement))) {
@@ -2019,6 +2017,7 @@ function renderAll() {
   }).format(new Date()).toUpperCase();
   syncSellerNavigation();
   renderMarketplace();
+  renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders).filter(provider => state.saved.includes(provider.id)));
   renderGroups();
   renderBookingList("user-booking-list", bookingsForActiveFilter());
   renderListings();
@@ -2140,7 +2139,11 @@ let dashboardRefreshPromise = null;
 async function refreshSupabaseState() {
   if (dashboardRefreshPromise) return dashboardRefreshPromise;
   const started = performance.now();
-  dashboardRefreshPromise = loadSupabaseState().then((result) => {
+  const deadline = started + 20000;
+  // Each awaited read shares one deadline. A timed-out response never reaches
+  // the state assignment below its await, even if the transport completes later.
+  const read = request => window.skillmateLoading.withTimeout(request, Math.max(0, deadline - performance.now()));
+  dashboardRefreshPromise = loadSupabaseState(read).then((result) => {
     dashboardLoadError = null;
     return result;
   }).finally(() => {
@@ -2158,10 +2161,10 @@ async function reconcileSavedChange() {
     showToast("Your change was saved. Some details could not refresh; reload to sync them.", "error");
   }
 }
-async function refreshPriceNegotiations() {
+async function refreshPriceNegotiations(read = request => Promise.resolve(request)) {
   if (!negotiationBackendAvailable) return;
-  const { data: negotiations, error: negotiationError } = await appSupabase
-    .from("price_negotiations").select("*").order("updated_at", { ascending: false });
+  const { data: negotiations, error: negotiationError } = await read(appSupabase
+    .from("price_negotiations").select("*").order("updated_at", { ascending: false }));
   if (negotiationError) {
     negotiationBackendAvailable = ["42P01", "42703", "PGRST205"].includes(negotiationError.code);
     priceNegotiations = [];
@@ -2171,8 +2174,8 @@ async function refreshPriceNegotiations() {
   const rows = negotiations || [];
   let offers = [];
   if (rows.length) {
-    const result = await appSupabase.from("price_offers").select("*")
-      .in("negotiation_id", rows.map(item => item.id)).order("created_at", { ascending: true });
+    const result = await read(appSupabase.from("price_offers").select("*")
+      .in("negotiation_id", rows.map(item => item.id)).order("created_at", { ascending: true }));
     if (result.error) {
       negotiationBackendAvailable = ["42P01", "42703", "PGRST205"].includes(result.error.code);
       priceNegotiations = [];
@@ -2218,7 +2221,7 @@ async function loadAllRows(createQuery, pageSize = DATA_PAGE_SIZE) {
     if (page.length < pageSize) return { data: rows, error: null };
   }
 }
-async function loadSupabaseState() {
+async function loadSupabaseState(read = request => Promise.resolve(request)) {
   const conversationDirectoryRequest = loadAllRows(() => appSupabase.from("conversation_directory")
     .select("conversation_id, other_user_id, other_user_name").order("conversation_id", { ascending: true }));
   const groupedMessagesRequest = conversationDirectoryRequest.then(({ data, error }) => {
@@ -2229,7 +2232,7 @@ async function loadSupabaseState() {
     ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations,
     savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory,
     verification, groupedMessages, ownStudentIdentifier, ownNegotiationSettings,
-  ] = await Promise.all([
+  ] = await read(Promise.all([
     loadAccountProfile(appUser.id),
     loadAllRows(() => appSupabase.from("provider_directory").select("*").order("service_id", { ascending: true })),
     loadAllRows(() => appSupabase.from("services").select("*").eq("provider_id", appUser.id)
@@ -2256,11 +2259,11 @@ async function loadSupabaseState() {
     appSupabase.from("student_identifiers").select("student_id_number").eq("student_id", appUser.id).maybeSingle(),
     loadAllRows(() => appSupabase.from("service_negotiation_settings")
       .select("service_id, minimum_price").eq("provider_id", appUser.id).order("service_id", { ascending: true })),
-  ]);
+  ]));
   const results = [ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations, savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory, verification, ownStudentIdentifier, ownNegotiationSettings];
   const failed = results.find((result) => result.error);
   if (failed) throw failed.error;
-  await refreshPriceNegotiations();
+  await refreshPriceNegotiations(read);
   const ownMinimumByService = new Map((ownNegotiationSettings.data || [])
     .map(item => [item.service_id, Number(item.minimum_price)]));
 
@@ -2396,7 +2399,7 @@ async function loadSupabaseState() {
   cacheConversationMessages(messages);
   const verificationButton = document.querySelector("#verification-open");
   verificationButton.dataset.requested = verification.data?.status || "";
-  await window.skillmateGrowth?.refresh();
+  await window.skillmateGrowth?.refresh({ read });
   const reportTarget = document.querySelector("#report-target");
   reportTarget.innerHTML = '<option value="">Choose a student</option>' + connectedProviders
     .filter((provider) => provider.id !== appUser.id)
@@ -3418,41 +3421,11 @@ async function openProviderProfile(providerId, serviceId) {
   const profile = document.querySelector("#provider-detail-content");
   const requestId = crypto.randomUUID();
   profile.dataset.requestId = requestId;
-  profile.replaceChildren();
-  const stopDetailLoading = window.skillmateLoading.show(profile, { variant: "detail", label: "Loading provider details" });
-  const detailModal = document.querySelector("#provider-detail-modal");
-  const finishDetailLoading = () => {
-    stopDetailLoading();
-    detailModal.removeEventListener("close", cancelDetailLoading);
-  };
-  const cancelDetailLoading = () => {
-    if (profile.dataset.requestId === requestId) profile.dataset.requestId = "";
-    finishDetailLoading();
-  };
-  detailModal.addEventListener("close", cancelDetailLoading, { once: true });
   document.querySelector("#provider-detail-title").textContent = selectedService?.title || provider.service;
-  document.querySelector("#provider-detail-book").disabled = true;
-  document.querySelector("#provider-detail-message").disabled = true;
-  document.querySelector("#provider-detail-report").disabled = true;
-  openModal("provider-detail-modal");
-  let cvUrl = "";
-  if (appSupabase && provider.cvPath
+  const hasCv = appSupabase && provider.cvPath
     && /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.pdf$/i.test(provider.cvPath)
-    && provider.cvPath.startsWith(`${providerId}/`)) {
-    let data, error;
-    try {
-      ({ data, error } = await window.skillmateLoading.withTimeout(appSupabase.storage.from("provider-cvs").createSignedUrl(provider.cvPath, 900)));
-    } catch (failure) { error = failure; }
-    if (profile.dataset.requestId !== requestId) { finishDetailLoading(); return; }
-    if (error) {
-      console.error("Could not create a signed provider CV link.", error);
-      showToast("This provider’s CV could not be opened right now.", "error");
-    } else {
-      cvUrl = data?.signedUrl || "";
-    }
-  }
+    && provider.cvPath.startsWith(`${providerId}/`);
   const skills = (provider.skills || []).filter(Boolean);
-  finishDetailLoading();
   const reviews = providerReviews(providerId);
   const portfolioMarkup = (provider.portfolio || []).map(item => {
     const work = typeof item === "string" ? { title: item } : item;
@@ -3468,7 +3441,7 @@ async function openProviderProfile(providerId, serviceId) {
       <div class="showcase-stats"><div><strong>${escapeHTML(rating.rating)}</strong><span>${rating.count} ${rating.count === 1 ? "review" : "reviews"}</span></div><i></i><div><strong>${Number(provider.bookings) || 0}</strong><span>completed works</span></div><i></i><div><strong>${services.length}</strong><span>${services.length === 1 ? "service" : "services"}</span></div></div>
     </header>
     <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>01</span><h3>Services</h3></div>${services.map((service) => `<div class="detail-service"><span><strong>${escapeHTML(service.title)}</strong><small>${escapeHTML(service.category)} · ${servicePriceLabel(service)}</small><small>${escapeHTML(serviceDetailLabel(service))}</small>${service.providerId !== appUser?.id ? `<small>${service.priceType === "range" ? "Price range · custom quote required" : service.negotiationMode === "fixed" ? "Fixed Price" : service.negotiationMode === "hybrid" ? "Custom price & scope" : "Negotiation · price only"}</small>${service.negotiationMode !== "fixed" ? `<span class="detail-negotiation-actions"><button class="button button-small button-outline" type="button" data-negotiation-action="offer" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Make an offer</button><button class="button button-small button-outline" type="button" data-negotiation-action="discuss" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Discuss price</button></span>` : ""}` : ""}</span>${service.groups ? '<span class="detail-group-tag">Group bookings welcome</span>' : ""}</div>`).join("")}</section>
-    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>02</span><h3>Education &amp; skills</h3></div><p class="showcase-education"><strong>${escapeHTML(provider.course || "Student")}</strong><span>${escapeHTML(provider.campus)}</span></p><div class="showcase-skills">${skills.length ? skills.map(skill => `<span>${escapeHTML(skill)}</span>`).join("") : '<span>Skills and specialities shared through listed services</span>'}</div>${cvUrl ? `<a class="showcase-cv-link" href="${escapeHTML(cvUrl)}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">↗</span><span><strong>View professional CV</strong><small>${escapeHTML(provider.cvName || "PDF document")} · Secure link expires in 15 minutes</small></span></a>` : ""}</section>
+    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>02</span><h3>Education &amp; skills</h3></div><p class="showcase-education"><strong>${escapeHTML(provider.course || "Student")}</strong><span>${escapeHTML(provider.campus)}</span></p><div class="showcase-skills">${skills.length ? skills.map(skill => `<span>${escapeHTML(skill)}</span>`).join("") : '<span>Skills and specialities shared through listed services</span>'}</div>${hasCv ? '<div class="showcase-cv-status" data-provider-cv role="status"></div>' : ""}</section>
     <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>03</span><h3>Selected work</h3></div><div class="showcase-work-grid">${portfolioMarkup || '<p class="detail-empty">No work samples added yet. Ask the provider about their experience.</p>'}</div></section>
     <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>04</span><h3>Student reviews</h3><span class="showcase-review-score">${rating.count ? `★ ${escapeHTML(rating.rating)}` : "NEW"}</span></div><div class="showcase-review-list">${reviewMarkup || '<p class="detail-empty">No reviews yet. Completed work can be reviewed by the customer.</p>'}</div></section>
     ${services.some(service => service.groups) ? `<section class="detail-section group-detail-callout"><div><h3>Need help as a group?</h3><p>This provider welcomes group requests.</p></div><button class="button button-outline" type="button" data-open="groups-modal" data-group-provider="${escapeHTML(providerId)}">Book with friends</button></section>` : ""}`;
@@ -3481,6 +3454,59 @@ async function openProviderProfile(providerId, serviceId) {
   document.querySelector("#provider-detail-book").disabled = false;
   document.querySelector("#provider-detail-message").disabled = false;
   document.querySelector("#provider-detail-report").disabled = false;
+  openModal("provider-detail-modal");
+  if (hasCv) void loadProviderCv(provider, profile, requestId);
+}
+async function loadProviderCv(provider, profile, requestId) {
+  const region = profile.querySelector("[data-provider-cv]");
+  const modal = document.querySelector("#provider-detail-modal");
+  if (!region || profile.dataset.requestId !== requestId || !modal.open) return;
+  const previousFocus = document.activeElement;
+  const restoreFocus = region.contains(previousFocus);
+  const isCurrent = () => profile.dataset.requestId === requestId && modal.open && region.isConnected;
+  const cancel = () => {
+    if (profile.dataset.requestId === requestId) profile.dataset.requestId = "";
+    region.removeAttribute("aria-busy");
+  };
+  modal.addEventListener("close", cancel, { once: true });
+  region.setAttribute("aria-busy", "true");
+  region.setAttribute("role", "status");
+  region.textContent = "Loading professional CV…";
+  let nextFocus;
+  try {
+    const { data, error } = await window.skillmateLoading.withTimeout(
+      appSupabase.storage.from("provider-cvs").createSignedUrl(provider.cvPath, 900),
+    );
+    if (!isCurrent()) return;
+    if (error) throw error;
+    const url = new URL(data?.signedUrl);
+    if (!["https:", "http:"].includes(url.protocol)) throw new Error("Invalid CV link");
+    const link = document.createElement("a");
+    link.className = "showcase-cv-link";
+    link.href = url.href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.innerHTML = `<span aria-hidden="true">↗</span><span><strong>View professional CV</strong><small>${escapeHTML(provider.cvName || "PDF document")} · Secure link expires in 15 minutes</small></span>`;
+    region.replaceChildren(link);
+    nextFocus = link;
+  } catch (error) {
+    if (!isCurrent()) return;
+    console.error("Could not create a signed provider CV link.", error);
+    region.setAttribute("role", "alert");
+    const message = document.createElement("span");
+    message.textContent = "The CV is unavailable. You can still book or message this student.";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "button button-small button-outline";
+    retry.textContent = "Retry CV";
+    retry.addEventListener("click", () => void loadProviderCv(provider, profile, requestId));
+    region.replaceChildren(message, retry);
+    nextFocus = retry;
+  } finally {
+    region.removeAttribute("aria-busy");
+    modal.removeEventListener("close", cancel);
+    if (isCurrent() && restoreFocus && (document.activeElement === document.body || document.activeElement === previousFocus)) nextFocus?.focus();
+  }
 }
 function openMessage(providerId, messageFor = "provider", serviceId) {
   const provider = providerId.startsWith("customer:") ? getProvider(providerId) : getProvider(providerId);

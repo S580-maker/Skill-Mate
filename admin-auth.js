@@ -220,7 +220,9 @@ async function refreshAdminOperations() {
   }
 }
 
+let supportTicketsRequest = 0;
 async function fetchSupportTickets() {
+  const requestId = ++supportTicketsRequest;
   const status = document.querySelector("#support-queue-status");
   const rows = document.querySelector("#support-ticket-rows");
   status.textContent = "Loading support tickets…";
@@ -230,6 +232,7 @@ async function fetchSupportTickets() {
       .select("id, user_id, category, message, status, screenshot_url, created_at")
       .in("status", ["open", "reviewing"]).order("created_at", { ascending: true }).limit(50), "Loading support tickets timed out.");
     finishLoading();
+    if (requestId !== supportTicketsRequest) return;
     if (error) throw error;
     rows.replaceChildren();
     for (const ticket of data || []) {
@@ -291,6 +294,7 @@ async function fetchSupportTickets() {
     status.textContent = data?.length ? `${data.length} oldest active tickets (up to 50 shown).` : "No active support tickets.";
   } catch (error) {
     finishLoading();
+    if (requestId !== supportTicketsRequest) return;
     console.error("Could not load support tickets.", error);
     status.textContent = ["PGRST205", "42P01"].includes(error.code)
       ? "Support tickets require the settings and support database migration."

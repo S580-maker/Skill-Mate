@@ -10,6 +10,7 @@ const pass = message => console.log(`PASS ${message}`);
 (async () => {
   const harness = await start();
   const { evaluate, waitFor, wait } = harness;
+  const run = script => evaluate(`(async () => { ${script} })()`);
   try {
     // 1. Every route previews its own layout, fits the viewport and never scrolls sideways.
     for (const width of widths) {
@@ -36,7 +37,7 @@ const pass = message => console.log(`PASS ${message}`);
 
     // 3. A slow request keeps the skeleton, then swaps it for content without an empty state in between.
     await harness.open("index.html?delay=700#home");
-    await evaluate(`window.__seenEmpty = false; new MutationObserver(() => { if (document.querySelector("#marketplace-grid .empty-state, #marketplace-grid .listing-empty")) window.__seenEmpty = true; }).observe(document.body, { childList: true, subtree: true });`);
+    await run(`window.__seenEmpty = false; new MutationObserver(() => { if (document.querySelector("#marketplace-grid .empty-state, #marketplace-grid .listing-empty")) window.__seenEmpty = true; }).observe(document.body, { childList: true, subtree: true });`);
     await waitFor('document.querySelectorAll("#marketplace-grid .provider-card").length > 0', 20000);
     assert.equal(await evaluate("window.__seenEmpty"), false, "an empty state flashed before the data arrived");
     pass("slow load shows no empty state before data arrives");
@@ -79,7 +80,7 @@ const pass = message => console.log(`PASS ${message}`);
     await harness.open("index.html?delay=0#home");
     await waitFor('document.body.classList.contains("app-auth-pending") === false', 20000);
     for (const hash of ["bookings", "messages", "saved", "earnings", "home", "profile-settings", "home"]) {
-      await evaluate(`location.hash = ${JSON.stringify(hash)}`);
+      await run(`location.hash = ${JSON.stringify(hash)}`);
       await wait(40);
     }
     await wait(500);
@@ -100,64 +101,55 @@ const pass = message => console.log(`PASS ${message}`);
     // A route change during startup must update the preview without starting another read.
     await harness.open("index.html?delay=500#home");
     await wait(200);
-    await evaluate('location.hash="bookings"');
+    await run('location.hash="bookings"');
     await waitFor('document.querySelector("#dashboard-loading-skeleton").dataset.skeletonRoute === "bookings"');
     await waitFor('!document.body.classList.contains("app-auth-pending")', 20000);
     assert.equal(await evaluate('document.querySelector(".active-view").dataset.view'), "bookings");
     pass("navigation during loading updates the preview and resolves to the requested route");
 
     // Initial account failures must not masquerade as empty conversations; retry recovers.
-    await evaluate('localStorage.clear()'); // This scenario intentionally has no cached conversations.
+    await run('localStorage.clear()'); // This scenario intentionally has no cached conversations.
     await harness.open("index.html?fail=provider_directory#messages");
     await waitFor('!document.body.classList.contains("app-auth-pending")', 20000);
     assert.ok(await evaluate('Boolean(document.querySelector("#conversation-list [data-loading-retry]"))'));
-    await evaluate('window.__fake.failing.clear(); document.querySelector("#conversation-list [data-loading-retry]").click()');
+    await run('window.__fake.failing.clear(); document.querySelector("#conversation-list [data-loading-retry]").click()');
     await waitFor('document.querySelectorAll("#conversation-list .conversation-item").length > 0', 20000);
     assert.equal(await evaluate('document.querySelectorAll("[aria-busy=true]").length'), 0);
     pass("conversation failures are distinct from empty data and retry restores content");
 
     // Reopening notifications preserves loaded rows through a failed refresh.
-    await evaluate('document.querySelector("#notifications-button").click()');
+    await run('document.querySelector("#notifications-button").click()');
     await waitFor('document.querySelectorAll(".notification-item").length > 0');
-    await evaluate('document.querySelector("#notifications-modal").close(); window.__fake.delay=300; window.__fake.failing.add("notifications"); document.querySelector("#notifications-button").click()');
+    await run('document.querySelector("#notifications-modal").close(); window.__fake.delay=300; window.__fake.failing.add("notifications"); document.querySelector("#notifications-button").click()');
     await wait(180);
     assert.equal(await evaluate('document.querySelectorAll(".notification-item").length'), 1);
     assert.equal(await evaluate('document.querySelectorAll("#notifications-list .sk").length'), 0);
     await waitFor('document.querySelector("#notifications-more").textContent === "Try again"');
     assert.equal(await evaluate('document.querySelectorAll(".notification-item").length'), 1);
-    await evaluate('window.__fake.failing.clear(); window.__fake.delay=0; document.querySelector("#notifications-more").click()');
+    await run('window.__fake.failing.clear(); window.__fake.delay=0; document.querySelector("#notifications-more").click()');
     await waitFor('!document.querySelector("#notifications-more").disabled');
     assert.equal(await evaluate('document.querySelectorAll(".notification-item").length'), 1, "retry reset must not duplicate cached rows");
     pass("notification refresh preserves content; retry neither duplicates nor drops rows");
 
-    await evaluate('document.querySelector("#notifications-modal").close()');
-    // Only the optional CV needs a read. Cached details resolve synchronously; a slow
-    // read gets a placeholder, and a late old response cannot replace a newer profile.
-    await evaluate(`window.__first = connectedProviders[0]; window.__second = connectedProviders[1];
-      window.__first.id = "11111111-1111-1111-1111-111111111111";
-      window.__first.cvPath = window.__first.id + "/22222222-2222-2222-2222-222222222222.pdf";
-      appSupabase.storage.from = () => ({ createSignedUrl: () => new Promise(resolve => { window.__finishCV = resolve; }) });
-      void openProviderProfile(window.__first.id);`);
-    await waitFor('Boolean(document.querySelector("#provider-detail-content .sk-detail"))');
-    assert.equal(await evaluate('document.querySelector("#provider-detail-content").getAttribute("aria-busy")'), "true");
-    await harness.screenshot(require('node:path').join(process.env.TEMP || harness.output, 'skillmate-detail-loading.png'));
-    await evaluate('void openProviderProfile(window.__second.id); window.__finishCV({data:{signedUrl:"https://example.test/cv.pdf"},error:null})');
+    await run('document.querySelector("#notifications-modal").close()');
+    // Cached details remain interactive while the optional CV has its own busy region.
+    await run(`window.__first=connectedProviders[0];window.__second=connectedProviders[1];
+      window.__first.id="11111111-1111-1111-1111-111111111111";
+      window.__first.cvPath=window.__first.id+"/22222222-2222-2222-2222-222222222222.pdf";
+      appSupabase.storage.from=()=>({createSignedUrl:()=>new Promise(resolve=>window.__finishCV=resolve)});
+      await openProviderProfile(window.__first.id);`);
+    assert.ok(await evaluate('Boolean(document.querySelector("#provider-detail-content .showcase-identity"))'));
+    assert.equal(await evaluate('document.querySelector("#provider-detail-book").disabled'),false);
+    assert.equal(await evaluate('document.querySelector("[data-provider-cv]").getAttribute("aria-busy")'),"true");
+    await harness.screenshot(require('node:path').join(process.env.TEMP || harness.output,'skillmate-detail-loading.png'));
+    await run('await openProviderProfile(window.__second.id);window.__finishCV({data:{signedUrl:"https://example.test/old.pdf"},error:null})');
     await wait(50);
-    assert.equal(await evaluate('document.querySelector("#provider-detail-content .showcase-identity h2").textContent'), await evaluate('window.__second.name'));
-    assert.equal(await evaluate('document.querySelector("#provider-detail-content").hasAttribute("aria-busy")'), false);
-    await evaluate(`window.__deadline = window.skillmateLoading.withTimeout;
-      window.skillmateLoading.withTimeout = request => window.__deadline(request, 40);
-      void openProviderProfile(window.__first.id);`);
-    await waitFor('Boolean(document.querySelector("#provider-detail-content .showcase-identity"))');
-    assert.equal(await evaluate('document.querySelectorAll("#provider-detail-content .sk").length'), 0);
-    await evaluate('window.skillmateLoading.withTimeout=window.__deadline');
-    await evaluate('void openProviderProfile(window.__first.id)');
-    await waitFor('Boolean(document.querySelector("#provider-detail-content .sk-detail"))');
-    await evaluate('document.querySelector("#provider-detail-modal").close()');
+    assert.equal(await evaluate('document.querySelector(".showcase-identity h2").textContent'),await evaluate('window.__second.name'));
+    await run('await openProviderProfile(window.__first.id);document.querySelector("#provider-detail-modal").close()');
     await wait(30);
-    assert.equal(await evaluate('document.querySelector("#provider-detail-content").hasAttribute("aria-busy")'), false);
-    await evaluate('window.__finishCV({data:null,error:null})');
-    pass("detail reads handle fast completion, overlapping profiles and a hung optional CV");
+    assert.equal(await evaluate('document.querySelector("[data-provider-cv]").hasAttribute("aria-busy")'),false);
+    await run('window.__finishCV({data:null,error:null})');
+    pass("cached service details stay interactive and optional CV reads respect profile changes and closure");
 
     // Admin uses the same real markup, but an explicitly fake admin role. No live auth is bypassed.
     for (const width of widths) {

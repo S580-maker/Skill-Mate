@@ -15,6 +15,15 @@ module.exports = async ({ base, call, evaluate, screenshot, wait }) => {
       await visit(route);
       assert.equal(await evaluate('location.pathname'), name === "landing" ? "/" : "/login.html");
       assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth+1'), `${name}:${width} fits`);
+      const policy = await evaluate('fetch(location.href,{method:"HEAD"}).then(response=>response.headers.get("content-security-policy"))');
+      assert.ok(policy?.includes("script-src 'self'"), "Express enforces CSP on actual page responses");
+      assert.ok(policy.includes("object-src 'none'"));
+      await evaluate('window.__cspProbe=false;var cspProbe=document.createElement("script");cspProbe.textContent="window.__cspProbe=true";document.head.append(cspProbe)');
+      assert.equal(await evaluate('window.__cspProbe'), false, "Inline executable content is blocked");
+      if (name === "landing") {
+        for (let i=0; i<80 && !await evaluate('Boolean(document.querySelector(".hero-illustration[data-ready]"))'); i++) await wait(50);
+        assert.ok(await evaluate('Boolean(document.querySelector(".hero-illustration[data-ready]"))'), "Storyset still loads under CSP");
+      }
       if (name !== "landing") {
         assert.equal(await evaluate('typeof window.supabase?.createClient'), "function", "Local official SDK loaded and passed SRI");
         assert.equal(await evaluate('document.body.dataset.authMode'), name === "signup" ? "signup" : "signin");

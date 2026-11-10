@@ -113,10 +113,10 @@
       return `${progress.step < 0 ? "" : `<ol class="booking-progress" aria-label="Booking progress">${stages.map((label, index) => `<li${index === progress.step ? ' aria-current="step"' : ""} class="${index < progress.step ? "is-done" : ""}">${index < progress.step ? "✓ " : ""}${label}</li>`).join("")}</ol>`}<small class="booking-next-step">${escapeHTML(progress.next)}</small>`;
     },
     canStartWork() { return !appSupabase || schedulesAvailable; },
-    async refresh() {
+    async refresh({ read = request => window.skillmateLoading.withTimeout(request) } = {}) {
       if (!appSupabase || !appUser) return;
       try {
-        const result = await appSupabase.from("provider_availability").select("*").limit(1000);
+        const result = await read(appSupabase.from("provider_availability").select("*").limit(1000));
         if (result.error) throw result.error;
         schedules = result.data || [];
         schedulesAvailable = true;
@@ -129,7 +129,7 @@
       if ($("#booking-modal").open) growth.refreshSlots();
       if (!$("#availability-form").matches(":focus-within")) populateHours();
       $("#availability-form button[type=submit]").disabled = !schedulesAvailable;
-      if (state.activePage === "requests") await growth.refreshBoard();
+      if (state.activePage === "requests") await read(growth.refreshBoard());
       growth.render();
       renderMarketplace();
     },
@@ -210,7 +210,18 @@
         window.skillmateLoading.showError($("#request-board-grid"), {
           title: "Requests are temporarily unavailable",
           message: "Your existing bookings and messages are still available.",
-          onRetry: () => window.skillmateGrowth.refreshBoard().then(() => $("#request-board-grid [data-loading-retry]")?.focus()),
+          onRetry: () => {
+            const grid = $("#request-board-grid");
+            const retry = grid.querySelector("[data-loading-retry]");
+            const restoreFocus = document.activeElement === retry;
+            return growth.refreshBoard().then(() => {
+              if (!restoreFocus || state.activePage !== "requests"
+                || (document.activeElement !== document.body && document.activeElement !== retry)) return;
+              const nextRetry = grid.querySelector("[data-loading-retry]");
+              if (nextRetry) nextRetry.focus();
+              else { grid.tabIndex = -1; grid.focus({ preventScroll: true }); }
+            });
+          },
         });
       } finally { finishLoading(); $("#request-board-refresh").disabled = false; }
       })();

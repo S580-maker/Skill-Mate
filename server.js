@@ -5,6 +5,7 @@ const { randomUUID } = require("node:crypto");
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
+const { contentSecurityPolicy } = require("./api/_lib/content-security-policy");
 const { isOtpVerifiedSession } = require("./api/_lib/supabase");
 const { apiRateLimit, authRateLimit, createRateLimit } = require("./api/_lib/rate-limit");
 const { requestMetrics } = require("./api/_lib/http-metrics");
@@ -23,7 +24,7 @@ app.disable("x-powered-by");
 app.set("trust proxy", process.env.TRUST_PROXY === "1");
 // Allow framing (e.g. editor preview panes) outside production only.
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: { useDefaults: false, directives: contentSecurityPolicy() },
   crossOriginEmbedderPolicy: false,
   frameguard: process.env.NODE_ENV === "production" ? { action: "sameorigin" } : false
 }));

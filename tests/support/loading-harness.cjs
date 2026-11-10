@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const http = require("node:http");
 const { spawn } = require("node:child_process");
+const { contentSecurityPolicy, serializePolicy } = require("../../api/_lib/content-security-policy");
 
 const root = path.resolve(__dirname, "..", "..");
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -87,6 +88,7 @@ function createServer() {
   return http.createServer((req, res) => {
     const name = decodeURIComponent(new URL(req.url, "http://localhost").pathname.slice(1)) || "index.html";
     res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Security-Policy", serializePolicy(contentSecurityPolicy({ production: false })));
     if (name === "supabase-client.js") { res.setHeader("Content-Type", mime[".js"]); res.end(fakeClient); return; }
     if (name === "supabase-config.js") { res.setHeader("Content-Type", mime[".js"]); res.end("window.SKILLMATE_SUPABASE_CONFIG={url:'https://fake.supabase.test',anonKey:'fake'};"); return; }
     if (name.startsWith("assets/vendor/")) { res.setHeader("Content-Type", mime[".js"]); res.end(""); return; }
