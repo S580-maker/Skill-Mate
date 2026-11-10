@@ -1052,14 +1052,6 @@ h1>span {
   color:#756a5d
 }
 
-.booking-spark {
-  position:absolute;
-  right:15px;
-  top:20px;
-  font-size:50px;
-  color:#a37b53
-}
-
 .step-title {
   display:flex;
   align-items:center;
@@ -2092,10 +2084,6 @@ h1>span {
   .paper-line {
     font-size:9px
   }
-  .booking-spark {
-    right:30px;
-    top:19px
-  }
   .solution-link {
     align-items:flex-start;
     flex-direction:column;
@@ -2300,7 +2288,6 @@ h1>span {
 .booking-paper strong { font-size:18px; font-weight:600; }
 .booking-paper small { font-size:8px; }
 .paper-line { font-size:10px; }
-.booking-spark { font-size:38px; right:25px; top:22px; }
 .solution-link { margin-top:8px; padding-top:23px; }
 .solution-link p,.text-link { font-size:13px; }
 
@@ -2397,7 +2384,6 @@ h1>span {
   .booking-paper { padding:18px; gap:9px; }
   .booking-paper strong { font-size:14px; }
   .paper-line { font-size:8px; }
-  .booking-spark { font-size:30px; top:12px; right:15px; }
   .community-layout { gap:28px; }
   .testimonial-placeholder { padding:24px; }
   .testimonial-placeholder h3 { font-size:27px; }
@@ -2472,7 +2458,6 @@ h1>span {
   .booking-paper strong { font-size:15px; }
   .booking-paper small { font-size:7px; }
   .paper-line { font-size:9px; }
-  .booking-spark { right:17px; }
   .solution-link { margin-top:2px; padding-top:18px; gap:5px; }
   .solution-link p,.text-link { font-size:12px; }
   .community-layout { gap:23px; }
