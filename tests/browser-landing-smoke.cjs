@@ -69,11 +69,24 @@ async function main() {
     fs.writeFileSync(path.join(output, name + ".png"), Buffer.from(result.data, "base64"));
   };
   await call("Page.enable"); await call("Runtime.enable"); await call("Network.enable");
+  if (process.argv.includes("--access-audit")) {
+    await require("./public-access-checks.cjs")({ base, call, evaluate, screenshot, wait });
+    assert.deepEqual(errors, [], "No browser exceptions during public/access checks");
+    console.log(`Screenshots: ${output}`);
+    return;
+  }
   for (const width of [1440, 1024, 768, 390, 320]) {
     await call("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width < 600 });
     await navigate();
     await evaluate('document.fonts.ready.then(() => true)');
     await wait(100);
+    for (let i = 0; i < 60 && !await evaluate('!!document.querySelector(".hero-illustration[data-ready]")'); i++) await wait(50);
+    assert.equal(await evaluate('!!document.querySelector(".hero-illustration[data-ready]")'), true, "Prominent Storyset hero loads immediately");
+    assert.equal(await evaluate('document.querySelectorAll(".storyset-credit").length'), 1, "One Storyset credit remains in the footer");
+    assert.equal(await evaluate('document.querySelector(".hero-illustration").shadowRoot.querySelector(".credit")'), null, "No label beneath the hero illustration");
+    const artwork = await evaluate('(()=>{const r=document.querySelector(".hero-illustration").getBoundingClientRect();return {top:r.top,bottom:r.bottom,width:r.width,height:innerHeight};})()');
+    assert.ok(artwork.width >= 200 && artwork.top < artwork.height - 100, `Hero artwork is visible on arrival: ${JSON.stringify(artwork)}`);
+    if (width > 800) assert.ok(artwork.bottom <= artwork.height, "Desktop illustration fits the first viewport");
     assert.equal(await evaluate(`Array.from(document.fonts).some(f => f.family === "Plus Jakarta Sans" && f.status === "loaded") && [400,500,600,700,800].every(w => document.fonts.check(w + ' 14px "Plus Jakarta Sans"'))`), true, "Plus Jakarta Sans loads locally at all requested weights");
     assert.equal(await evaluate('location.pathname'), "/");
     const dimensions = await evaluate('({viewport:innerWidth,width:document.documentElement.scrollWidth})');

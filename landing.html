@@ -9,11 +9,14 @@
   <script src="/auth-callback.js?v=1"></script>
   <link rel="preload" href="/assets/fonts/plus-jakarta-sans-latin-variable.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/landing-fonts.css?v=3" />
-  <link rel="stylesheet" href="/landing.css?v=4" />
+  <link rel="stylesheet" href="/landing.css?v=20261110" />
   <link rel="stylesheet" href="/aurora.css?v=1" />
-  <link rel="stylesheet" href="/brand-colors.css?v=1" />
-  <link rel="stylesheet" href="/typography.css?v=2" />
-  <link rel="stylesheet" href="/landing-home.css?v=1" />
+  <link rel="stylesheet" href="/brand-colors.css?v=20261110" />
+  <link rel="stylesheet" href="/typography.css?v=20261110" />
+  <link rel="stylesheet" href="/landing-home.css?v=20261110" />
+  <link rel="stylesheet" href="/illustrations.css?v=20261110" />
+  <link rel="preload" href="/assets/illustrations/storyset/onboarding.svg" as="image" />
+  <script src="/illustrations.js?v=3" defer></script>
   <script src="/landing.js?v=2" defer></script>
   <script src="/aurora.js?v=1" defer></script>
 </head>
@@ -21,13 +24,13 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="container nav-row">
-      <a class="wordmark" href="/" aria-label="Skillmate home">Skillmate<span aria-hidden="true">✳</span></a>
+      <a class="wordmark" href="/" aria-label="Skillmate home">Skillmate</a>
       <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-nav" hidden><span>Menu</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16M4 16h16" /></svg></button>
       <nav class="main-nav" id="main-nav" aria-label="Main navigation">
         <a href="#how-it-works">How it works</a>
         <a href="#community">Our community</a>
         <a href="#faqs">FAQs</a>
-        <div class="nav-account"><a href="/login.html">Log in <span aria-hidden="true">↗</span></a><a class="button button-small" href="/login.html?mode=signup">Get Started <span aria-hidden="true">→</span></a></div>
+        <div class="nav-account"><a href="/login.html">Log in <span aria-hidden="true">↗</span></a><a class="button button-small" href="/login.html?mode=signup">Get started <span aria-hidden="true">→</span></a></div>
       </nav>
     </div>
   </header>
@@ -36,31 +39,33 @@
     <section class="hero container has-aurora" aria-labelledby="hero-title">
       <div class="aurora-bg" data-aurora aria-hidden="true"><div class="aurora-layer aurora-layer--far"><span class="aurora-blob aurora-blob--blue"></span><span class="aurora-blob aurora-blob--violet"></span></div><div class="aurora-grid"></div><span class="aurora-wave"></span><span class="aurora-wave aurora-wave--gold"></span><div class="aurora-layer aurora-layer--near"><span class="aurora-blob aurora-blob--sky"></span><span class="aurora-blob aurora-blob--lilac"></span></div></div>
       <div class="hero-copy">
-        <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> THE STUDENT SKILLS MARKETPLACE</p>
+        <p class="eyebrow">The student skills marketplace</p>
         <h1 id="hero-title">Big talent.<br /><span>Right on campus.</span></h1>
         <p class="hero-description">Find a helping hand for your next project, or turn what you're good at into your next opportunity.</p>
-        <div class="hero-actions"><a class="button" href="/index.html#home">Find a Service <span aria-hidden="true">↗</span></a><a class="button button-outline" href="/login.html?mode=signup">Offer Your Skill <span aria-hidden="true">↗</span></a></div>
+        <div class="hero-actions"><a class="button" href="/index.html#home">Find a service <span aria-hidden="true">↗</span></a><a class="button button-outline" href="/login.html?mode=signup">Offer your skill <span aria-hidden="true">↗</span></a></div>
         <p class="hero-note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></svg>Built around students. Made for your campus.</p>
       </div>
-      <figure class="hero-visual" aria-labelledby="visual-caption">
+      <figure class="hero-visual hero-storyset" aria-labelledby="visual-caption">
+        <skillmate-illustration name="onboarding" class="hero-illustration" loading="eager"><img src="/assets/illustrations/storyset/onboarding.svg" width="500" height="500" alt="" fetchpriority="high" /></skillmate-illustration>
+        <details class="hero-product-preview"><summary>Explore the marketplace preview</summary>
         <div class="visual-orbit orbit-one" aria-hidden="true"></div><div class="visual-orbit orbit-two" aria-hidden="true"></div>
-        <span class="visual-spark" aria-hidden="true">✳</span>
         <div class="product-window">
-          <div class="window-bar"><span class="preview-brand">Skillmate<span>✳</span></span><span class="preview-campus">YOUR CAMPUS</span></div>
+          <div class="window-bar"><span class="preview-brand">Skillmate</span><span class="preview-campus">Your campus</span></div>
           <div class="window-body">
             <div class="preview-heading"><span>Discover something great.</span><small>A little talent goes a long way.</small></div>
             <div class="preview-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg>What do you need a hand with?</div>
             <div class="preview-tags"><span class="selected">Explore</span><span>Design</span><span>Tutoring</span><span>Tech</span></div>
             <div class="preview-services">
-              <div class="preview-service"><div class="service-art design-art" aria-hidden="true"><span class="design-sheet">MAKE<br /><i>something</i><br />GREAT.<b>↗</b></span><span class="design-pencil"></span></div><small>DESIGN &amp; CREATIVITY</small><strong>Ideas, brought to life.</strong><span>Discover student designers <b>↗</b></span></div>
-              <div class="preview-service"><div class="service-art study-art" aria-hidden="true"><div class="book book-back"></div><div class="book book-front"><span>Aa</span><i></i></div><span class="study-star">✧</span></div><small>LEARNING &amp; TUTORING</small><strong>Make it click.</strong><span>Find your next study partner <b>↗</b></span></div>
+              <div class="preview-service"><div class="service-art design-art" aria-hidden="true"><span class="design-sheet">MAKE<br /><i>something</i><br />GREAT.<b>↗</b></span><span class="design-pencil"></span></div><small>Design &amp; creativity</small><strong>Ideas, brought to life.</strong><span>Discover student designers <b>↗</b></span></div>
+              <div class="preview-service"><div class="service-art study-art" aria-hidden="true"><div class="book book-back"></div><div class="book book-front"><span>Aa</span><i></i></div><span class="study-star">✧</span></div><small>Learning &amp; tutoring</small><strong>Make it click.</strong><span>Find your next study partner <b>↗</b></span></div>
             </div>
           </div>
         </div>
         <div class="floating-note note-top"><span class="note-icon" aria-hidden="true">↗</span><span>Your skills.<br /><strong>Someone's next big win.</strong></span></div>
-        <figcaption id="visual-caption">A glimpse of the Skillmate experience · Illustrative preview</figcaption>
+        </details>
+        <figcaption id="visual-caption">Find help. Share skills. Grow together.</figcaption>
       </figure>
-      <div class="hero-bottom"><span>FIND YOUR PEOPLE. FIND YOUR POSSIBILITIES.</span><a href="#the-problem">Meet your campus, connected <span aria-hidden="true">↓</span></a></div>
+      <div class="hero-bottom"><a href="#the-problem">Meet your campus, connected <span aria-hidden="true">↓</span></a></div>
     </section>
 
     <!-- 2. Problem -->
@@ -69,9 +74,9 @@
       <div class="container">
         <div class="section-heading" data-reveal><h2 id="problem-title">Campus life shouldn't<br />be this <em>complicated.</em></h2><p>The talent is here. Finding the right person shouldn't be the hard part.</p></div>
         <div class="problem-grid">
-          <article class="problem-card" data-reveal><div class="problem-art search-art" aria-hidden="true"><span class="mini-bubble">Anyone know a good designer?</span><span class="mini-bubble reply-bubble">Try asking in the other group…</span><span class="search-loop">?</span></div><span class="card-index">01 / THE SEARCH</span><h3>So many chats.<br />Still no clear answer.</h3><p>Finding reliable student services can mean endless group chats, forwarded numbers, and guesswork.</p></article>
-          <article class="problem-card" data-reveal><div class="problem-art trust-art" aria-hidden="true"><span class="profile-tile tile-one"><i></i><b></b><b></b></span><span class="profile-tile tile-two"><i></i><b></b><b></b></span><span class="trust-question">?</span></div><span class="card-index">02 / THE UNCERTAINTY</span><h3>A name and a number.<br />But who can you trust?</h3><p>Without a profile or a clear picture of someone's work, choosing the right person feels like a leap.</p></article>
-          <article class="problem-card" data-reveal><div class="problem-art talent-art" aria-hidden="true"><span class="talent-orbit"></span><span class="talent-star">✳</span><span class="talent-label">Great skills. Small spotlight.</span></div><span class="card-index">03 / THE MISSED OPPORTUNITY</span><h3>Real talent.<br />Not enough visibility.</h3><p>You have something to offer. Getting your skills in front of the people who need them is another story.</p></article>
+          <article class="problem-card" data-reveal><div class="problem-art search-art" aria-hidden="true"><span class="mini-bubble">Anyone know a good designer?</span><span class="mini-bubble reply-bubble">Try asking in the other group…</span><span class="search-loop">?</span></div><span class="card-index">01 · The search</span><h3>So many chats.<br />Still no clear answer.</h3><p>Finding reliable student services can mean endless group chats, forwarded numbers, and guesswork.</p></article>
+          <article class="problem-card" data-reveal><div class="problem-art trust-art" aria-hidden="true"><span class="profile-tile tile-one"><i></i><b></b><b></b></span><span class="profile-tile tile-two"><i></i><b></b><b></b></span><span class="trust-question">?</span></div><span class="card-index">02 · The uncertainty</span><h3>A name and a number.<br />But who can you trust?</h3><p>Without a profile or a clear picture of someone's work, choosing the right person feels like a leap.</p></article>
+          <article class="problem-card" data-reveal><div class="problem-art talent-art" aria-hidden="true"><span class="talent-orbit"></span><span class="talent-label">Great skills. Small spotlight.</span></div><span class="card-index">03 · The missed opportunity</span><h3>Real talent.<br />Not enough visibility.</h3><p>You have something to offer. Getting your skills in front of the people who need them is another story.</p></article>
         </div>
       </div>
     </section>
@@ -82,8 +87,8 @@
       <div class="section-heading centered" data-reveal><h2 id="solution-title">One Campus.<br /><span>Endless Possibilities.</span></h2><p>A place to find help, share what you're good at, and move things forward together.</p></div>
       <div class="steps-grid">
         <article class="step" data-reveal><div class="step-visual discover-visual" aria-hidden="true"><div class="illustration-search"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg> A skill for every kind of day.</div><div class="skill-chips"><span>↗ Design</span><span>⌘ Tech help</span><span>✧ Tutoring</span><span>◉ Photography</span></div></div><div class="step-copy"><div class="step-title"><span>01</span><h3>Discover services</h3></div><p>Browse student services by category. Compare prices, explore profiles, and save the ones you like.</p></div></article>
-        <article class="step" data-reveal><div class="step-visual connect-visual" aria-hidden="true"><div class="conversation-bubble">Could you help with my project?<small>YOU</small></div><div class="conversation-bubble outgoing">Let's talk about what you need.<small>STUDENT PROVIDER</small></div><span class="example-label">Illustrative conversation</span></div><div class="step-copy"><div class="step-title"><span>02</span><h3>Connect with students</h3></div><p>Message a provider to ask questions, discuss the work, and agree on the details before you book.</p></div></article>
-        <article class="step" data-reveal><div class="step-visual booking-visual" aria-hidden="true"><div class="booking-paper"><span class="booking-check">✓</span><div><small>YOUR NEXT STEP</small><strong>Make it happen.</strong></div><span class="paper-rule"></span><span class="paper-line">Your time. Your agreed details.</span></div><span class="booking-spark">✳</span></div><div class="step-copy"><div class="step-title"><span>03</span><h3>Book it. Or offer it.</h3></div><p>Send a booking request and track its progress. Have a skill to share? Create your own service listing.</p></div></article>
+        <article class="step" data-reveal><div class="step-visual connect-visual" aria-hidden="true"><div class="conversation-bubble">Could you help with my project?<small>You</small></div><div class="conversation-bubble outgoing">Let's talk about what you need.<small>Student provider</small></div><span class="example-label">Illustrative conversation</span></div><div class="step-copy"><div class="step-title"><span>02</span><h3>Connect with students</h3></div><p>Message a provider to ask questions, discuss the work, and agree on the details before you book.</p></div></article>
+        <article class="step" data-reveal><div class="step-visual booking-visual" aria-hidden="true"><div class="booking-paper"><span class="booking-check">✓</span><div><small>Your next step</small><strong>Make it happen.</strong></div><span class="paper-rule"></span><span class="paper-line">Your time. Your agreed details.</span></div><span class="booking-spark">✳</span></div><div class="step-copy"><div class="step-title"><span>03</span><h3>Book it. Or offer it.</h3></div><p>Send a booking request and track its progress. Have a skill to share? Create your own service listing.</p></div></article>
       </div>
       <div class="solution-link" data-reveal><p>A helping hand today. A new opportunity tomorrow.</p><a class="text-link" href="/login.html?mode=signup">Find your place on Skillmate <span aria-hidden="true">↗</span></a></div>
     </section>
@@ -93,7 +98,7 @@
       <div class="aurora-bg aurora-bg--soft" data-aurora aria-hidden="true"><div class="aurora-layer aurora-layer--far"><span class="aurora-blob aurora-blob--blue"></span><span class="aurora-blob aurora-blob--violet"></span></div></div>
       <div class="container community-layout">
         <div class="section-heading" data-reveal>
-          <p class="eyebrow">YOUR CAMPUS. YOUR PEOPLE.</p>
+          <p class="eyebrow">Your campus, your people</p>
           <h2 id="community-title">Everyone has<br />something to offer.</h2>
           <p>A fresh perspective. A skill you've been practising. A little time to help someone out. There's a place for it here.</p>
           <a class="text-link" href="/login.html?mode=signup">Find your place on Skillmate <span aria-hidden="true">&#8599;</span></a>
@@ -120,14 +125,14 @@
 
     <!-- 6. Call to action -->
     <section class="cta-wrap container" aria-labelledby="cta-title">
-      <div class="cta" data-reveal><span class="cta-star" aria-hidden="true">✳</span><p class="eyebrow">THERE'S TALENT ALL AROUND YOU.</p><h2 id="cta-title">A little help.<br />A lot of possibility.</h2><p>Find the help you need. Share the skills you have.</p><a class="button button-light" href="/login.html?mode=signup">Get Started <span aria-hidden="true">↗</span></a><span class="cta-orbit" aria-hidden="true"></span></div>
+      <div class="cta" data-reveal><p class="eyebrow">There's talent all around you</p><h2 id="cta-title">A little help.<br />A lot of possibility.</h2><p>Find the help you need. Share the skills you have.</p><a class="button button-light" href="/login.html?mode=signup">Get started <span aria-hidden="true">↗</span></a><span class="cta-orbit" aria-hidden="true"></span></div>
     </section>
   </main>
 
   <!-- 7. Footer -->
   <footer class="site-footer container">
-    <div class="footer-top"><div class="footer-brand"><a class="wordmark" href="/">Skillmate<span aria-hidden="true">✳</span></a><p>Find help. Share skills.<br />Grow together.</p></div><nav aria-label="Explore Skillmate"><h2>EXPLORE</h2><a href="#how-it-works">How it works</a><a href="/index.html#home">Find a service</a><a href="/login.html?mode=signup">Offer your skill</a></nav><nav aria-label="More about Skillmate"><h2>GET TO KNOW US</h2><a href="#community">Our community</a><a href="#faqs">FAQs</a><a href="/login.html">Log in</a></nav><div class="footer-contact"><h2>MADE FOR STUDENT LIFE</h2><p>Your next collaboration could be closer than you think.</p><a class="text-link" href="/login.html?mode=signup">Join Skillmate <span aria-hidden="true">&#8599;</span></a></div></div>
-    <div class="footer-bottom"><small>© <span id="copyright-year">2026</span> Skillmate. Your campus, connected.</small><nav aria-label="Legal"><a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms of Service</a></nav><a href="#main" class="back-top">Back to top <span aria-hidden="true">↑</span></a></div>
+    <div class="footer-top"><div class="footer-brand"><a class="wordmark" href="/">Skillmate</a><p>Find help. Share skills.<br />Grow together.</p></div><nav aria-label="Explore Skillmate"><h2>Explore</h2><a href="#how-it-works">How it works</a><a href="/index.html#home">Find a service</a><a href="/login.html?mode=signup">Offer your skill</a></nav><nav aria-label="More about Skillmate"><h2>Get to know us</h2><a href="#community">Our community</a><a href="#faqs">FAQs</a><a href="/login.html">Log in</a></nav><div class="footer-contact"><h2>Made for student life</h2><p>Your next collaboration could be closer than you think.</p><a class="text-link" href="/login.html?mode=signup">Join Skillmate <span aria-hidden="true">&#8599;</span></a></div></div>
+    <div class="footer-bottom"><small>© <span id="copyright-year">2026</span> Skillmate. Your campus, connected.</small><nav aria-label="Legal"><a class="storyset-credit" href="https://storyset.com">Artwork: Storyset</a><a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms of Service</a></nav><a href="#main" class="back-top">Back to top <span aria-hidden="true">↑</span></a></div>
   </footer>
 </body>
 </html>

@@ -1,42 +1,42 @@
 /* Royal blue and soft cream brand layer for the admin console only. Loaded after styles.css by admin.html. */
 :root {
-  --gold:#102d72;
-  --gold-deep:#102d72;
-  --gold-soft:#e3e8f2;
-  --gold-cream:#f7f4ec;
-  --gold-line:#102d7266;
-  --gold-glow:#102d7240;
+  --brand-accent:#102d72;
+  --brand-accent-ink:#102d72;
+  --brand-tint:#e3e8f2;
+  --brand-paper:#f7f4ec;
+  --brand-line:#102d7266;
+  --brand-glow:#102d7240;
 }
-:root[data-theme="dark"] { --gold-deep:#dce4f3; --gold-cream:#1c2233; --gold-soft:#233758; }
+:root[data-theme="dark"] { --brand-accent-ink:#dce4f3; --brand-paper:#1c2233; --brand-tint:#233758; }
 
 /* Sidebar */
-.sidebar { box-shadow:inset -1px 0 0 var(--gold-line); }
-.brand-name > span,.brand-name::after { color:var(--gold); }
-.workspace-avatar { color:var(--ink,#172342); background:var(--gold); }
-.nav-caption { color:var(--gold); }
-.nav-link:hover { box-shadow:inset 3px 0 var(--gold-line); }
-.nav-link.active { box-shadow:inset 3px 0 var(--gold); }
-.nav-count { color:var(--gold); }
-.help-card { border-color:var(--gold-line); background:linear-gradient(160deg,var(--nav-bg),color-mix(in srgb,var(--gold) 14%,var(--nav-bg))); }
-.help-icon { color:var(--gold); }
-.help-card a { color:var(--gold); }
-.profile-avatar { color:#172342; background:var(--gold); }
+.sidebar { box-shadow:inset -1px 0 0 var(--brand-line); }
+.brand-name > span,.brand-name::after { color:var(--brand-accent); }
+.workspace-avatar { color:var(--ink,#172342); background:var(--brand-accent); }
+.nav-caption { color:var(--brand-accent); }
+.nav-link:hover { box-shadow:inset 3px 0 var(--brand-line); }
+.nav-link.active { box-shadow:inset 3px 0 var(--brand-accent); }
+.nav-count { color:var(--brand-accent); }
+.help-card { border-color:var(--brand-line); background:linear-gradient(160deg,var(--nav-bg),color-mix(in srgb,var(--brand-accent) 14%,var(--nav-bg))); }
+.help-icon { color:var(--brand-accent); }
+.help-card a { color:var(--brand-accent); }
+.profile-avatar { color:#172342; background:var(--brand-accent); }
 
 /* Top bar and controls */
 .topbar { border-bottom-color:transparent; box-shadow:0 1px 0 var(--border); position:sticky; }
-.topbar::after { content:""; position:absolute; left:0; right:0; bottom:0; height:2px; pointer-events:none; background:linear-gradient(90deg,var(--gold),transparent 55%); opacity:.8; }
-.breadcrumbs strong { box-shadow:inset 0 -3px 0 var(--gold-line); }
-.student-profile-link { border-color:var(--gold); }
-.student-profile-link:hover,.student-profile-link:focus-visible { border-color:var(--gold); background:var(--gold-cream); }
-.button-primary { box-shadow:inset 0 -3px 0 var(--gold),0 3px 7px color-mix(in srgb,var(--shadow-color) 13%,transparent); }
+.topbar::after { content:""; position:absolute; left:0; right:0; bottom:0; height:2px; pointer-events:none; background:linear-gradient(90deg,var(--brand-accent),transparent 55%); opacity:.8; }
+.breadcrumbs strong { box-shadow:inset 0 -3px 0 var(--brand-line); }
+.student-profile-link { border-color:var(--brand-accent); }
+.student-profile-link:hover,.student-profile-link:focus-visible { border-color:var(--brand-accent); background:var(--brand-paper); }
+.button-primary { box-shadow:inset 0 -3px 0 var(--brand-accent),0 3px 7px color-mix(in srgb,var(--shadow-color) 13%,transparent); }
 
 /* Cards and panels */
-.stat-card,.panel { border-color:var(--gold-line); }
-.stat-card::before { content:""; position:absolute; top:0; left:16px; width:36px; height:3px; border-radius:0 0 3px 3px; background:var(--gold); }
-.stat-card:nth-child(even) { background:linear-gradient(160deg,var(--panel),color-mix(in srgb,var(--gold) 9%,var(--panel))); }
-.panel-heading h2 { box-shadow:inset 0 -6px 0 var(--gold-glow); width:fit-content; }
-.admin-view:target,.admin-view:focus { outline-color:var(--gold); }
-:focus-visible { outline-color:var(--gold); }
+.stat-card,.panel { border-color:var(--brand-line); }
+.stat-card::before { content:""; position:absolute; top:0; left:16px; width:36px; height:3px; border-radius:0 0 3px 3px; background:var(--brand-accent); }
+.stat-card:nth-child(even) { background:linear-gradient(160deg,var(--panel),color-mix(in srgb,var(--brand-accent) 9%,var(--panel))); }
+.panel-heading h2 { box-shadow:inset 0 -6px 0 var(--brand-glow); width:fit-content; }
+.admin-view:target,.admin-view:focus { outline-color:var(--brand-accent); }
+:focus-visible { outline-color:var(--brand-accent); }
 
 @media(max-width:820px) {
   .topbar::after { opacity:.6; }

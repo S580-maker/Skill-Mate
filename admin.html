@@ -10,10 +10,10 @@
     <title>Skillmate | Admin dashboard</title>
     <link rel="preload" href="/assets/fonts/plus-jakarta-sans-latin-variable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/landing-fonts.css?v=3" />
-    <link rel="stylesheet" href="styles.css?v=12" />
-<link rel="stylesheet" href="admin-gold.css?v=2" />
-    <link rel="stylesheet" href="/brand-colors.css?v=1" />
-    <link rel="stylesheet" href="/typography.css?v=2" />
+    <link rel="stylesheet" href="styles.css?v=20261110" />
+<link rel="stylesheet" href="admin-gold.css?v=20261110" />
+    <link rel="stylesheet" href="/brand-colors.css?v=20261110" />
+    <link rel="stylesheet" href="/typography.css?v=20261110" />
     <script src="theme.js?v=2"></script>
   </head>
   <body class="admin-locked">
@@ -32,7 +32,7 @@
         <div class="workspace-switcher">
           <span class="workspace-avatar">S</span>
           <span class="workspace-copy">
-            <span class="workspace-label">WORKSPACE</span>
+            <span class="workspace-label">Workspace</span>
             <strong>Admin portal</strong>
           </span>
           <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
@@ -71,7 +71,7 @@
             <span class="nav-dot" aria-label="Needs attention"></span>
           </a>
 
-          <span class="nav-caption nav-caption-spaced">INSIGHTS</span>
+          <span class="nav-caption nav-caption-spaced">Insights</span>
           <a class="nav-link" href="#performance">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5V12M10 19.5V5M16 19.5v-9M22 19.5V8" /><path d="M2 20h20" /></svg>
             <span>Analytics</span>
@@ -92,8 +92,8 @@
             <a href="mailto:support@skillmate.app">Contact support <span aria-hidden="true">↗</span></a>
           </div>
           <div class="profile" id="admin-profile">
-            <div class="profile-avatar">AM</div>
-            <span class="profile-copy"><strong>Alex Morgan</strong><small>Administrator</small></span>
+            <div class="profile-avatar">A</div>
+            <span class="profile-copy"><strong>Admin</strong><small>Administrator</small></span>
           </div>
         </div>
       </aside>
@@ -124,8 +124,8 @@
           <section class="admin-view" id="overview" aria-labelledby="overview-title">
           <section class="welcome-row">
             <div>
-              <p class="eyebrow" id="admin-date">ADMINISTRATION <span class="demo-pill">LOADING LIVE DATA</span></p>
-              <h1 id="overview-title">Good morning, Alex <span aria-hidden="true">✦</span></h1>
+              <p class="eyebrow" id="admin-date"></p>
+              <h1 id="overview-title">Loading</h1>
               <p class="welcome-copy">Here’s what’s happening across your Skillmate community today.</p>
             </div>
             <button class="button button-primary" id="export-button" type="button">
@@ -138,25 +138,25 @@
             <article class="stat-card">
               <div class="stat-top"><span class="stat-label">Total students</span><span class="stat-icon icon-blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 20v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V20M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM16 4.2a4 4 0 0 1 0 7.6" /></svg></span></div>
               <div class="stat-value">—</div>
-              <div class="stat-foot"><span>Live total</span><span>All accounts</span></div>
+              <div class="stat-foot"><span>All accounts</span></div>
               <div class="sparkline spark-blue" aria-hidden="true"></div>
             </article>
             <article class="stat-card">
               <div class="stat-top"><span class="stat-label">Active providers</span><span class="stat-icon icon-violet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V8l8-4 8 4v12M8 20v-5h8v5M8 9h.01M12 9h.01M16 9h.01" /></svg></span></div>
               <div class="stat-value">—</div>
-              <div class="stat-foot"><span>Live total</span><span>Active listings</span></div>
+              <div class="stat-foot"><span>Active listings</span></div>
               <div class="sparkline spark-violet" aria-hidden="true"></div>
             </article>
             <article class="stat-card">
               <div class="stat-top"><span class="stat-label">Bookings this month</span><span class="stat-icon icon-teal"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M7.5 3.5v3M16.5 3.5v3M3.5 10h17M8 14h3M8 17h6" /></svg></span></div>
               <div class="stat-value">—</div>
-              <div class="stat-foot"><span>Live total</span><span>This month</span></div>
+              <div class="stat-foot"><span>This month</span></div>
               <div class="sparkline spark-teal" aria-hidden="true"></div>
             </article>
             <article class="stat-card">
               <div class="stat-top"><span class="stat-label">Group bookings</span><span class="stat-icon icon-amber"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20v-1.5a4 4 0 0 1 4-4h5a4 4 0 0 1 4 4V20M16 5a3.5 3.5 0 0 1 0 6.8M17.5 14.5a4 4 0 0 1 4 4V20" /></svg></span></div>
               <div class="stat-value">—</div>
-              <div class="stat-foot"><span>Live total</span><span>All groups</span></div>
+              <div class="stat-foot"><span>All groups</span></div>
               <div class="sparkline spark-amber" aria-hidden="true"></div>
             </article>
           </section>
@@ -169,7 +169,7 @@
           </section>
 
           <section class="admin-view" id="performance" aria-labelledby="performance-title" hidden>
-            <div class="admin-page-heading"><p class="eyebrow">INSIGHTS</p><h1 id="performance-title">Analytics</h1><p>Track bookings and new student activity over time.</p></div>
+            <div class="admin-page-heading"><p class="eyebrow">Insights</p><h1 id="performance-title">Analytics</h1><p>Track bookings and new student activity over time.</p></div>
             <article class="panel performance-panel" id="performance-chart">
               <div class="panel-heading">
                 <div><h2>Marketplace activity</h2><p>Bookings and new students over time</p></div>
@@ -209,10 +209,10 @@
           </section>
 
           <section class="admin-view" id="students" aria-labelledby="students-title" hidden>
-            <div class="admin-page-heading"><p class="eyebrow">ADMINISTRATION</p><h1 id="students-title">Needs attention</h1><p>Review verification requests and student support tickets.</p></div>
+            <div class="admin-page-heading"><p class="eyebrow">Administration</p><h1 id="students-title">Needs attention</h1><p>Review verification requests and student support tickets.</p></div>
             <article class="panel attention-panel" id="attention-panel">
               <div class="panel-heading">
-                <div><h2>Needs your attention</h2><p>A few things to review</p></div>
+                <div><h2>Open items</h2><p>A few things to review</p></div>
                 <span class="attention-total">0</span>
               </div>
               <div class="attention-list">
@@ -237,7 +237,7 @@
           </section>
 
           <section class="admin-view" id="bookings" aria-labelledby="bookings-title" hidden>
-            <div class="admin-page-heading"><p class="eyebrow">MARKETPLACE</p><h1 id="bookings-title">Bookings</h1><p>Review appointments and group booking activity.</p></div>
+            <div class="admin-page-heading"><p class="eyebrow">Marketplace</p><h1 id="bookings-title">Bookings</h1><p>Review appointments and group booking activity.</p></div>
             <article class="panel bookings-panel" id="booking-list">
               <div class="panel-heading">
                 <div><h2>Recent bookings</h2><p>Keep track of what’s happening</p></div>
@@ -245,7 +245,7 @@
               </div>
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>STUDENT</th><th>SERVICE &amp; PROVIDER</th><th>DATE</th><th>TYPE</th><th>STATUS</th></tr></thead>
+                  <thead><tr><th>Student</th><th>Service &amp; provider</th><th>Date</th><th>Type</th><th>Status</th></tr></thead>
                   <tbody id="booking-rows">
                     <tr data-search="ama mensah laptop cleaning daniel owusu"><td><span class="person"><span class="person-avatar avatar-lilac">AM</span><span><strong>Ama Mensah</strong><small>ama.m@ug.edu.gh</small></span></span></td><td><span class="service-cell"><strong>Laptop cleaning</strong><small>Daniel Owusu</small></span></td><td><span class="date-cell">Oct 24, 2026<small>10:30 AM</small></span></td><td><span class="booking-type">Group <i>+3</i></span></td><td><span class="status status-confirmed"><i></i>Confirmed</span></td></tr>
                     <tr data-search="kojo asare graphic design nana adu"><td><span class="person"><span class="person-avatar avatar-blue">KA</span><span><strong>Kojo Asare</strong><small>kojo.a@knust.edu.gh</small></span></span></td><td><span class="service-cell"><strong>Graphic design</strong><small>Nana Adu</small></span></td><td><span class="date-cell">Oct 24, 2026<small>11:00 AM</small></span></td><td><span class="booking-type">Individual</span></td><td><span class="status status-pending"><i></i>Pending</span></td></tr>
@@ -259,7 +259,7 @@
           </section>
 
           <section class="admin-view" id="services" aria-labelledby="services-title" hidden>
-            <div class="admin-page-heading"><p class="eyebrow">MARKETPLACE</p><h1 id="services-title">Services</h1><p>Explore active service categories across the community.</p></div>
+            <div class="admin-page-heading"><p class="eyebrow">Marketplace</p><h1 id="services-title">Services</h1><p>Explore active service categories across the community.</p></div>
             <article class="panel services-panel" id="service-list">
               <div class="panel-heading">
                 <div><h2>Active service categories</h2><p>Current live listings</p></div>
@@ -270,7 +270,7 @@
           </section>
 
           <section class="admin-view" id="verification" aria-labelledby="verification-title" hidden>
-            <div class="admin-page-heading"><p class="eyebrow">STUDENT TRUST</p><h1 id="verification-title">Verification queue</h1><p>Review student requests to verify their campus affiliation.</p></div>
+            <div class="admin-page-heading"><p class="eyebrow">Student trust</p><h1 id="verification-title">Verification queue</h1><p>Review student requests to verify their campus affiliation.</p></div>
             <article class="panel verification-panel" id="verification-queue">
               <div class="panel-heading">
                 <div><h2>Verification queue</h2><p>Help keep the community trusted</p></div>
@@ -282,7 +282,7 @@
           </section>
 
           <section class="admin-view" id="safety" aria-labelledby="safety-title" hidden>
-            <div class="admin-page-heading"><p class="eyebrow">STUDENT TRUST</p><h1 id="safety-title">Trust &amp; safety</h1><p>Monitor verification health and review community reports.</p></div>
+            <div class="admin-page-heading"><p class="eyebrow">Student trust</p><h1 id="safety-title">Trust &amp; safety</h1><p>Monitor verification health and review community reports.</p></div>
             <article class="panel safety-panel" id="safety-panel">
               <div class="safety-heading">
                 <span class="safety-shield"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5.5c0 4.6-3.3 7.8-8 9.5-4.7-1.7-8-4.9-8-9.5V6l8-3Z" /><path d="m8.5 12 2.2 2.2 4.8-4.8" /></svg></span>
@@ -297,7 +297,7 @@
           </section>
 
           <section class="admin-view" id="support-tickets" aria-labelledby="support-title" hidden>
-            <div class="admin-page-heading"><p class="eyebrow">STUDENT SUPPORT</p><h1 id="support-title">Support tickets</h1><p>Review student requests and update their status.</p></div>
+            <div class="admin-page-heading"><p class="eyebrow">Student support</p><h1 id="support-title">Support tickets</h1><p>Review student requests and update their status.</p></div>
             <section class="panel" id="support-queue" aria-labelledby="support-queue-title">
               <div class="panel-heading"><div><h2 id="support-queue-title">Open support requests</h2><p>Manage reports submitted by students.</p></div><button class="review-button" type="button" id="support-queue-refresh">Refresh tickets</button></div>
               <p id="support-queue-status" role="status" aria-live="polite"></p>
@@ -306,7 +306,7 @@
           </section>
 
           <section class="admin-view" id="activity" aria-labelledby="activity-title" hidden>
-            <div class="admin-page-heading"><p class="eyebrow">SYSTEM</p><h1 id="activity-title">System status</h1><p>Current availability of Skillmate services.</p></div>
+            <div class="admin-page-heading"><p class="eyebrow">System</p><h1 id="activity-title">System status</h1><p>Current availability of Skillmate services.</p></div>
             <section class="panel system-status-panel" aria-label="Current system status">
               <div class="panel-heading"><div><h2>Service health</h2><p>Live checks update automatically every minute.</p></div></div>
               <p class="system-status-message" id="system-status" data-status="checking"><i class="online-dot"></i><span>Checking system status…</span></p>
@@ -364,7 +364,7 @@
     <dialog class="admin-dialog verification-dialog" id="verification-review-dialog" aria-labelledby="verification-review-title">
       <form method="dialog">
         <button class="modal-close" type="submit" aria-label="Close">×</button>
-        <p class="eyebrow">PRIVATE STUDENT ID</p>
+        <p class="eyebrow">Private student ID</p>
         <h2 id="verification-review-title">Review campus verification</h2>
         <p class="verification-review-student" id="verification-review-student"></p>
         <p class="verification-review-status" id="verification-review-status" role="status" aria-live="polite"></p>
@@ -377,7 +377,7 @@
     </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="script.js?v=2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/assets/vendor/supabase-js-2.119.0.js" integrity="sha384-uteMfOloLDGt042uDz+xHGF3ym63/WQ6rFq7murQRG8Ih7QrXGEGNtWd8688sb4O"></script>
     <script src="supabase-config.js"></script>
     <script src="supabase-client.js?v=4"></script>
     <script src="admin-auth.js?v=3-2"></script>

@@ -78,6 +78,13 @@ from(){return {select(){return this;},eq(){return this;},single:async()=>({data:
 </script>`;
 const server = http.createServer((req, res) => {
   const name = new URL(req.url, "http://localhost").pathname.slice(1) || "index.html";
+  if (/^assets\/illustrations\/storyset\/[a-z-]+\.(svg|html)$/.test(name)) {
+    try {
+      res.setHeader("Content-Type", name.endsWith(".svg") ? "image/svg+xml" : "text/html");
+      res.end(fs.readFileSync(path.join(root, name)));
+    } catch { res.writeHead(404).end(); }
+    return;
+  }
   if (/^assets\/fonts\/[\w-]+\.woff2$/.test(name)) {
     try { res.setHeader("Content-Type", "font/woff2"); res.end(fs.readFileSync(path.join(root, name))); }
     catch { res.writeHead(404).end(); }
@@ -95,7 +102,7 @@ const server = http.createServer((req, res) => {
   try { content = fs.readFileSync(path.join(root, name), "utf8"); }
   catch { res.writeHead(404).end(); return; }
   if (name.endsWith(".html")) {
-    content = content.replace(/<script[^>]*src="(?:https:[^"]+|supabase-config.js|supabase-client.js[^"]*)"[^>]*><\/script>/g, "");
+    content = content.replace(/<script[^>]*src="(?:https:[^"]+|\/assets\/vendor\/supabase-js-[^"]+|supabase-config.js|supabase-client.js[^"]*)"[^>]*><\/script>/g, "");
     if (name === "login.html") content = content.replace('<script src="ghana-universities.js">', `${authFixture}<script src="ghana-universities.js">`);
     if (name === "forgot-password.html") content = content.replace(/(<script src="forgot-password\.js[^"]*">)/, `${recoveryFixture}$1`);
     if (name === "onboarding.html") content = content.replace('<script src="ghana-universities.js">', `${onboardingFixture}<script src="ghana-universities.js">`);
@@ -108,6 +115,10 @@ const server = http.createServer((req, res) => {
     if (new URLSearchParams(location.search).has("new")) state.services = [];
     initializeDashboard(); loadAccountSettings(); showConnectedApp();
   }).catch((error) => {`);
+  }
+  if (name === "illustrations.js" && process.argv.includes("--illustrations-only")) {
+    // Exercise the documented official-export configuration without shipping test artwork.
+    content = content.replace('search: { slug:', 'search: { animatedFile: new URLSearchParams(location.search).has("export-test") ? "search.html" : null, slug:');
   }
   res.setHeader("Content-Type", name.endsWith(".css") ? "text/css" : name.endsWith(".js") ? "application/javascript" : name.endsWith(".svg") ? "image/svg+xml" : "text/html");
   res.end(content);
@@ -443,7 +454,7 @@ async function main() {
   }
   const verifyMarketplaceRedesign = async () => {
     await call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
-    await navigate("index.html");
+    await navigate("index.html?new=1");
     await evaluate('document.fonts.ready');
     assert.equal(await evaluate('getComputedStyle(document.querySelector(".side-nav")).flexDirection'), "row");
     assert.equal(await evaluate('getComputedStyle(document.querySelector(".main-content")).marginLeft'), "0px");
@@ -533,10 +544,28 @@ async function main() {
     console.log("PASS Google sign-in: OAuth, six-digit verification and preserved-session app entry");
     return;
   }
+  if (process.argv.includes("--polish-only")) {
+    await require("./polish-layout-checks.cjs")({ call, evaluate, navigate, wait, screenshot, checkWidth });
+    assert.deepEqual(errors, [], "Uncaught browser errors in isolated fixtures");
+    console.log(`Fixture screenshots (not authenticated verification): ${output}`);
+    return;
+  }
+  if (process.argv.includes("--main-illustrations-only")) {
+    await require("./main-illustrations-browser-checks.cjs")({ call, evaluate, navigate, wait, screenshot, checkWidth });
+    assert.deepEqual(errors, [], "Uncaught browser errors");
+    console.log(`Screenshots: ${output}`);
+    return;
+  }
+  if (process.argv.includes("--illustrations-only")) {
+    await require("./illustrations-browser-checks.cjs")({ call, evaluate, navigate, wait, screenshot, checkWidth });
+    assert.deepEqual(errors, [], "Uncaught browser errors");
+    console.log(`Screenshots: ${output}`);
+    return;
+  }
   for (const width of [320, 360, 390, 430, 768, 1024, 1440]) {
     await call("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width <= 768 });
-    await navigate("index.html");
-    assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length'), 6);
+    // `?new=1` removes the demo profile's own listings so this checks the six seed providers only.
+    await navigate("index.html?new=1");
     if (width <= 1024) {
       assert.equal(await evaluate('getComputedStyle(document.querySelector("#sidebar")).display'), "none", "Compact navigation is collapsed by default");
       await evaluate('document.querySelector("#menu-toggle").click()');

@@ -66,7 +66,20 @@ button, .button, .auth-access .auth-submit, .auth-access .auth-google,
   line-height: 1.7;
   letter-spacing: 0;
 }
-.eyebrow { letter-spacing: .12em; font-weight: 500; }
+.eyebrow, .hero .eyebrow, .view-heading .eyebrow, .auth-card .eyebrow,
+.welcome-card .eyebrow, .section-heading .eyebrow {
+  letter-spacing: .02em; font-weight: 500; text-transform:none;
+  font-size:12px; line-height:1.5;
+}
+.view-heading > div > p:not(.eyebrow), .panel-heading p { line-height:1.65; }
+.empty-card { gap:10px; padding:24px; }
+.empty-card strong { font-size:15px; line-height:1.5; }
+.empty-card small { max-width:44ch; font-size:13px; line-height:1.65; }
+.provider-card .provider-description { line-height:1.7; }
+.settings-form label, .modal-frame label { line-height:1.5; }
+.price, .listing-price, .booking-price, .stat-value, .provider-stat strong, .group-seats strong, #earnings-total, .earnings-hero strong, [data-currency] {
+  font-variant-numeric: tabular-nums;
+}
 
 @media (max-width: 640px) {
   .hero h1 { font-size: clamp(40px, 11.5vw, 54px); letter-spacing: -.03em; }

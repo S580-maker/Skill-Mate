@@ -1,0 +1,64 @@
+/* Scoped illustration placements; forms, navigation and marketplace behavior stay intact. */
+skillmate-illustration { display:block; width:var(--illustration-width,176px); max-width:100%; margin:0 auto 8px; }
+skillmate-illustration > img { display:block; width:100%; height:auto; }
+.illustration-attribution { padding:12px 24px 28px; text-align:center; }
+.storyset-credit { color:var(--muted,#596579); font-size:11px; line-height:1.8; text-underline-offset:2px; }
+.footer-bottom nav:has(.storyset-credit) { flex-wrap:wrap; }
+.onboarding-card .auth-footer .storyset-credit { margin-left:10px; }
+.hero-storyset.hero-visual { display:block; min-height:0; padding:20px 24px; background:#f7f4ec; border:1px solid #e9ddba; }
+.hero-illustration { --illustration-width:400px; --illustration-background:transparent; }
+.hero-storyset figcaption { position:static; margin-top:10px; text-align:center; font-size:11px; }
+.hero-product-preview { margin-top:12px; }
+.hero-product-preview > summary { min-height:44px; display:list-item; padding:12px 6px; color:#102d72; font-size:12px; cursor:pointer; text-align:center; }
+.hero-product-preview .floating-note { position:static; transform:none; margin:16px auto 0; width:fit-content; }
+.hero-product-preview[open] .product-window { margin-top:12px; }
+.auth-access .showcase-copy:has(.auth-welcome-illustration) { padding:28px 0 20px; }
+.auth-welcome-illustration { --illustration-width:250px; margin:20px auto 8px; }
+.auth-skills-preview > summary { min-height:44px; padding:12px 0; color:#e9ddba; font-size:12px; cursor:pointer; }
+.auth-skills-preview .campus-scene { padding-top:16px; }
+.discover-welcome { display:grid; grid-template-columns:minmax(0,1fr) 210px; column-gap:28px; align-items:center; }
+.discover-welcome > h1 { grid-column:1; grid-row:1; }
+.discover-welcome > p:not(.eyebrow) { grid-column:1; grid-row:2; }
+.discover-welcome > .discover-search { grid-column:1; grid-row:3; }
+.dashboard-welcome-illustration { --illustration-width:210px; grid-column:2; grid-row:1 / 4; margin:0; }
+@media(max-width:1100px) {
+  .discover-welcome { grid-template-columns:minmax(0,1fr) 160px; gap:0 20px; }
+  .dashboard-welcome-illustration { --illustration-width:160px; }
+}
+@media(max-width:800px) {
+  .hero-storyset.hero-visual { padding:12px 18px; max-width:100%; }
+  .hero-illustration { --illustration-width:260px; }
+}
+@media(max-width:760px) {
+  .auth-access .showcase-copy:has(.auth-welcome-illustration) { display:grid; grid-template-columns:minmax(0,1fr) 110px; align-items:center; gap:12px; padding-top:16px; }
+  .auth-access .showcase-copy:has(.auth-welcome-illustration) h1 { font-size:clamp(24px,5vw,34px); letter-spacing:-1px; }
+  .auth-welcome-illustration { --illustration-width:110px; margin:0; }
+  .auth-skills-preview { display:none; }
+}
+@media(max-width:600px) {
+  .hero:has(.hero-storyset) { padding-top:24px; row-gap:20px; }
+  .hero-illustration { --illustration-width:210px; }
+  .discover-welcome { grid-template-columns:minmax(0,1fr) 100px; gap:0 12px; }
+  .discover-welcome > h1 { grid-column:1 / -1; }
+  .discover-welcome > p:not(.eyebrow) { margin-bottom:0; padding-right:4px; }
+  .dashboard-welcome-illustration { --illustration-width:100px; grid-row:2; margin:8px 0 14px; }
+  .discover-welcome > .discover-search { grid-column:1 / -1; }
+}
+.empty-card:has(skillmate-illustration) { grid-column:1 / -1; }
+.onboarding-card > skillmate-illustration { --illustration-width:180px; }
+.chat-panel-empty skillmate-illustration { --illustration-width:200px; }
+.booking-success { display:flex; align-items:center; gap:20px; margin:0 0 20px; padding:16px 20px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface); color:var(--dark); }
+.booking-success skillmate-illustration { --illustration-width:112px; margin:0; }
+.booking-success-copy { flex:1; min-width:0; }
+.booking-success-copy strong { display:block; font-size:16px; }
+.booking-success-copy p { margin:8px 0 0; color:var(--muted); font-size:13px; line-height:1.6; }
+.booking-success > button { flex:none; min-height:44px; }
+@media(max-width:600px) {
+  skillmate-illustration { --illustration-width:136px; }
+  .onboarding-card > skillmate-illustration { --illustration-width:110px; }
+  .chat-panel-empty skillmate-illustration { --illustration-width:156px; }
+  .booking-success { flex-wrap:wrap; gap:12px; padding:16px; }
+  .booking-success skillmate-illustration { --illustration-width:88px; }
+  .booking-success-copy { flex-basis:140px; }
+  .booking-success > button { margin-left:auto; }
+}

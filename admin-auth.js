@@ -335,11 +335,12 @@ async function fetchAdminDashboard() {
   const needsAttention = Boolean(reports.count || verifications.data?.length);
   document.querySelector(".nav-dot").hidden = !needsAttention;
   document.querySelector(".nav-dot").style.display = needsAttention ? "" : "none";
-  document.querySelector(".welcome-row .demo-pill").textContent = "LIVE DATA";
-  document.querySelector("#admin-date").firstChild.textContent = new Date().toLocaleDateString("en-GB", {
+  const timeOfDay = new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 18 ? "Good afternoon" : "Good evening";
+  const firstName = String(window.adminProfile.full_name || "").trim().split(/\s+/)[0] || "there";
+  document.querySelector("#admin-date").textContent = new Date().toLocaleDateString("en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
-  }).toUpperCase() + " ";
-  document.querySelector(".welcome-row h1").innerHTML = `Welcome, ${escapeAdminText(window.adminProfile.full_name)} <span aria-hidden="true">✦</span>`;
+  });
+  document.querySelector(".welcome-row h1").textContent = `${timeOfDay}, ${firstName}`;
   document.querySelector(".profile-copy strong").textContent = window.adminProfile.full_name;
   document.querySelector(".profile-avatar").textContent = initials(window.adminProfile.full_name);
   const rows = bookings.data || [];

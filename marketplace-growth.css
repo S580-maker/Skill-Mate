@@ -4,25 +4,25 @@
 .marketplace-filter-trigger svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .marketplace-filter-trigger:hover, .marketplace-filter-trigger.is-active { border-color: var(--main); color: var(--main); background: var(--main-soft); }
 .marketplace-filter-trigger:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
-.marketplace-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 0 0 20px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.marketplace-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 0 0 20px; padding: 16px; border: 1px solid var(--border); border-radius:var(--radius-md); background: var(--surface); }
 .marketplace-tools label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; }
 .marketplace-tools input[type=number] { width: 100px; }
-.marketplace-tools input, .marketplace-tools select, .availability-form input, .availability-form select, .request-board input, .request-board select, .request-board textarea, #request-post-modal input, #request-post-modal textarea, #request-post-modal select, #request-reply-modal textarea, #request-reply-modal input, #request-report-modal textarea { min-height: 44px; max-width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px; color: var(--dark); background: var(--surface); font: inherit; font-size: 14px; }
+.marketplace-tools input, .marketplace-tools select, .availability-form input, .availability-form select, .request-board input, .request-board select, .request-board textarea, #request-post-modal input, #request-post-modal textarea, #request-post-modal select, #request-reply-modal textarea, #request-reply-modal input, #request-report-modal textarea { min-height: 44px; max-width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius:var(--radius-sm); color: var(--dark); background: var(--surface); font: inherit; font-size: 14px; }
 .marketplace-tools .filter-toggle { display: flex; align-items: center; gap: 8px; min-height: 44px; color: var(--dark); }
 .filter-toggle input { min-height: 20px; width: 18px; }
-.request-board-entry { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin: 24px 0; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--main-soft); }
+.request-board-entry { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin: 24px 0; padding: 20px; border: 1px solid var(--border); border-radius:var(--radius-md); background: var(--main-soft); }
 .request-board-entry h2 { margin: 0 0 5px; font-size: 18px; }
 .request-board-entry p { margin: 0; color: var(--muted); font-size: 14px; }
 .request-board { padding: 0; }
 .request-board-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 20px 0; }
 .request-board-toolbar label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .request-board-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.request-card { display: flex; flex-direction: column; align-items: start; min-width: 0; padding: 22px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.request-card { display: flex; flex-direction: column; align-items: start; min-width: 0; padding: 22px; border: 1px solid var(--border); border-radius:var(--radius-lg); background: var(--surface); }
 .request-card h2 { margin: 10px 0; font-size: 19px; overflow-wrap: anywhere; }
 .request-card p { font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .request-card small { color: var(--muted); line-height: 1.7; }
 .request-card .request-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; font-size: 13px; }
-.request-meta span { padding: 5px 9px; border-radius: 7px; background: var(--bg); }
+.request-meta span { padding: 5px 9px; border-radius:var(--radius-sm); background: var(--bg); }
 .request-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: auto; padding-top: 14px; }
 .request-response { width: 100%; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border); }
 .request-response [data-request-chat] { display: block; margin-top: 10px; }
@@ -42,12 +42,12 @@
 .availability-panel[open] .availability-form { padding: 0 18px 18px; }
 .availability-form label { display: grid; gap: 6px; font-size: 14px; }
 .availability-form label.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; clip-path: inset(50%); }
-.availability-enabled { display: flex !important; min-height: 58px; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); cursor: pointer; }
+.availability-enabled { display: flex !important; min-height: 58px; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid var(--border); border-radius:var(--radius-md); background: var(--bg); cursor: pointer; }
 .availability-enabled input, .availability-day-toggle input { width: 19px; min-height: 20px; margin: 0; accent-color: var(--main); }
 .availability-enabled span { display: grid; gap: 1px; }
 .availability-enabled strong { font-size: 14px; font-weight: 600; }
 .availability-form small { font-size: 12px; color: var(--muted); line-height: 1.45; }
-.availability-days { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 12px; }
+.availability-days { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--border); border-radius:var(--radius-md); }
 .availability-days legend { padding: 0 7px; font-size: 14px; font-weight: 600; }
 .availability-hint { margin: -2px 0 10px; color: var(--muted); font-size: 12px; }
 .availability-row { display: grid; grid-template-columns: 66px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 48px; border-top: 1px solid var(--border); }
@@ -57,14 +57,14 @@
 .availability-time-range input[type=time] { width: 100%; min-width: 0; min-height: 40px; padding: 7px 5px; text-align: center; }
 .availability-time-range input:disabled { visibility: hidden; }
 .availability-time-range span { color: var(--muted); font-size: 11px; }
-.availability-advanced { padding: 11px 12px; border: 1px solid var(--border); border-radius: 11px; }
+.availability-advanced { padding: 11px 12px; border: 1px solid var(--border); border-radius:var(--radius-md); }
 .availability-advanced summary { cursor: pointer; color: var(--dark); font-size: 13px; font-weight: 500; }
 .availability-settings-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
 .availability-days-off { margin-top: 14px; }
 .availability-feedback:empty { display: none; }
 .availability-form > button[type=submit] { width: 100%; }
 .booking-progress { display: flex; flex-wrap: wrap; gap: 7px; margin: 13px 0 7px; padding: 0; list-style: none; }
-.booking-progress li { padding: 4px 8px; border-radius: 6px; background: var(--bg); color: var(--muted); font-size: 12px; }
+.booking-progress li { padding: 4px 8px; border-radius:var(--radius-sm); background: var(--bg); color: var(--muted); font-size: 12px; }
 .booking-progress li.is-done { color: var(--success); background: color-mix(in srgb, var(--success) 9%, var(--surface)); }
 .booking-progress li[aria-current=step] { color: var(--main); background: var(--main-soft); font-weight: 600; }
 .booking-next-step { display: block; margin: 6px 0 10px; font-size: 13px; color: var(--muted); }

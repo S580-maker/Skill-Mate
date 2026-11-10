@@ -1109,7 +1109,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   if (targetId === "recent-grid") visible = latestMarketplaceListings(visible);
   if (targetId === "marketplace-grid") {
     document.querySelector("#marketplace-result-count").textContent = `${visible.length} ${visible.length === 1 ? "service" : "services"}`;
-    document.querySelector("#marketplace-heading").textContent = query ? "Search results" : newestFirst ? "Recently Added" : selectedCategory === "All" ? "Featured Services" : selectedCategory;
+    document.querySelector("#marketplace-heading").textContent = query ? "Search results" : newestFirst ? "Recently added" : selectedCategory === "All" ? "Featured services" : selectedCategory;
     document.querySelector("#marketplace-description").textContent = query || selectedCategory !== "All" ? "Find the right student for what you need." : newestFirst ? "Newest listings first. Services without publication dates appear last." : "Popular services from talented students on your campus.";
     const status = document.querySelector("#search-status");
     status.hidden = !query;
@@ -1129,6 +1129,10 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
       </div>
     </article>`).join("") : `<div class="empty-card"><span aria-hidden="true">⌕</span><strong>${targetId === "saved-grid" ? "Your shortlist starts here" : "No services found"}</strong><small>${targetId === "saved-grid" ? "Tap the heart on a service to save its provider for later." : "Try another skill or browse all categories."}</small><button class="button button-outline" type="button" ${targetId === "saved-grid" ? 'data-page-link="home"' : 'data-clear-search'}>Explore services</button></div>`;
   if (targetId === "recent-grid" && !visible.length) target.innerHTML = '<p class="recent-empty">No recently published services to show yet.</p>';
+  if (!visible.length && ["marketplace-grid", "saved-grid"].includes(targetId)) {
+    const empty = target.querySelector(".empty-card");
+    window.skillmateIllustrations?.mount(empty, targetId === "saved-grid" ? "saved" : "search", empty?.querySelector(":scope > span"));
+  }
   if (targetId === "marketplace-grid") { renderMarketplace("recent-grid", providers); renderMarketplaceActivity(); }
 }
 function renderSearchSuggestions() {
@@ -1182,7 +1186,7 @@ function renderGroups() {
     const joined = appSupabase ? Boolean(group.joinedByMe) : state.joinedGroups.includes(group.id);
     const full = group.joined >= group.capacity;
     const percent = Math.min(100, group.joined / group.capacity * 100);
-    return `<article class="group-card"><div class="group-card-heading"><span class="group-icon">${getCategoryIcon(provider?.category || "Other")}</span><span class="group-open">${full ? "Full" : "Open to join"}</span></div><h3>${escapeHTML(group.title)}</h3><p>${escapeHTML(group.service)} <span>· hosted by ${escapeHTML(group.host)}</span></p><div class="group-date">◷ ${formatDate(group.date)}</div><div class="group-progress"><span style="width:${percent}%"></span></div><div class="group-seats"><span>${group.joined} of ${group.capacity} students joined</span><strong>${currency(group.price)} <small>/ person</small></strong></div><button class="button ${joined ? "button-joined" : "button-outline"} group-join" type="button" data-join-group="${escapeHTML(group.id)}" ${pendingGroupActions.has(group.id) || full && !joined ? "disabled" : ""}>${joined ? "✓ You’re in — leave group" : full ? "Group is full" : "Join group"}</button><button class="group-message-link" type="button" data-message="${escapeHTML(group.providerId)}">Ask ${escapeHTML(provider?.name || "provider")} a question</button></article>`;
+    return `<article class="group-card"><div class="group-card-heading"><span class="group-icon">${getCategoryIcon(provider?.category || "Other")}</span><span class="group-open">${full ? "Full" : "Open to join"}</span></div><h3>${escapeHTML(group.title)}</h3><p>${escapeHTML(group.service)} <span>· hosted by ${escapeHTML(group.host)}</span></p><div class="group-date">${formatDate(group.date)}</div><div class="group-progress"><span style="width:${percent}%"></span></div><div class="group-seats"><span>${group.joined} of ${group.capacity} students joined</span><strong>${currency(group.price)} <small>/ person</small></strong></div><button class="button ${joined ? "button-joined" : "button-outline"} group-join" type="button" data-join-group="${escapeHTML(group.id)}" ${pendingGroupActions.has(group.id) || full && !joined ? "disabled" : ""}>${joined ? "✓ You’re in — leave group" : full ? "Group is full" : "Join group"}</button><button class="group-message-link" type="button" data-message="${escapeHTML(group.providerId)}">Ask ${escapeHTML(provider?.name || "provider")} a question</button></article>`;
   }).join("") : '<div class="empty-card"><strong>No open groups yet</strong><small>Start one and invite students on your campus.</small></div>';
 }
 function formatDate(dateString) {
@@ -1242,7 +1246,11 @@ function renderBookingList(targetId, list, options = {}) {
     const agreedScope = booking.scopeSnapshot
       ? `<div class="booking-location"><strong>${booking.priceAgreementId ? "Agreed service scope" : "Service details"}</strong><small>${escapeHTML(booking.scopeSnapshot)}</small></div>` : "";
     return `<article class="booking-card${!providerView && status === "Completed" && !booking.reviewed ? " booking-awaiting-review" : ""}" data-booking-card-id="${escapeHTML(booking.id)}"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span>${booking.priceAgreementId ? '<span class="booking-type-pill">Agreed price</span>' : ""}<span class="status status-${escapeHTML(status.toLowerCase().replaceAll(" ", "-"))}">${escapeHTML(statusLabel)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${appointmentSuggestion}${listedPriceNote}${requestedArrangement}${booking.note ? `<small class="booking-note">Instructions: “${escapeHTML(booking.note)}”</small>` : ""}${agreedScope}${progress}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${repeatAction}${priceChatAction}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
-  }).join("") : '<div class="empty-card"><span>◷</span><strong>Nothing here just yet</strong><small>Your bookings and requests will appear here.</small></div>';
+  }).join("") : '<div class="empty-card"><span class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><strong>Nothing here just yet</strong><small>Your bookings and requests will appear here.</small></div>';
+  if (!list.length && targetId === "user-booking-list") {
+    const empty = target.querySelector(".empty-card");
+    window.skillmateIllustrations?.mount(empty, "bookings", empty?.querySelector(":scope > span"));
+  }
   target.querySelectorAll("[data-decision], [data-propose-appointment], [data-review]").forEach(button => {
     const id = button.dataset.bookingId || button.dataset.proposeAppointment || button.dataset.review;
     if (pendingBookingStatuses.has(id) || id?.startsWith("pending-booking-")) {
@@ -1370,6 +1378,7 @@ function renderEmptyChat() {
   description.textContent = "Choose a chat to pick up where you left off, or message a student to start a new conversation.";
   empty.append(icon, heading, description);
   target.append(empty);
+  window.skillmateIllustrations?.mount(empty, "messages", icon);
 }
 function chatMessageRenderKey(message, grouped) {
   return JSON.stringify([
@@ -1767,7 +1776,7 @@ function renderChat(options = {}) {
       empty.append(spinner, label);
     } else {
       empty.removeAttribute("role");
-      empty.textContent = "No messages yet 👋 Say hi!";
+      empty.textContent = "No messages yet. Start a conversation from a provider's profile.";
     }
     orderedChildren.push(empty);
   }
@@ -1881,6 +1890,7 @@ function serviceDetailLabel(service) {
 function renderListings() {
   const target = document.querySelector("#listing-list");
   target.innerHTML = state.services.length ? state.services.map((service) => `<article class="listing-card">${serviceCoverUrl(service) ? `<img class="service-list-cover" src="${escapeHTML(serviceCoverUrl(service))}" alt="" loading="lazy" />` : `<span class="service-list-icon">${getCategoryIcon(service.category)}</span>`}<div class="listing-copy"><div class="listing-title"><strong>${escapeHTML(service.title)}</strong><span class="listing-status ${service.active ? "listing-active" : "listing-paused"}">${service.pending ? "Saving..." : service.active ? "Active" : "Paused"}</span></div><small>${escapeHTML(service.category)} ${service.groups ? "· Open to groups" : ""}</small><p>${escapeHTML(service.description)}</p><small>${escapeHTML(serviceDetailLabel(service))}</small></div><strong class="listing-price">${servicePriceLabel(service)}</strong><div class="listing-actions"><button class="button button-small button-outline" type="button" data-edit-service="${escapeHTML(service.id)}" ${service.pending ? "disabled" : ""}>Edit</button><button class="subtle-button" type="button" data-toggle-service="${escapeHTML(service.id)}" ${service.pending || pendingServiceToggles.has(service.id) ? "disabled aria-busy=\"true\"" : ""}>${service.active ? "Pause" : "Activate"}</button></div></article>`).join("") : '<div class="empty-card"><strong>Your first service starts here</strong><small>List a skill to help students find and book you.</small><button class="button button-primary button-small" type="button" data-open="service-modal">Add a service</button></div>';
+  if (!state.services.length) window.skillmateIllustrations?.mount(target.querySelector(".empty-card"), "listings");
 }
 function renderPortfolio() {
   const target = document.querySelector("#portfolio-grid");
@@ -2912,12 +2922,13 @@ async function bootstrapStudentApp() {
 }
 function showPage(page, options = {}) {
   if (page === "profile") page = "profile-settings";
+  if (page !== "bookings") window.skillmateIllustrations?.hideBookingSuccess();
   const view = document.querySelector(`[data-view="${page}"]`);
   if (!view) return;
   const pageTitles = {
     home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers",
-    provider: "My Listings", earnings: "Estimated earnings", "profile-settings": "Your profile",
-    "help-support": "Help & Support", requests: "Campus requests", activity: "My Activity",
+    provider: "My listings", earnings: "Estimated earnings", "profile-settings": "Your profile",
+    "help-support": "Help & support", requests: "Campus requests", activity: "My activity",
   };
   const pageTitle = pageTitles[page];
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
@@ -2967,7 +2978,8 @@ function showPage(page, options = {}) {
   if (page === "provider") { renderListings(); renderPortfolio(); }
   if (page === "earnings") renderEarnings();
   if (page === "bookings") renderBookingList("user-booking-list", bookingsForActiveFilter());
-  window.scrollTo({ top: Number.isFinite(options.restoreScroll) ? Math.max(0, options.restoreScroll) : 0, behavior: "auto" });
+  // Section switches and history restores jump instantly; a smooth scroll left running from one section would override a restore.
+  window.scrollTo({ top: Number.isFinite(options.restoreScroll) ? Math.max(0, options.restoreScroll) : 0, behavior: "instant" });
   if (appSupabase && appUser && ["home", "bookings", "messages", "provider", "earnings"].includes(page)) {
     refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate activity for this page.", error));
   }
@@ -3084,7 +3096,7 @@ function updateBookingRequestMode(service, hasAgreement) {
     ? "For example: I’d like 20 edited photos instead of the 10 included. Please quote the extra cost."
     : "Share a helpful detail";
   document.querySelector("#booking-custom-quote-hint").hidden = !isQuoteRequest;
-  document.querySelector("#booking-instructions").open = isQuoteRequest;
+  document.querySelector("#booking-instructions").open = isQuoteRequest || Boolean(document.querySelector("#booking-note").value);
   const instructionsSummary = document.querySelector("#booking-instructions summary");
   instructionsSummary.childNodes[0].textContent = isQuoteRequest ? "Describe your request " : "Add instructions ";
   instructionsSummary.querySelector("span").textContent = isQuoteRequest ? "(required)" : "(optional)";
@@ -4003,6 +4015,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
       showToast("This agreed price is no longer available for this service.", "error");
       return;
     }
+    window.skillmateIllustrations?.hideBookingSuccess();
     bookingSubmissionPending = true;
     const temporaryId = `pending-booking-${Date.now()}`;
     const pendingBooking = {
@@ -4040,6 +4053,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
         await reconcileSavedChange();
         bookingDrafts.delete(bookingDraftKey);
         renderAll();
+        window.skillmateIllustrations?.showBookingSuccess();
         showToast("Booking request sent. You can track it in My bookings.", "success");
       } catch (error) {
         state.bookings = state.bookings.filter((booking) => booking.id !== temporaryId);
@@ -4053,6 +4067,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
     });
     return;
   }
+  window.skillmateIllustrations?.hideBookingSuccess();
   bookingSubmissionPending = true;
   state.bookings.unshift({
     id: `booking-${Date.now()}`, serviceId: service.id, scheduledAt: scheduledAt.toISOString(), providerId, service: service.title, price: Number(service.price),
@@ -4067,6 +4082,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
   event.target.closest("dialog").close();
   renderAll();
   showPage("bookings");
+  window.skillmateIllustrations?.showBookingSuccess({ local: true });
   showToast("Booking request sent. Your booking record is saved on this device.");
 });
 document.querySelector("#group-form").addEventListener("submit", (event) => {

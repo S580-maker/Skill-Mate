@@ -1,0 +1,71 @@
+{
+  "style": "Rafiki",
+  "downloaded": "2026-11-09",
+  "license": "https://storyset.com/terms",
+  "animation": "Skillmate CSS entrance and gentle float; official static SVG artwork",
+  "assets": {
+    "onboarding": {
+      "file": "onboarding.svg",
+      "title": "college students",
+      "source": "https://storyset.com/illustration/college-students/rafiki",
+      "download": "https://stories.freepiklabs.com/storage/72157/College-students_Mesa-de-trabajo-1.svg",
+      "originalSha256": "3c50fc218b414295f3a484d323dbf743da73bb12eed19f85f42709e933635d0c",
+      "sha256": "b54c1a240cea805a563d4c14a87dccb2172441066066bf8f62cd9dac3a4e986a",
+      "changes": "Primary blue to #102D72; light gray to muted gold #E9DDBA and cream #F7F4EC. Original shapes and other colors preserved."
+    },
+    "search": {
+      "file": "search.svg",
+      "title": "search",
+      "source": "https://storyset.com/illustration/search/rafiki",
+      "download": "https://stories.freepiklabs.com/storage/864/Search-01.svg",
+      "originalSha256": "e0c5af65f1a7232648c3a5188d8712d0bd0f52b420e83e6a908b1f4e87d49587",
+      "sha256": "5d0087acf55c9de055d0ce8b8e627c725bcbd0ef694747d71a99a2aed963b03c",
+      "changes": "Primary blue to #102D72; light gray to muted gold #E9DDBA and cream #F7F4EC. Original shapes and other colors preserved."
+    },
+    "saved": {
+      "file": "saved.svg",
+      "title": "bookmarks",
+      "source": "https://storyset.com/illustration/bookmarks/rafiki",
+      "download": "https://stories.freepiklabs.com/storage/32065/Bookmarks-rafikii_Artboard-1.svg",
+      "originalSha256": "b6b6f7571a77ea4142a7ed944e9c134afaf858b0356785a336a4438efc92d00a",
+      "sha256": "d120b26aede28fc8459a45efd3ff0fb0971f49d3d61ab67a3b2e0d7f9520f48c",
+      "changes": "Primary blue to #102D72; light gray to muted gold #E9DDBA and cream #F7F4EC. Original shapes and other colors preserved."
+    },
+    "bookings": {
+      "file": "bookings.svg",
+      "title": "schedule",
+      "source": "https://storyset.com/illustration/schedule/rafiki",
+      "download": "https://stories.freepiklabs.com/storage/6452/334-Schedule-(1)_Artboard-1.svg",
+      "originalSha256": "f32fa6b812b5f8f77c6ee9bbd4de4a5e8b24266aa6a4ecb15b9aac9371128cca",
+      "sha256": "da2927f37ff391b8661d7d33e470b5cc1af9d1903517ec3db513ab64092ca4e3",
+      "changes": "Primary blue to #102D72; light gray to muted gold #E9DDBA and cream #F7F4EC. Original shapes and other colors preserved."
+    },
+    "listings": {
+      "file": "listings.svg",
+      "title": "freelancer",
+      "source": "https://storyset.com/illustration/freelancer/rafiki",
+      "download": "https://stories.freepiklabs.com/storage/2035/155-Freelancer_Artboard-1.svg",
+      "originalSha256": "282db5e9de9d79d96e49174daf747c11a37c47bc8e460796883dbb8eda4d954b",
+      "sha256": "d889deb5440ea53a2b35fef6e3cec526a066105b86a4ea746eba806f8be96493",
+      "changes": "Primary blue to #102D72; light gray to muted gold #E9DDBA and cream #F7F4EC. Original shapes and other colors preserved."
+    },
+    "messages": {
+      "file": "messages.svg",
+      "title": "chatting",
+      "source": "https://storyset.com/illustration/chatting/rafiki",
+      "download": "https://stories.freepiklabs.com/storage/1523/37-Chatting_Artboard-1.svg",
+      "originalSha256": "ee46b55c5ceb27e0e82a8ef5b85e6e6d69b1a96fece6af75d8e92082b562a710",
+      "sha256": "5bb16641c3e3f05d2766bb931d8c1aae77722d4659df1378ee2f190bf59cbb59",
+      "changes": "Primary blue to #102D72; light gray to muted gold #E9DDBA and cream #F7F4EC. Original shapes and other colors preserved."
+    },
+    "success": {
+      "file": "success.svg",
+      "title": "confirmed",
+      "source": "https://storyset.com/illustration/confirmed/rafiki",
+      "download": "https://stories.freepiklabs.com/storage/1519/33-Confirmed_Artboard-1.svg",
+      "originalSha256": "61759c162f84ae8c5c0c85945d16b94dcb357b2dccacc946c6e303e1f2d5269b",
+      "sha256": "fcca52a5de845e38f36f888c9a6ce02a9c90e644143ee400286c23adcd00c110",
+      "changes": "Primary blue to #102D72; light gray to muted gold #E9DDBA and cream #F7F4EC. Original shapes and other colors preserved."
+    }
+  }
+}

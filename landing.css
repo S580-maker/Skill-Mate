@@ -90,7 +90,7 @@ a,button,summary {
   top:-100px;
   z-index:20;
   padding:14px 24px;
-  border-radius:8px;
+  border-radius:var(--radius-sm);
   background:var(--ink);
   color:white
 }
@@ -122,11 +122,6 @@ a,button,summary {
   font-size:27px;
   font-weight:800;
   letter-spacing:-1.3px
-}
-
-.wordmark>span {
-  color:var(--blue);
-  font-size:27px
 }
 
 .main-nav {
@@ -169,7 +164,7 @@ a,button,summary {
   min-height:54px;
   padding:16px 24px;
   border:1px solid var(--blue);
-  border-radius:9px;
+  border-radius:var(--radius-sm);
   background:var(--blue);
   color:white;
   font-size:14px;
@@ -214,7 +209,7 @@ a,button,summary {
   min-height:44px;
   padding:8px 12px;
   border:1px solid var(--line);
-  border-radius:8px;
+  border-radius:var(--radius-sm);
   color:var(--ink);
   background:white;
   font-size:13px
@@ -223,7 +218,7 @@ a,button,summary {
 .eyebrow {
   font-size:10px;
   font-weight:750;
-  letter-spacing:1.8px;
+  letter-spacing:.02em;
   line-height:1.7;
   color:var(--blue)
 }
@@ -245,7 +240,7 @@ a,button,summary {
   display:flex;
   align-items:center;
   gap:9px;
-  letter-spacing:1.3px
+  letter-spacing:.02em
 }
 
 .status-dot {
@@ -305,7 +300,7 @@ h1>span {
   align-self:stretch;
   position:relative;
   isolation:isolate;
-  border-radius:26px;
+  border-radius:var(--radius-xl);
   background:#e5ebfc;
   display:flex;
   align-items:center;
@@ -357,7 +352,7 @@ h1>span {
 .product-window {
   width:86%;
   border:1px solid #d9dfed;
-  border-radius:13px;
+  border-radius:var(--radius-md);
   background:white;
   box-shadow:0 24px 48px #233d7224;
   transform:rotate(-4deg);
@@ -380,15 +375,10 @@ h1>span {
   letter-spacing:-.6px
 }
 
-.preview-brand>span {
-  color:var(--blue);
-  margin-left:4px
-}
-
 .preview-campus {
   visibility:hidden;
   font-size:7px;
-  letter-spacing:1px;
+  letter-spacing:.02em;
   color:#63708a
 }
 
@@ -419,7 +409,7 @@ h1>span {
   margin-top:20px;
   padding:10px 12px;
   border:1px solid var(--line);
-  border-radius:7px;
+  border-radius:var(--radius-sm);
   font-size:9px;
   color:#687287
 }
@@ -437,7 +427,7 @@ h1>span {
 
 .preview-tags>span {
   padding:6px 11px;
-  border-radius:5px;
+  border-radius:var(--radius-sm);
   background:#f1f3f8;
   font-size:8px
 }
@@ -461,7 +451,7 @@ h1>span {
   height:117px;
   position:relative;
   overflow:hidden;
-  border-radius:8px;
+  border-radius:var(--radius-sm);
   margin-bottom:13px;
   display:grid;
   place-items:center
@@ -561,7 +551,7 @@ h1>span {
 .preview-service>small {
   display:block;
   font-size:6.5px;
-  letter-spacing:1px;
+  letter-spacing:.02em;
   color:var(--blue);
   font-weight:700
 }
@@ -592,7 +582,7 @@ h1>span {
   align-items:center;
   padding:13px 17px;
   border:1px solid #e3e7f0;
-  border-radius:12px;
+  border-radius:var(--radius-md);
   background:#fff;
   box-shadow:0 9px 25px #132c6712;
   font-size:10px;
@@ -642,7 +632,7 @@ h1>span {
 
 .hero-bottom>span {
   font-size:9px;
-  letter-spacing:1.7px;
+  letter-spacing:.02em;
   color:#667086;
   font-weight:600
 }
@@ -698,7 +688,7 @@ h1>span {
 .problem-art {
   position:relative;
   min-height:185px;
-  border-radius:11px;
+  border-radius:var(--radius-md);
   overflow:hidden;
   margin-bottom:24px
 }
@@ -707,7 +697,7 @@ h1>span {
   display:block;
   margin-inline:12px;
   font-size:8px;
-  letter-spacing:1.1px;
+  letter-spacing:.02em;
   color:#68738c;
   font-weight:650
 }
@@ -792,7 +782,7 @@ h1>span {
 .profile-tile {
   width:91px;
   height:112px;
-  border-radius:9px;
+  border-radius:var(--radius-md);
   background:#fffdfa;
   padding:16px;
   box-shadow:0 6px 12px #74513910;
@@ -814,7 +804,7 @@ h1>span {
 .profile-tile b {
   width:48px;
   height:5px;
-  border-radius:4px;
+  border-radius:var(--radius-sm);
   background:#e4dbd0
 }
 
@@ -883,7 +873,7 @@ h1>span {
   bottom:25px;
   padding:9px 13px;
   background:#f8faef;
-  border-radius:6px;
+  border-radius:var(--radius-sm);
   font-size:9px;
   transform:rotate(-5deg);
   border:1px solid #d0d9bf
@@ -910,7 +900,7 @@ h1>span {
 
 .step-visual {
   height:217px;
-  border-radius:14px;
+  border-radius:var(--radius-md);
   position:relative;
   overflow:hidden;
   padding:28px
@@ -929,7 +919,7 @@ h1>span {
   gap:9px;
   padding:13px;
   background:white;
-  border-radius:7px;
+  border-radius:var(--radius-sm);
   font-size:10px;
   box-shadow:0 4px 12px #24459608;
   transform:rotate(-3deg)
@@ -953,7 +943,7 @@ h1>span {
   padding:9px 11px;
   border:1px solid #ccd7f4;
   background:#f8faff;
-  border-radius:6px;
+  border-radius:var(--radius-sm);
   color:#48619d;
   font-size:10px
 }
@@ -985,7 +975,7 @@ h1>span {
 .conversation-bubble small {
   display:block;
   font-size:6px;
-  letter-spacing:1px;
+  letter-spacing:.02em;
   color:#697860;
   margin-top:5px
 }
@@ -1017,7 +1007,7 @@ h1>span {
   max-width:100%;
   padding:20px;
   background:#fffcf8;
-  border-radius:10px;
+  border-radius:var(--radius-md);
   box-shadow:0 10px 20px #6c443212;
   transform:rotate(-5deg);
   display:flex;
@@ -1040,7 +1030,7 @@ h1>span {
 .booking-paper small {
   display:block;
   font-size:6px;
-  letter-spacing:1px;
+  letter-spacing:.02em;
   color:#757166;
   margin-bottom:5px
 }
@@ -1177,7 +1167,7 @@ h1>span {
   display:inline-block;
   padding:7px 10px;
   border:1px dashed #bbc8e5;
-  border-radius:5px;
+  border-radius:var(--radius-sm);
   color:#566a95;
   font-size:8px;
   letter-spacing:1px
@@ -1235,7 +1225,7 @@ h1>span {
 
 .faq .eyebrow {
   font-size:9px;
-  letter-spacing:1.2px
+  letter-spacing:.02em
 }
 
 .faq-doodle {
@@ -1314,14 +1304,14 @@ h1>span {
   text-align:center;
   background:#254ed0;
   border:1px solid #254ed0;
-  border-radius:24px;
+  border-radius:var(--radius-xl);
   color:white
 }
 
 .cta .eyebrow {
   color:#d5e0ff;
   font-size:9px;
-  letter-spacing:1.6px
+  letter-spacing:.02em
 }
 
 .cta h2 {
@@ -1408,7 +1398,7 @@ h1>span {
 
 .site-footer h2 {
   font-size:9px;
-  letter-spacing:1.4px;
+  letter-spacing:.02em;
   font-weight:700;
   margin-bottom:19px;
   color:#53617e
@@ -1850,7 +1840,7 @@ h1>span {
   }
   .hero .eyebrow {
     font-size:8px;
-    letter-spacing:1px;
+    letter-spacing:.02em;
     gap:8px
   }
   h1 {
@@ -1995,7 +1985,7 @@ h1>span {
   }
   .eyebrow {
     font-size:9px;
-    letter-spacing:1.3px
+    letter-spacing:.02em
   }
   .problem-grid {
     grid-template-columns:1fr;
@@ -2019,7 +2009,7 @@ h1>span {
   }
   .card-index {
     font-size:8px;
-    letter-spacing:1.3px;
+    letter-spacing:.02em;
     margin-inline:10px
   }
   .search-art {
@@ -2160,7 +2150,7 @@ h1>span {
   }
   .cta .eyebrow {
     font-size:8px;
-    letter-spacing:1px
+    letter-spacing:.02em
   }
   .cta>p:not(.eyebrow) {
     font-size:12px
@@ -2228,7 +2218,7 @@ h1>span {
   inset:59px 28px 45px 39px;
   z-index:-1;
   border:1px solid #b7c8ee;
-  border-radius:16px;
+  border-radius:var(--radius-lg);
   background:#d2def9;
   transform:rotate(5deg);
   box-shadow:0 14px 32px #233d7212;
@@ -2316,7 +2306,7 @@ h1>span {
 
 .community-layout { gap:64px; }
 .community .text-link { margin-top:15px; }
-.testimonial-placeholder { padding:32px; border-radius:14px; box-shadow:var(--illustration-shadow); }
+.testimonial-placeholder { padding:32px; border-radius:var(--radius-md); box-shadow:var(--illustration-shadow); }
 .testimonial-placeholder h3 { font-size:31px; margin-top:20px; }
 .testimonial-placeholder>p { font-size:14px; max-width:38ch; margin-top:14px; line-height:1.8; }
 .placeholder-label { font-size:9px; }
@@ -2330,7 +2320,7 @@ h1>span {
 .faq-list details[open] { background:#eef2fc; }
 .faq-list details[open] summary,.faq-list details[open] .faq-answer { padding-inline:16px; }
 .cta-wrap { padding-bottom:60px; }
-.cta { padding:46px 32px; border-radius:20px; }
+.cta { padding:46px 32px; border-radius:var(--radius-lg); }
 .cta h2 { font-size:clamp(34px,3.5vw,48px); margin-top:16px; line-height:1.2; letter-spacing:-1.7px; }
 .cta>p:not(.eyebrow) { margin-top:15px; }
 .cta .button { margin-top:23px; }
@@ -2429,9 +2419,9 @@ h1>span {
   .hero-actions { margin-top:20px; }
   .hero-actions .button { padding-inline:10px; gap:9px; min-height:50px; }
   .hero-note { margin-top:16px; font-size:9px; }
-  .hero .eyebrow { font-size:7.5px; letter-spacing:.8px; }
-  .hero-visual { min-height:350px; padding:12px 0 28px; border-radius:18px; }
-  .hero-visual::after { inset:47px 15px 37px 24px; border-radius:12px; }
+  .hero .eyebrow { font-size:7.5px; letter-spacing:.02em; }
+  .hero-visual { min-height:350px; padding:12px 0 28px; border-radius:var(--radius-lg); }
+  .hero-visual::after { inset:47px 15px 37px 24px; border-radius:var(--radius-md); }
   .product-window { width:88%; margin-top:5px; }
   .window-bar { padding:11px 12px; }
   .window-body { padding:14px 12px; }
@@ -2498,7 +2488,7 @@ h1>span {
   .cta-wrap { padding-bottom:40px; }
   .cta { padding:36px 20px; }
   .cta h2 { font-size:31px; letter-spacing:-1px; }
-  .cta .eyebrow { font-size:7px; letter-spacing:.8px; }
+  .cta .eyebrow { font-size:7px; letter-spacing:.02em; }
   .cta-star { display:none; }
   .footer-top { gap:24px 17px; padding-bottom:25px; }
   .footer-top nav>a,.footer-bottom a { min-height:44px; }
@@ -2525,4 +2515,3 @@ h1>span {
     transform:none
   }
 }
-
