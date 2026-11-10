@@ -9,7 +9,7 @@ module.exports = async ({ base, call, evaluate, screenshot, wait }) => {
     }
     await wait(500);
   };
-  for (const width of [390, 768, 1366]) {
+  for (const width of [320, 375, 768, 1280, 1920]) {
     await call("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width < 768 });
     for (const [name, route] of [["landing", "/"], ["login", "/login.html"], ["signup", "/login.html?mode=signup"]]) {
       await visit(route);

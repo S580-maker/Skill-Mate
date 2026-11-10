@@ -1,32 +1,36 @@
 (() => {
   let offset = 0;
   let loading = false;
+  let retryReset = false;
   const dialog = document.querySelector("#notifications-modal");
   const status = document.querySelector("#notifications-status");
   const list = document.querySelector("#notifications-list");
   const more = document.querySelector("#notifications-more");
   async function load({ reset = false } = {}) {
     if (loading) return;
-    if (reset) { offset = 0; list.replaceChildren(); }
+    reset = reset || retryReset;
+    const requestOffset = reset ? 0 : offset;
     loading = true;
     const finishLoading = typeof window !== "undefined" && window.skillmateLoading
-      ? window.skillmateLoading.show(list, { count: 3, label: "Loading notifications" })
+      ? window.skillmateLoading.show(list, { count: 3, variant: "notifications", label: "Loading notifications", delay: 150, preserve: reset && list.children.length > 0 })
       : () => {};
     more.disabled = true;
     status.textContent = "Loading notifications…";
     try {
       let result = appSupabase
-        ? await appSupabase.from("notifications").select("id, title, body, read_at, created_at, conversation_id, booking_id, target_path")
-          .order("created_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + 9)
+        ? await window.skillmateLoading.withTimeout(appSupabase.from("notifications").select("id, title, body, read_at, created_at, conversation_id, booking_id, target_path")
+          .order("created_at", { ascending: false }).order("id", { ascending: false }).range(requestOffset, requestOffset + 9))
         : { data: [], error: null };
       if (result.error && ["42703", "PGRST204"].includes(result.error.code)) {
         console.warn("Booking-linked notifications are unavailable until the booking workflow migration is applied.", result.error);
-        result = await appSupabase.from("notifications").select("id, title, body, read_at, created_at")
-          .order("created_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + 9);
+        result = await window.skillmateLoading.withTimeout(appSupabase.from("notifications").select("id, title, body, read_at, created_at")
+          .order("created_at", { ascending: false }).order("id", { ascending: false }).range(requestOffset, requestOffset + 9));
       }
       const { data, error } = result;
       if (error) throw error;
       finishLoading();
+      if (reset) { offset = 0; list.replaceChildren(); }
+      retryReset = false;
       for (const item of data || []) {
         const row = document.createElement("li");
         row.className = "notification-item";
@@ -106,6 +110,7 @@
       more.textContent = "Load more";
       status.textContent = offset ? "Review your updates and mark them read individually." : "No notifications yet.";
     } catch {
+      retryReset = reset;
       status.textContent = "Could not load notifications. Please try again.";
       more.hidden = false;
       more.textContent = "Try again";

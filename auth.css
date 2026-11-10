@@ -242,7 +242,7 @@ body { min-height: 100vh; }
   .onboarding-photo-row { align-items: flex-start; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .auth-submit-spinner { animation-duration: 1.5s; }
+  .auth-submit-spinner { animation: none; }
   .recovery-otp,
   .recovery-otp-inputs input.otp-digit-entered,
   .recovery-otp.is-error .recovery-otp-inputs,

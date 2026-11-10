@@ -7,8 +7,8 @@
     <title>Skillmate | Student marketplace</title>
     <link rel="preload" href="/assets/fonts/plus-jakarta-sans-latin-variable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="landing-fonts.css?v=3" />
-    <link rel="preload" href="user.css?v=20261110" as="style" />
-    <link rel="stylesheet" href="user.css?v=20261110" />
+    <link rel="preload" href="user.css?v=20261110b" as="style" />
+    <link rel="stylesheet" href="user.css?v=20261110b" />
     <link rel="stylesheet" href="app-refresh.css?v=20261110" />
     <link rel="stylesheet" href="marketplace-growth.css?v=20261110" />
   <link rel="stylesheet" href="student-gold.css?v=20261110" />
@@ -16,45 +16,19 @@
     <link rel="stylesheet" href="/brand-colors.css?v=20261110" />
     <link rel="stylesheet" href="typography.css?v=20261110" />
     <link rel="stylesheet" href="illustrations.css?v=20261110" />
+    <link rel="stylesheet" href="skeleton.css?v=20261110b" />
     <script src="theme.js?v=2"></script>
   </head>
   <body class="app-auth-pending">
     <div class="auth-screen" id="app-auth-status" role="status" aria-live="polite">
-      <section class="dashboard-loading-skeleton" id="dashboard-loading-skeleton" aria-label="Loading your dashboard">
-        <aside class="dashboard-skeleton-sidebar" aria-hidden="true">
-          <div class="dashboard-skeleton-brand"><strong>Skillmate</strong></div>
-          <i class="skeleton dashboard-skeleton-campus"></i>
-          <div class="dashboard-skeleton-nav"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div>
-          <i class="skeleton dashboard-skeleton-profile"></i>
-        </aside>
-        <div class="dashboard-skeleton-content">
-          <header class="dashboard-skeleton-top">
-            <i class="skeleton dashboard-skeleton-crumb"></i>
-            <i class="skeleton dashboard-skeleton-avatar"></i>
-          </header>
-          <main class="dashboard-skeleton-main" aria-hidden="true">
-            <div class="dashboard-skeleton-intro">
-              <i class="skeleton dashboard-skeleton-eyebrow"></i>
-              <i class="skeleton dashboard-skeleton-title"></i>
-              <i class="skeleton dashboard-skeleton-subtitle"></i>
-              <i class="skeleton dashboard-skeleton-search"></i>
-            </div>
-            <div class="dashboard-skeleton-categories"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div>
-            <div class="dashboard-skeleton-section"><i class="skeleton dashboard-skeleton-section-title"></i><i class="skeleton dashboard-skeleton-section-meta"></i></div>
-            <div class="dashboard-skeleton-cards">
-              <article class="dashboard-skeleton-card"><i class="skeleton dashboard-skeleton-cover"></i><div><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div></article>
-              <article class="dashboard-skeleton-card"><i class="skeleton dashboard-skeleton-cover"></i><div><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div></article>
-            </div>
-      </main>
-        </div>
-        <nav class="dashboard-skeleton-mobile-nav" aria-hidden="true"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></nav>
-      </section>
+      <section class="dashboard-loading-skeleton" id="dashboard-loading-skeleton" aria-label="Loading your dashboard"></section>
       <section class="dashboard-loading-progress" id="dashboard-loading-progress" hidden>
         <strong id="dashboard-loading-label">Getting your dashboard ready…</strong>
         <progress id="dashboard-loading-bar" max="100" value="10" aria-label="Dashboard loading progress"></progress>
         <span><span id="dashboard-loading-elapsed">10 seconds elapsed</span><span id="dashboard-loading-remaining">Estimated time remaining: calculating…</span></span>
       </section>
     </div>
+    <script src="loading-ui.js?v=20261110b"></script>
     <div class="app-shell" id="app-shell">
       <header class="topbar marketplace-header">
         <a class="brand" href="#home" data-page-link="home" aria-label="Skillmate home">
@@ -421,11 +395,10 @@
     <script defer src="marketplace-utils.js?v=4"></script>
     <script defer src="push-notification-platform.js?v=1"></script>
     <script defer src="marketplace-growth-utils.js?v=1"></script>
-    <script defer src="loading-ui.js?v=1"></script>
     <script defer src="illustrations.js?v=3"></script>
-    <script defer src="user.js?v=53"></script>
-    <script defer src="marketplace-growth.js?v=8"></script>
+    <script defer src="user.js?v=54"></script>
+    <script defer src="marketplace-growth.js?v=9"></script>
     <script defer src="service-form.js?v=4"></script>
-    <script defer src="notifications.js?v=2"></script>
+    <script defer src="notifications.js?v=3"></script>
   </body>
 </html>

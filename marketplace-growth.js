@@ -185,24 +185,33 @@
       if (appSupabase && !appUser) return;
       boardLoading = (async () => {
       $("#request-board-refresh").disabled = true;
-      const finishLoading = !requests.length && window.skillmateLoading
-        ? window.skillmateLoading.show($("#request-board-grid"), { count: 6, variant: "cards", label: "Loading campus requests" })
+      const hadRequests = requests.length > 0;
+      if (!hadRequests) $("#request-board-grid").replaceChildren();
+      const finishLoading = window.skillmateLoading
+        ? window.skillmateLoading.show($("#request-board-grid"), { count: 6, variant: "requests", label: "Loading campus requests", delay: 150, preserve: hadRequests })
         : () => {};
       feedback("#request-board-feedback", "Loading campus requests…");
       try {
         if (appSupabase) {
-          const result = await appSupabase.from("campus_request_directory").select("*").order("created_at", { ascending: false }).range(0, boardLimit - 1);
+          const result = await window.skillmateLoading.withTimeout(appSupabase.from("campus_request_directory").select("*").order("created_at", { ascending: false }).range(0, boardLimit - 1));
           if (result.error) throw result.error;
-          requests = result.data || [];
-          const replyResult = requests.length ? await appSupabase.from("campus_request_response_directory").select("*").in("request_id", requests.map(item => item.id)).order("created_at", { ascending: false }).limit(500) : { data: [] };
+          const nextRequests = result.data || [];
+          const replyResult = nextRequests.length ? await window.skillmateLoading.withTimeout(appSupabase.from("campus_request_response_directory").select("*").in("request_id", nextRequests.map(item => item.id)).order("created_at", { ascending: false }).limit(500)) : { data: [] };
           if (replyResult.error) throw replyResult.error;
+          requests = nextRequests;
           responses = replyResult.data || [];
         }
         feedback("#request-board-feedback", appSupabase ? "Requests expire at the end of their chosen day in Ghana time. Keep personal and payment details out of public posts." : "Demo board: posts and replies stay in this browser and are not sent to other students.");
         renderBoard();
       } catch {
         feedback("#request-board-feedback", "Campus requests could not load. Try Refresh in a moment.", true);
-        $("#request-board-grid").innerHTML = '<div class="empty-card"><strong>Requests are temporarily unavailable</strong><small>Your existing bookings and messages are still available.</small></div>';
+        if (hadRequests) return; // Keep the last successful result during a failed refresh.
+        $("#request-board-grid").replaceChildren();
+        window.skillmateLoading.showError($("#request-board-grid"), {
+          title: "Requests are temporarily unavailable",
+          message: "Your existing bookings and messages are still available.",
+          onRetry: () => window.skillmateGrowth.refreshBoard().then(() => $("#request-board-grid [data-loading-retry]")?.focus()),
+        });
       } finally { finishLoading(); $("#request-board-refresh").disabled = false; }
       })();
       try { return await boardLoading; }

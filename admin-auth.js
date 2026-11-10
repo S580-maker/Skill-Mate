@@ -2,6 +2,8 @@ const adminClient = window.skillmateSupabase;
 const adminStatus = document.querySelector("#admin-auth-status");
 
 function showAdminGate(message, withLogin = false, withReload = false) {
+  document.querySelector("#admin-auth-gate")?.removeAttribute("aria-busy");
+  document.querySelector("#admin-auth-gate")?.classList.add("is-error");
   adminStatus.replaceChildren(document.createTextNode(message));
   if (withLogin) {
     const link = document.createElement("a");
@@ -222,10 +224,12 @@ async function fetchSupportTickets() {
   const status = document.querySelector("#support-queue-status");
   const rows = document.querySelector("#support-ticket-rows");
   status.textContent = "Loading support tickets…";
+  const finishLoading = window.skillmateLoading?.show(rows, { count: 2, variant: "notifications", label: "Loading support tickets", delay: 150, preserve: rows.children.length > 0 }) || (() => {});
   try {
-    const { data, error } = await adminClient.from("support_tickets")
+    const { data, error } = await withAdminTimeout(adminClient.from("support_tickets")
       .select("id, user_id, category, message, status, screenshot_url, created_at")
-      .in("status", ["open", "reviewing"]).order("created_at", { ascending: true }).limit(50);
+      .in("status", ["open", "reviewing"]).order("created_at", { ascending: true }).limit(50), "Loading support tickets timed out.");
+    finishLoading();
     if (error) throw error;
     rows.replaceChildren();
     for (const ticket of data || []) {
@@ -286,11 +290,12 @@ async function fetchSupportTickets() {
     }
     status.textContent = data?.length ? `${data.length} oldest active tickets (up to 50 shown).` : "No active support tickets.";
   } catch (error) {
-    rows.replaceChildren();
+    finishLoading();
     console.error("Could not load support tickets.", error);
     status.textContent = ["PGRST205", "42P01"].includes(error.code)
       ? "Support tickets require the settings and support database migration."
       : "Could not load support tickets. Refresh to try again.";
+    if (!rows.children.length) window.skillmateLoading.showError(rows, { message: status.textContent, onRetry: fetchSupportTickets });
   }
 }
 
@@ -500,6 +505,8 @@ async function protectAdminDashboard() {
     document.body.classList.remove("admin-locked");
     document.body.classList.add("admin-ready");
     adminStatus.hidden = true;
+    document.querySelector("#admin-auth-gate").hidden = true;
+    document.querySelector("#admin-auth-gate").removeAttribute("aria-busy");
     refreshAdminSystemStatus();
     window.setInterval(refreshAdminSystemStatus, 60000);
     refreshAdminOperations();

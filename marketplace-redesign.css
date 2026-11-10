@@ -130,11 +130,6 @@
 .activity-explanation { margin-top:16px; }
 .activity-account-name { font-weight:600; }
 .mobile-nav { display:none; }
-#app-auth-status:has(.dashboard-loading-skeleton:not([hidden])) { place-content:start stretch; padding:0; }
-.dashboard-loading-skeleton { width:100%; min-height:100dvh; grid-template-columns:minmax(0,1fr); border:0; border-radius:0; box-shadow:none; }
-.dashboard-skeleton-sidebar { display:none; }
-.dashboard-skeleton-mobile-nav { display:none; }
-.dashboard-skeleton-content { width:min(1400px,100%); margin-inline:auto; }
 @media(hover:hover) and (prefers-reduced-motion:no-preference) {
   .provider-card:hover { transform:translateY(-3px); border-color:#bdcce3; box-shadow:0 12px 28px #0f172a0c; }
   .provider-card:focus-within { border-color:var(--main); }

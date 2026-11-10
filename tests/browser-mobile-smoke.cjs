@@ -110,11 +110,11 @@ const server = http.createServer((req, res) => {
   if (name === "user.js") {
     content = content.replace("const appSupabase = window.skillmateSupabase;", "let appSupabase = window.skillmateSupabase;");
     content = content.replace("function syncMessageChannels() {", "function syncMessageChannels() { if (window.__testDisableRealtime) return;");
-    content = content.replace("bootstrapStudentApp().catch((error) => {", `Promise.resolve().then(() => {
+    content = content.replace("bootstrapStudentApp().then(() => window.clearTimeout(startupStuckTimer), (error) => {", `Promise.resolve().then(() => {
     state.profile.university = "University of Ghana";
     if (new URLSearchParams(location.search).has("new")) state.services = [];
     initializeDashboard(); loadAccountSettings(); showConnectedApp();
-  }).catch((error) => {`);
+  }).then(() => window.clearTimeout(startupStuckTimer), (error) => {`);
   }
   if (name === "illustrations.js" && process.argv.includes("--illustrations-only")) {
     // Exercise the documented official-export configuration without shipping test artwork.
@@ -579,17 +579,12 @@ async function main() {
       assert.equal(await evaluate('getComputedStyle(document.querySelector(".mobile-nav")).display'), "none", "The floating mobile navigation remains hidden on desktop");
     }
     if (width === 320 || width === 1440) {
-      const skeleton = await evaluate(`(()=>{const screen=document.querySelector("#app-auth-status");const app=document.querySelector("#app-shell");screen.hidden=false;screen.classList.remove("is-exiting");document.body.classList.add("app-auth-pending");const shell=document.querySelector("#dashboard-loading-skeleton");const sidebar=document.querySelector(".dashboard-skeleton-sidebar");const nav=document.querySelector(".dashboard-skeleton-mobile-nav");const content=document.querySelector(".dashboard-skeleton-content");return{width:innerWidth,columns:getComputedStyle(shell).gridTemplateColumns,sidebarDisplay:getComputedStyle(sidebar).display,navDisplay:getComputedStyle(nav).display,shellWidth:shell.getBoundingClientRect().width,contentWidth:content.getBoundingClientRect().width,coverCount:document.querySelectorAll(".dashboard-skeleton-card").length};})()`);
+      const skeleton = await evaluate(`(()=>{const screen=document.querySelector("#app-auth-status");screen.hidden=false;screen.classList.remove("is-exiting");document.body.classList.add("app-auth-pending");const shell=document.querySelector("#dashboard-loading-skeleton");const page=shell.querySelector(".sk-page");return{shellWidth:shell.getBoundingClientRect().width,pageWidth:page.getBoundingClientRect().width,hasHeader:Boolean(shell.querySelector(".sk-header")),scrollWidth:shell.scrollWidth,cardCount:shell.querySelectorAll(".sk-card").length};})()`);
       assert.equal(skeleton.shellWidth <= width + 1, true, `${width}: loading skeleton fits the viewport`);
-      assert.equal(skeleton.contentWidth <= width + 1, true, `${width}: skeleton content has no horizontal overflow`);
-      assert.equal(skeleton.coverCount, 2);
-      if (width === 320) {
-        assert.equal(skeleton.sidebarDisplay, "none", "Phone skeleton omits desktop sidebar");
-        assert.equal(skeleton.navDisplay, "none", "Phone skeleton has no obsolete bottom dock");
-      } else {
-        assert.equal(skeleton.sidebarDisplay, "none", "Desktop skeleton matches the layout without a permanent sidebar");
-        assert.equal(skeleton.navDisplay, "none", "Desktop skeleton omits mobile navigation");
-      }
+      assert.equal(skeleton.pageWidth <= width + 1, true, `${width}: skeleton content has no horizontal overflow`);
+      assert.equal(skeleton.scrollWidth <= width + 1, true, `${width}: skeleton does not scroll horizontally`);
+      assert.equal(skeleton.hasHeader, true, "The skeleton previews the app header");
+      assert.equal(skeleton.cardCount > 0, true, "The skeleton previews service cards");
       await evaluate('document.body.classList.remove("app-auth-pending");document.querySelector("#app-auth-status").hidden=true');
     }
     if (width === 320) {

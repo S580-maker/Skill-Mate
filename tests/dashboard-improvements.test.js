@@ -28,6 +28,7 @@ test("notifications display every fetched item without marking any read; marking
   const ranges = [];
   let failWrite = true;
   const context = {
+    window: { skillmateLoading: { show: () => () => {}, withTimeout: request => Promise.resolve(request) } },
     document: {
       querySelector: get,
       createElement: element,
@@ -129,7 +130,7 @@ test("dashboard skeleton appears immediately and stays visible with progress dur
   const source = read("user.js");
   const elements = new Map();
   const get = selector => {
-    if (!elements.has(selector)) elements.set(selector, { hidden: true, textContent: "", value: 0 });
+    if (!elements.has(selector)) elements.set(selector, { hidden: true, textContent: "", value: 0, removeAttribute() {} });
     return elements.get(selector);
   };
   let now = 100;

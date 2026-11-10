@@ -143,6 +143,7 @@ let globalSearchTimer;
 let pendingActionCount = 0;
 let activityRefreshInProgress = false;
 let dashboardDataLoaded = false;
+let dashboardLoadError = null;
 const pendingProviderSaves = new Set();
 const pendingGroupActions = new Set();
 const pendingServiceToggles = new Set();
@@ -1081,15 +1082,61 @@ window.skillmateOnServicePublished = publishServiceToMarketplace;
 function latestMarketplaceListings(listings) {
   return listings.slice(0, 2);
 }
+// Shown instead of an empty state when account data could not be loaded, so a failure never reads as "nothing here".
+const pendingDataRegions = new Map();
+function renderPendingData(target, count, variant) {
+  if (!target) return false;
+  if (appSupabase && !dashboardDataLoaded && !count) {
+    if (!pendingDataRegions.has(target)) {
+      target.replaceChildren();
+      pendingDataRegions.set(target, window.skillmateLoading.show(target, { variant, count: 3, label: "Loading your account data" }));
+    }
+    return true;
+  }
+  pendingDataRegions.get(target)?.();
+  pendingDataRegions.delete(target);
+  return false;
+}
+function renderLoadFailure(target, { focus = false } = {}) {
+  if (!appSupabase || !dashboardLoadError || !target) return false;
+  window.skillmateLoading.showError(target, {
+    title: "We couldn’t load this",
+    message: "Your Skillmate data didn’t load. Check your connection and try again.",
+    focus,
+    onRetry: () => retryDashboardData(),
+  });
+  return true;
+}
+async function retryDashboardData() {
+  if (dashboardRefreshPromise) return;
+  const originId = document.activeElement?.closest?.("#marketplace-grid, #saved-grid, #user-booking-list, #earnings-list, #listing-list, #conversation-list")?.id;
+  dashboardLoadError = null;
+  dashboardDataLoaded = false;
+  renderAll();
+  renderMarketplace("saved-grid", []);
+  try {
+    await refreshSupabaseState();
+  } catch (retryError) {
+    dashboardLoadError = retryError;
+    console.error("Could not refresh Skillmate account data.", retryError);
+  }
+  dashboardDataLoaded = true;
+  renderAll();
+  renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders).filter(provider => state.saved.includes(provider.id)));
+  // The retry button was replaced, so hand focus to the retry button again or to the refreshed region.
+  const origin = originId && document.getElementById(originId);
+  if (origin && (document.activeElement === document.body || origin.contains(document.activeElement))) {
+    const nextRetry = origin.querySelector("[data-loading-retry]");
+    if (nextRetry) nextRetry.focus();
+    else { origin.tabIndex = -1; origin.focus({ preventScroll: true }); }
+  }
+}
 function renderMarketplace(targetId = "marketplace-grid", providers = appSupabase ? connectedProviders : seedProviders) {
   const target = document.getElementById(targetId);
   if (!target) return;
-  if (appSupabase && !dashboardDataLoaded && targetId === "marketplace-grid") {
-    target.setAttribute("aria-busy", "true");
-    target.innerHTML = window.skillmateLoading.markup({ count: 6, variant: "cards", label: "Finding services on your campus" });
-    return;
-  }
+  if (["marketplace-grid", "saved-grid"].includes(targetId) && renderPendingData(target, connectedProviders.length, "cards")) return;
   target.removeAttribute("aria-busy");
+  if (["marketplace-grid", "saved-grid"].includes(targetId) && dashboardLoadError && !connectedProviders.length && renderLoadFailure(target)) return;
   const query = targetId === "saved-grid" ? "" : document.querySelector("#global-search").value.trim();
   const campus = state.profile?.university || "";
   const matching = marketplaceEntries(providers).filter((provider) => {
@@ -1216,6 +1263,8 @@ function parseLocalAppointment(dateValue, timeValue) {
 function renderBookingList(targetId, list, options = {}) {
   const target = document.getElementById(targetId);
   if (!target) return;
+  if (renderPendingData(target, list.length, "bookings")) return;
+  if (!list.length && renderLoadFailure(target)) return;
   if (options.provider) list = window.skillmateMarketplace.filterBookings(list, { direction: "received", ownId: ownProviderId() });
   target.innerHTML = list.length ? list.map((booking) => {
     const provider = getProvider(booking.providerId);
@@ -1290,6 +1339,8 @@ function openMessageContextMenu(message, x, y) {
 }
 function renderConversations(options = {}) {
   const target = document.querySelector("#conversation-list");
+  if (renderPendingData(target, state.messages.length, "conversations")) return;
+  if (!state.messages.length && renderLoadFailure(target)) return;
   const layout = document.querySelector("#messages-layout");
   state.messages.forEach((chat) => chat.messages.forEach((message, index) => {
     if (!message.id) message.id = `legacy-${chat.id}-${index}`;
@@ -1889,6 +1940,8 @@ function serviceDetailLabel(service) {
 }
 function renderListings() {
   const target = document.querySelector("#listing-list");
+  if (renderPendingData(target, state.services.length, "listings")) return;
+  if (!state.services.length && renderLoadFailure(target)) return;
   target.innerHTML = state.services.length ? state.services.map((service) => `<article class="listing-card">${serviceCoverUrl(service) ? `<img class="service-list-cover" src="${escapeHTML(serviceCoverUrl(service))}" alt="" loading="lazy" />` : `<span class="service-list-icon">${getCategoryIcon(service.category)}</span>`}<div class="listing-copy"><div class="listing-title"><strong>${escapeHTML(service.title)}</strong><span class="listing-status ${service.active ? "listing-active" : "listing-paused"}">${service.pending ? "Saving..." : service.active ? "Active" : "Paused"}</span></div><small>${escapeHTML(service.category)} ${service.groups ? "· Open to groups" : ""}</small><p>${escapeHTML(service.description)}</p><small>${escapeHTML(serviceDetailLabel(service))}</small></div><strong class="listing-price">${servicePriceLabel(service)}</strong><div class="listing-actions"><button class="button button-small button-outline" type="button" data-edit-service="${escapeHTML(service.id)}" ${service.pending ? "disabled" : ""}>Edit</button><button class="subtle-button" type="button" data-toggle-service="${escapeHTML(service.id)}" ${service.pending || pendingServiceToggles.has(service.id) ? "disabled aria-busy=\"true\"" : ""}>${service.active ? "Pause" : "Activate"}</button></div></article>`).join("") : '<div class="empty-card"><strong>Your first service starts here</strong><small>List a skill to help students find and book you.</small><button class="button button-primary button-small" type="button" data-open="service-modal">Add a service</button></div>';
   if (!state.services.length) window.skillmateIllustrations?.mount(target.querySelector(".empty-card"), "listings");
 }
@@ -2087,7 +2140,10 @@ let dashboardRefreshPromise = null;
 async function refreshSupabaseState() {
   if (dashboardRefreshPromise) return dashboardRefreshPromise;
   const started = performance.now();
-  dashboardRefreshPromise = loadSupabaseState().finally(() => {
+  dashboardRefreshPromise = loadSupabaseState().then((result) => {
+    dashboardLoadError = null;
+    return result;
+  }).finally(() => {
     performance.measure("skillmate:dashboard-refresh", { start: started, end: performance.now() });
     dashboardRefreshPromise = null;
   });
@@ -2630,7 +2686,7 @@ function startDashboardLoading() {
   document.querySelector("#app-auth-status").hidden = false;
   document.querySelector("#dashboard-loading-skeleton").hidden = false;
   window.setTimeout(() => {
-    if (!document.body.classList.contains("app-auth-pending")) return;
+    if (!dashboardLoadingStartedAt || !document.body.classList.contains("app-auth-pending")) return;
     document.querySelector("#dashboard-loading-skeleton").hidden = false;
     document.querySelector("#dashboard-loading-progress").hidden = false;
     updateDashboardLoadingProgress();
@@ -2638,6 +2694,7 @@ function startDashboardLoading() {
   }, 10000);
 }
 function finishDashboardLoading() {
+  document.querySelector("#dashboard-loading-skeleton").removeAttribute("aria-busy");
   if (!dashboardLoadingStartedAt) return;
   const duration = performance.now() - dashboardLoadingStartedAt;
   window.clearInterval(dashboardLoadingInterval);
@@ -2891,7 +2948,8 @@ async function bootstrapStudentApp() {
     document.querySelector(".campus-card small").textContent = state.profile.course || "Student account";
   } catch (refreshError) {
     dashboardDataLoaded = true;
-    renderMarketplace();
+    dashboardLoadError = refreshError;
+    renderAll();
     console.error("Could not refresh Skillmate account data.", refreshError);
     showToast("Some account data could not be refreshed. Your cached conversations are still available.", "error");
   }
@@ -3360,7 +3418,18 @@ async function openProviderProfile(providerId, serviceId) {
   const profile = document.querySelector("#provider-detail-content");
   const requestId = crypto.randomUUID();
   profile.dataset.requestId = requestId;
-  profile.innerHTML = window.skillmateLoading.markup({ count: 4, label: "Loading provider details" });
+  profile.replaceChildren();
+  const stopDetailLoading = window.skillmateLoading.show(profile, { variant: "detail", label: "Loading provider details" });
+  const detailModal = document.querySelector("#provider-detail-modal");
+  const finishDetailLoading = () => {
+    stopDetailLoading();
+    detailModal.removeEventListener("close", cancelDetailLoading);
+  };
+  const cancelDetailLoading = () => {
+    if (profile.dataset.requestId === requestId) profile.dataset.requestId = "";
+    finishDetailLoading();
+  };
+  detailModal.addEventListener("close", cancelDetailLoading, { once: true });
   document.querySelector("#provider-detail-title").textContent = selectedService?.title || provider.service;
   document.querySelector("#provider-detail-book").disabled = true;
   document.querySelector("#provider-detail-message").disabled = true;
@@ -3372,17 +3441,18 @@ async function openProviderProfile(providerId, serviceId) {
     && provider.cvPath.startsWith(`${providerId}/`)) {
     let data, error;
     try {
-      ({ data, error } = await appSupabase.storage.from("provider-cvs").createSignedUrl(provider.cvPath, 900));
+      ({ data, error } = await window.skillmateLoading.withTimeout(appSupabase.storage.from("provider-cvs").createSignedUrl(provider.cvPath, 900)));
     } catch (failure) { error = failure; }
-    if (profile.dataset.requestId !== requestId) return;
+    if (profile.dataset.requestId !== requestId) { finishDetailLoading(); return; }
     if (error) {
       console.error("Could not create a signed provider CV link.", error);
       showToast("This provider’s CV could not be opened right now.", "error");
     } else {
-      cvUrl = data.signedUrl;
+      cvUrl = data?.signedUrl || "";
     }
   }
   const skills = (provider.skills || []).filter(Boolean);
+  finishDetailLoading();
   const reviews = providerReviews(providerId);
   const portfolioMarkup = (provider.portfolio || []).map(item => {
     const work = typeof item === "string" ? { title: item } : item;
@@ -5639,20 +5709,40 @@ document.addEventListener("keydown", (event) => {
 document.querySelector("#group-service").addEventListener("change", updateGroupPrice);
 renderServiceCategories();
 startDashboardLoading();
-bootstrapStudentApp().catch((error) => {
+function showStartupFailure(message) {
+  const status = document.querySelector("#app-auth-status");
+  finishDashboardLoading();
+  status.hidden = false;
+  status.querySelectorAll("#dashboard-loading-skeleton, #dashboard-loading-progress").forEach(element => { element.hidden = true; });
+  status.querySelector(".startup-failure")?.remove();
+  const failure = document.createElement("div");
+  failure.className = "startup-failure";
+  status.append(failure);
+  window.skillmateLoading.showError(failure, {
+    title: "We couldn’t load your account",
+    message,
+    linkHref: "login.html",
+    linkLabel: "Return to sign in",
+    page: true,
+    focus: true,
+    onRetry: () => window.location.reload(),
+  });
+}
+// A hung request must never leave the startup skeleton on screen forever.
+const STARTUP_STUCK_MS = 45000;
+const startupStuckTimer = window.setTimeout(() => {
+  if (document.body.classList.contains("app-auth-pending")) {
+    showStartupFailure("This is taking longer than expected. Check your connection and try again.");
+  }
+}, STARTUP_STUCK_MS);
+bootstrapStudentApp().then(() => window.clearTimeout(startupStuckTimer), (error) => {
+  window.clearTimeout(startupStuckTimer);
   console.error("Could not initialize the Skillmate student dashboard.", error);
   if (error?.message === "SESSION_CHECK_TIMEOUT") {
     window.location.replace("login.html");
     return;
   }
-  const status = document.querySelector("#app-auth-status");
-  finishDashboardLoading();
-  status.hidden = false;
-  status.replaceChildren(document.createTextNode("We couldn’t load your account right now. Please try again in a moment."));
-  const loginLink = document.createElement("a");
-  loginLink.href = "login.html";
-  loginLink.textContent = "Return to sign in";
-  status.append(loginLink);
+  showStartupFailure("Check your connection and try again. Your data is safe.");
 });
 
 function updateGroupPrice() {
