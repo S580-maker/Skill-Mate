@@ -166,19 +166,19 @@ Supabase Auth stores password verifiers using bcrypt with a unique random salt. 
 The email worker is `POST /api/email-notifications` and requires the `CRON_SECRET` configured above. For dependable 10-minute unread checks on Vercel Hobby, schedule it from Supabase instead of adding a frequent Vercel Cron job:
 
 - In Supabase **Database → Extensions**, enable `pg_cron`, `pg_net`, and **Vault** if they are not already enabled.
-- In **Database → Vault**, create secrets named `skillflex_email_worker_url` (`https://your-domain.example/api/email-notifications`), `skillflex_system_health_url` (`https://your-domain.example/api/system-health-snapshot`), and `skillflex_email_worker_secret` (the exact `CRON_SECRET` value). Keep the token in Vault; do not commit it or paste it into application source.
+- In **Database → Vault**, create secrets named `skillmate_email_worker_url` (`https://your-domain.example/api/email-notifications`), `skillmate_system_health_url` (`https://your-domain.example/api/system-health-snapshot`), and `skillmate_email_worker_secret` (the exact `CRON_SECRET` value). Keep the token in Vault; do not commit it or paste it into application source.
 - In the Supabase SQL Editor, schedule the worker once:
 
    ```sql
    select cron.schedule(
-     'skillflex-marketplace-email',
+     'skillmate-marketplace-email',
      '*/5 * * * *',
      $$
      select net.http_post(
-            url := (select decrypted_secret from vault.decrypted_secrets where name = 'skillflex_email_worker_url' limit 1),
+            url := (select decrypted_secret from vault.decrypted_secrets             where name = 'skillmate_email_worker_url' limit 1),
        headers := jsonb_build_object(
          'Authorization',
-              'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'skillflex_email_worker_secret' limit 1)
+                          'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'skillmate_email_worker_secret' limit 1)
        ),
        body := '{}'::jsonb
      );
@@ -192,14 +192,14 @@ The email worker is `POST /api/email-notifications` and requires the `CRON_SECRE
 
   ```sql
   select cron.schedule(
-    'skillflex-system-health',
+    'skillmate-system-health',
     '*/5 * * * *',
     $$
     select net.http_post(
-          url := (select decrypted_secret from vault.decrypted_secrets where name = 'skillflex_system_health_url' limit 1),
+          url := (select decrypted_secret from vault.decrypted_secrets           where name = 'skillmate_system_health_url' limit 1),
       headers := jsonb_build_object(
         'Authorization',
-            'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'skillflex_email_worker_secret' limit 1)
+                      'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'skillmate_email_worker_secret' limit 1)
       ),
       body := '{}'::jsonb
     );
