@@ -13,13 +13,15 @@
     <link rel="stylesheet" href="marketplace-growth.css?v=20261110" />
   <link rel="stylesheet" href="student-gold.css?v=20261110" />
     <link rel="stylesheet" href="marketplace-redesign.css?v=20261110" />
-    <link rel="stylesheet" href="/brand-colors.css?v=20261110" />
-    <link rel="stylesheet" href="typography.css?v=20261110" />
+    <link rel="stylesheet" href="/brand-colors.css?v=20261111" />
+    <link rel="stylesheet" href="typography.css?v=20261111" />
     <link rel="stylesheet" href="illustrations.css?v=20261110" />
-    <link rel="stylesheet" href="skeleton.css?v=20261110b" />
+    <link rel="stylesheet" href="skeleton.css?v=20261111" />
+    <link rel="stylesheet" href="journey.css?v=1" />
     <script src="theme.js?v=2"></script>
   </head>
   <body class="app-auth-pending">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <div class="auth-screen" id="app-auth-status" role="status" aria-live="polite">
       <section class="dashboard-loading-skeleton" id="dashboard-loading-skeleton" aria-label="Loading your dashboard"></section>
       <section class="dashboard-loading-progress" id="dashboard-loading-progress" hidden>
@@ -47,7 +49,7 @@
           <a class="nav-link" href="#profile-settings" data-page="profile-settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg><span>Profile &amp; settings</span></a>
           <a class="nav-link" href="#help-support" data-page="help-support"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.6 9a2.5 2.5 0 1 1 4.3 1.8c-1.1 1-1.9 1.4-1.9 3M12 17.2h.01" /></svg><span>Help &amp; support</span></a>
           <button class="signout-button" id="signout-button" type="button">Sign out</button>
-          <a class="admin-link" id="admin-link" href="admin.html" hidden>Admin dashboard <span aria-hidden="true">↗</span></a>
+          <a class="admin-link" id="admin-link" href="admin.html" hidden>Admin dashboard</a>
           <div class="profile"><div class="profile-avatar">AM</div><span class="profile-copy"><strong>Alex Morgan</strong><small>Student · University of Ghana</small></span><button class="icon-button" id="profile-menu" type="button" aria-label="Edit profile">⋯</button></div>
         </div>
 </div></details>
@@ -60,7 +62,7 @@
 
       </header>
       <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close navigation" hidden></button>
-      <main class="main-content">
+      <main id="main-content" tabindex="-1" class="main-content">
         <div class="page-content">
           <section class="view active-view" id="view-home" data-view="home">
             <div class="discover-intro discover-welcome">
@@ -69,7 +71,7 @@
               <h1>Find Skills &amp; Services<br />from <span>Students Like You</span></h1>
               <p>Get help, collaborate, and make campus life easier.</p>
               <div class="discover-search">
-                <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg><input id="global-search" type="search" placeholder="Search for services (e.g., tutoring, design, editing...)" aria-label="Search services, skills, or providers" aria-describedby="search-status" aria-controls="search-suggestions" aria-expanded="false" /><button class="search-clear" id="search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>&times;</button><kbd>Ctrl K</kbd></label><button type="button" class="button marketplace-search-submit" id="marketplace-search-submit">Search <span aria-hidden="true">&#8594;</span></button>
+                <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg><input id="global-search" type="search" placeholder="Search for services (e.g., tutoring, design, editing...)" aria-label="Search services, skills, or providers" aria-describedby="search-status" aria-controls="search-suggestions" aria-expanded="false" /><button class="search-clear" id="search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>&times;</button><kbd>Ctrl K</kbd></label><button type="button" class="button marketplace-search-submit" id="marketplace-search-submit">Search</button>
                 <div class="search-suggestions" id="search-suggestions" role="group" aria-label="Search suggestions" hidden></div>
               </div>
             </div>
@@ -92,18 +94,20 @@
             </form>
             <div class="marketplace-heading"><div><h2 id="marketplace-heading">Featured services</h2><p id="marketplace-description">Popular services from talented students on your campus.</p></div><span id="marketplace-result-count" aria-live="polite"></span></div>
             <p class="search-status" id="search-status" aria-live="polite" hidden></p>
+            <div class="discovery-resume" id="discovery-resume" role="status" hidden></div>
+            <div class="discovery-quick-actions" aria-label="Discover controls"><button class="button button-small button-outline" type="button" data-discovery-focus="search">Search</button><button class="button button-small button-primary" type="button" data-discovery-focus="filters">Filters</button></div>
             <div class="marketplace-grid" id="marketplace-grid"></div>
-            <section class="recent-services" id="recent-services" aria-labelledby="recent-heading"><div class="marketplace-heading"><div><h2 id="recent-heading">Recently added</h2><p>New services from students around campus.</p></div><button class="subtle-button" type="button" id="recent-view-all">View all <span aria-hidden="true">&#8599;</span></button></div><div class="marketplace-grid" id="recent-grid"></div></section>
+            <section class="recent-services" id="recent-services" aria-labelledby="recent-heading"><div class="marketplace-heading"><div><h2 id="recent-heading">Recently added</h2><p>New services from students around campus.</p></div><button class="subtle-button" type="button" id="recent-view-all">View all</button></div><div class="marketplace-grid" id="recent-grid"></div></section>
             <aside class="request-board-entry"><div><h2>Need help finding a service?</h2><p>Post your task and let students on your campus offer to help.</p></div><button class="button button-primary" type="button" data-new-request>Post what you need</button></aside>
             <section class="safety-note"><span class="safety-note-icon">✓</span><span><strong>Made for students. Built around trust.</strong><small>See campus badges, keep booking records, and report or block when needed. <button type="button" data-open="safety-modal">Read our safety tips</button></small></span></section>
             </div><aside class="marketplace-activity" aria-label="My activity">
               <section class="welcome-card"><span class="activity-avatar" data-activity-avatar aria-hidden="true"></span><p class="eyebrow">Your campus, connected</p><h2>Welcome back, <span data-student-name>student</span></h2><p>Discover services, book help, or offer your own skills.</p><span class="activity-campus" data-student-campus></span></section>
-              <section class="activity-card"><div class="activity-card-heading"><h2>Your activity</h2><a href="#activity" data-page-link="activity" aria-label="View all activity">&#8599;</a></div><div class="activity-links"><a href="#bookings" data-page-link="bookings"><span>Upcoming bookings</span><strong data-activity-count="bookings">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#messages" data-page-link="messages"><span>Unread messages</span><strong data-activity-count="messages">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#saved" data-page-link="saved"><span>Saved services</span><strong data-activity-count="saved">0</strong><span aria-hidden="true">&#8599;</span></a></div></section>
-              <section class="offer-skill-card"><span class="offer-icon" aria-hidden="true">&#10023;</span><h2>Offer Your Skill</h2><p>Turn what you're good at into opportunities for other students.</p><button type="button" class="button" data-open="service-modal">Create a Service <span aria-hidden="true">&#8599;</span></button></section>
+              <section class="activity-card"><div class="activity-card-heading"><h2>Your activity</h2><a href="#activity" data-page-link="activity" aria-label="View all activity"></a></div><div class="activity-links"><a href="#bookings" data-page-link="bookings"><span>Upcoming bookings</span><strong data-activity-count="bookings">0</strong></a><a href="#messages" data-page-link="messages"><span>Unread messages</span><strong data-activity-count="messages">0</strong></a><a href="#saved" data-page-link="saved"><span>Saved services</span><strong data-activity-count="saved">0</strong></a></div></section>
+              <section class="offer-skill-card"><span class="offer-icon" aria-hidden="true">&#10023;</span><h2>Offer Your Skill</h2><p>Turn what you're good at into opportunities for other students.</p><button type="button" class="button" data-open="service-modal">Create a Service</button></section>
             </aside></div>
           </section>
 
-          <section class="view" id="view-activity" data-view="activity"><div class="view-heading"><div><p class="eyebrow">Campus connections</p><h1>My activity</h1><p>Your bookings, conversations, and account at a glance.</p></div></div><div class="activity-page-layout"><section class="activity-card"><h2>Your activity</h2><div class="activity-links"><a href="#bookings" data-page-link="bookings"><span>Upcoming bookings</span><strong data-activity-count="bookings">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#messages" data-page-link="messages"><span>Unread messages</span><strong data-activity-count="messages">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#saved" data-page-link="saved"><span>Saved services</span><strong data-activity-count="saved">0</strong><span aria-hidden="true">&#8599;</span></a></div><p class="activity-explanation">Upcoming bookings include pending and confirmed appointments that have not passed.</p></section><section class="activity-card"><h2>Your account</h2><p class="activity-account-name" data-student-full-name></p><p data-student-campus></p><p data-student-verification></p><div class="activity-links"><a href="#profile-settings" data-page-link="profile-settings">Profile &amp; settings <span aria-hidden="true">&#8599;</span></a><a href="#provider" data-page-link="provider">My listings <span aria-hidden="true">&#8599;</span></a><a href="#earnings" data-page-link="earnings">Estimated earnings <span aria-hidden="true">&#8599;</span></a><a href="#requests" data-page-link="requests">Campus requests <span aria-hidden="true">&#8599;</span></a><a href="#help-support" data-page-link="help-support">Help &amp; support <span aria-hidden="true">&#8599;</span></a></div></section></div></section>
+          <section class="view" id="view-activity" data-view="activity"><div class="view-heading"><div><p class="eyebrow">Campus connections</p><h1>My activity</h1><p>Your bookings, conversations, and account at a glance.</p></div></div><div class="activity-page-layout"><section class="activity-card"><h2>Your activity</h2><div class="activity-links"><a href="#bookings" data-page-link="bookings"><span>Upcoming bookings</span><strong data-activity-count="bookings">0</strong></a><a href="#messages" data-page-link="messages"><span>Unread messages</span><strong data-activity-count="messages">0</strong></a><a href="#saved" data-page-link="saved"><span>Saved services</span><strong data-activity-count="saved">0</strong></a></div><p class="activity-explanation">Upcoming bookings include pending and confirmed appointments that have not passed.</p></section><section class="activity-card"><h2>Your account</h2><p class="activity-account-name" data-student-full-name></p><p data-student-campus></p><p data-student-verification></p><div class="activity-links"><a href="#profile-settings" data-page-link="profile-settings">Profile &amp; settings</a><a href="#provider" data-page-link="provider">My listings</a><a href="#earnings" data-page-link="earnings">Estimated earnings</a><a href="#requests" data-page-link="requests">Campus requests</a><a href="#help-support" data-page-link="help-support">Help &amp; support</a></div></section></div></section>
           <section class="view request-board" id="view-requests" data-view="requests">
             <div class="view-heading"><div><p class="eyebrow">Help starts here</p><h1>Campus requests</h1><p>Tell your campus what you need, or offer your skills to another student.</p></div><button class="button button-primary" id="request-post-open" type="button">Post a request</button></div>
             <div class="request-board-toolbar"><label>Show<select id="request-board-filter"><option value="campus">Open requests on my campus</option><option value="mine">My requests</option><option value="responses">Requests I replied to</option></select></label><button class="subtle-button" id="request-board-refresh" type="button">Refresh</button></div>
@@ -172,10 +176,8 @@
 
           <section class="view" id="view-profile-settings" data-view="profile-settings">
             <div class="view-heading"><div><p class="eyebrow">Your account</p><h1>Profile &amp; settings</h1><p>Manage your public profile and account preferences.</p></div></div>
-            <nav class="profile-shortcuts" aria-label="Your shortcuts"><button type="button" data-page-link="saved"><span aria-hidden="true">♡</span> Saved providers <span aria-hidden="true">→</span></button><button type="button" data-page-link="help-support"><span aria-hidden="true">?</span> Help &amp; support <span aria-hidden="true">→</span></button></nav>
-            <section class="seller-entry panel"><div><p class="eyebrow">Put your skills to work</p><h2 id="seller-entry-title">Good at something?</h2><p id="seller-entry-description">Create a listing and help someone on campus.</p></div><button class="button button-primary" id="mode-switch" type="button"><span id="mode-switch-label">Offer a service</span></button><button class="subtle-button" type="button" data-page-link="earnings" data-seller-only hidden>Estimated earnings →</button></section>
+            <nav class="profile-shortcuts" aria-label="Your shortcuts"><button type="button" data-page-link="saved"><span aria-hidden="true">♡</span> Saved providers</button><button type="button" data-page-link="help-support"><span aria-hidden="true">?</span> Help &amp; support</button></nav>
             <div id="profile-completeness-root"></div>
-            <section class="panel appearance-settings"><div><h2>Appearance</h2><p>Choose the theme that feels right for you.</p></div><button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to dark mode"><span data-theme-icon aria-hidden="true">☾</span> Change theme</button></section>
             <form class="settings-form" id="account-profile-form">
               <section class="panel settings-section">
                 <div class="panel-heading"><div><h2>Profile details</h2><p>These details help students recognize you on campus.</p></div></div>
@@ -190,6 +192,7 @@
                 <button class="button button-primary settings-save-button" type="submit">Save profile</button>
               </section>
             </form>
+            <section class="panel appearance-settings"><div><h2>Appearance</h2><p>Choose the theme that feels right for you.</p></div><button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to dark mode"><span data-theme-icon aria-hidden="true">☾</span> Change theme</button></section>
             <form class="settings-form" id="password-change-form">
               <section class="panel settings-section">
                 <div class="panel-heading"><div><h2>Change password</h2><p>Use at least 8 characters; password input is limited to 72 bytes.</p></div></div>
@@ -208,10 +211,11 @@
               <div class="settings-push-control">
                 <p><strong>Browser notifications</strong><br /><small>Get booking and message alerts when Skillmate is closed. Message previews are kept private.</small></p>
                 <button class="button button-outline" id="settings-push-toggle" type="button">Enable on this device</button>
-                <small class="settings-push-help" id="settings-push-help" hidden>On iPhone/iPad: Share → Add to Home Screen. Then open Skillmate from its new icon and tap Enable.</small>
+                <small class="settings-push-help" id="settings-push-help" hidden>On iPhone/iPad: Use Share, then Add to Home Screen. Then open Skillmate from its new icon and tap Enable.</small>
                 <p class="settings-feedback" id="settings-push-feedback" role="status" aria-live="polite" hidden></p>
               </div>
             </section>
+            <section class="seller-entry panel"><div><p class="eyebrow">Put your skills to work</p><h2 id="seller-entry-title">Good at something?</h2><p id="seller-entry-description">Create a listing and help someone on campus.</p></div><button class="button button-primary" id="mode-switch" type="button"><span id="mode-switch-label">Offer a service</span></button><button class="subtle-button" type="button" data-page-link="earnings" data-seller-only hidden>Estimated earnings</button></section>
             <section class="panel settings-section danger-zone">
               <div class="panel-heading"><div><h2>Delete account</h2><p>Your profile will be anonymized, listings deactivated, and sign-in disabled. Booking and safety history is retained without your profile details.</p></div></div>
               <button class="button button-danger" id="delete-account-open" type="button">Delete my account</button>
@@ -277,6 +281,7 @@
           <button class="modal-close" type="button" data-close aria-label="Close booking">×</button>
         </header>
         <p class="booking-context" id="booking-description"></p>
+        <div class="journey-feedback" id="booking-save-status" role="status" aria-live="polite"></div>
         <input type="hidden" id="booking-provider-id" />
         <input type="hidden" id="booking-negotiation-id" />
         <section class="booking-service-summary" aria-live="polite">
@@ -305,7 +310,7 @@
           <textarea id="booking-note" rows="2" maxlength="1000" placeholder="Share a helpful detail"></textarea>
         </details>
         <label class="booking-confirm-check" id="booking-confirm-label" hidden><input id="booking-confirm-details" type="checkbox" /><span>I’ve reviewed the agreed service scope and price. I understand this is a request and the provider still needs to confirm.</span></label>
-        <div id="booking-negotiation-option" class="booking-negotiation-option" hidden><button id="booking-negotiate" class="booking-inline-link" type="button">Prefer a different price? <span>Negotiate in chat →</span></button></div>
+        <div id="booking-negotiation-option" class="booking-negotiation-option" hidden><button id="booking-negotiate" class="booking-inline-link" type="button">Prefer a different price? <span>Negotiate in chat</span></button></div>
         <footer class="booking-submit-footer">
           <p class="booking-availability-note" id="booking-availability-note">The provider must confirm your requested appointment.</p>
           <button class="button button-primary modal-submit" id="booking-submit" type="submit">Send Booking Request</button>
@@ -362,7 +367,7 @@
             <article class="service-preview-card"><div class="service-preview-cover"><img id="service-review-cover" alt="Service cover" hidden /><span id="service-review-symbol" aria-hidden="true">✦</span></div><div class="service-preview-copy"><p class="eyebrow" id="service-review-category"></p><h4 id="service-review-name"></h4><p id="service-review-description"></p><div class="service-preview-tags" id="service-review-tags"></div><strong id="service-review-price"></strong></div></article>
           </section>
         </div>
-        <footer class="service-editor-footer"><p class="modal-feedback" id="service-form-feedback" role="status" aria-live="polite" hidden></p><div class="service-editor-actions"><button class="button button-outline" id="service-back" type="button" hidden>Back to details</button><span class="service-helper" id="service-footer-hint"><em>Clear details. Confident bookings.</em></span><button class="button button-primary" id="service-submit" type="submit">Preview service <span aria-hidden="true">&rarr;</span></button></div></footer>
+        <footer class="service-editor-footer"><p class="modal-feedback" id="service-form-feedback" role="status" aria-live="polite" hidden></p><div class="service-editor-actions"><button class="button button-outline" id="service-back" type="button" hidden>Back to details</button><span class="service-helper" id="service-footer-hint"><em>Clear details. Confident bookings.</em></span><button class="button button-primary" id="service-submit" type="submit">Preview service</button></div></footer>
       </form>
     </dialog>
     <dialog class="app-modal" id="profile-modal"><form method="dialog" class="modal-frame" id="profile-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">Your campus profile</p><h2>Edit your profile</h2><p class="modal-description">Help students understand who you are and what you’re good at.</p><label>Your name<input id="profile-name" required minlength="2" maxlength="80" value="Alex Morgan" /></label><label id="profile-university-field" hidden>University or campus<input id="profile-university" maxlength="120" placeholder="Enter your university or campus" /></label><label id="profile-student-id-field" hidden>Student ID number <span class="label-hint">(optional)</span><input id="profile-student-id" minlength="3" maxlength="80" placeholder="Enter your student ID number" /><small>This is stored privately and does not automatically verify student status.</small></label><label>Short bio<textarea id="profile-bio" rows="3" maxlength="500">Graphic designer and laptop fixer who loves helping fellow students.</textarea></label><label>University email<input id="profile-email" type="email" value="alex.m@ug.edu.gh" required /></label><label>Hostel or campus location <span class="label-hint">(optional)</span><input id="profile-location" maxlength="120" placeholder="e.g. Mensah Sarbah Hall" /><small class="location-privacy-note">Only shared with the other person after a booking is confirmed. Use a hostel or campus name, not your room number.</small></label><button class="button button-primary modal-submit" type="submit">Save profile</button></form></dialog>
@@ -388,17 +393,23 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script defer src="/assets/vendor/supabase-js-2.119.0.js" integrity="sha384-uteMfOloLDGt042uDz+xHGF3ym63/WQ6rFq7murQRG8Ih7QrXGEGNtWd8688sb4O"></script>
     <script defer src="supabase-config.js"></script>
-    <script defer src="supabase-client.js?v=4"></script>
+    <script defer src="api-client.js?v=2"></script>
+    <script defer src="supabase-client.js?v=6"></script>
     <script defer src="smart-search.js"></script>
     <script defer src="profile-completeness.js?v=2"></script>
     <script defer src="service-form-utils.js?v=3"></script>
     <script defer src="marketplace-utils.js?v=4"></script>
     <script defer src="push-notification-platform.js?v=1"></script>
     <script defer src="marketplace-growth-utils.js?v=1"></script>
-    <script defer src="illustrations.js?v=3"></script>
-    <script defer src="user.js?v=55"></script>
-    <script defer src="marketplace-growth.js?v=10"></script>
+    <script defer src="illustrations.js?v=4"></script>
+    <script defer src="booking-policy.js?v=1"></script>
+    <script defer src="csv-utils.js?v=1"></script>
+    <script defer src="booking-ui.js?v=1"></script>
+    <script defer src="provider-profile.js?v=1"></script>
+    <script defer src="user.js?v=59"></script>
+    <script defer src="marketplace-growth.js?v=12"></script>
     <script defer src="service-form.js?v=4"></script>
     <script defer src="notifications.js?v=3"></script>
+    <script defer src="journey-state.js?v=3"></script>
   </body>
 </html>
