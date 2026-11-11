@@ -31,7 +31,10 @@ async function handleAdmin(request, response) {
     const role = await getUserRole(user.id, accessToken);
     if (role !== "admin") return response.redirect(302, "/index.html");
 
-    const html = await readFile(path.join(process.cwd(), "api", "_lib", "admin.html"), "utf8");
+    // Vercel publishes dist/public and includes this private, compiled template
+    // in the function. Local Express uses its own protected template route.
+    const templateRoot = process.env.VERCEL === "1" ? path.join(process.cwd(), "dist") : process.cwd();
+    const html = await readFile(path.join(templateRoot, "api", "_lib", "admin.html"), "utf8");
     response.setHeader("Cache-Control", "private, no-store");
     response.setHeader("Content-Type", "text/html; charset=utf-8");
     return response.status(200).send(html);

@@ -27,6 +27,7 @@ function fixture() {
     passwordInput: get("#auth-password"), confirmPasswordInput: get("#auth-confirm-password"),
     passwordVisibility: get("#password-visibility"), confirmPasswordVisibility: get("#confirm-password-visibility"),
     setPasswordVisibility() {}, updatePasswordHint() {}, authMode: "signin", authSubmitting: false,
+    requestAuth: (...args) => context.fetch(...args),
   };
   vm.createContext(context);
   vm.runInContext(source.slice(source.indexOf("function setAuthMode(mode)"), source.indexOf("function loadGhanaianUniversities()")), context);
@@ -78,6 +79,7 @@ function otpFixture(fetchHandler = async () => ({ ok: false, json: async () => (
       requests.push({ url, body: options.body ? JSON.parse(options.body) : undefined, options });
       return fetchHandler(url, options);
     },
+    requestAuth: (...args) => context.fetch(...args),
     getPostAuthUrl: () => "index.html",
     window: {
       clearInterval() {},

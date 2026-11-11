@@ -5,7 +5,7 @@ const path = require("node:path");
 
 const read = (file) => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 const migration = read("supabase/migrations/20261104120000_provider_showcase_reviews.sql");
-const userScript = read("user.js");
+const userScript = read("user.js") + read("provider-profile.js");
 const page = read("index.html");
 
 test("provider showcase exposes portfolio, reviews, skills and a signed private CV", () => {

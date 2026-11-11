@@ -306,7 +306,7 @@ body { min-height: 100vh; }
 #new-password-form input,
 #reset-form input,
 #onboarding-form > label > input,
-.skill-entry input { border-color: var(--border); color: var(--dark); background: var(--surface); }
+.skill-entry input { border-color: var(--control-border, var(--border)); color: var(--dark); background: var(--surface); }
 #auth-form input::placeholder,
 #forgot-password-form input::placeholder,
 #reset-form input::placeholder { color: var(--muted); }

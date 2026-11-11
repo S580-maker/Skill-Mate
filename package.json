@@ -10,8 +10,17 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "typecheck": "tsc --project tsconfig.json",
+    "build": "npm run typecheck && node scripts/build.cjs",
+    "test:visual": "node tests/modernization-visual-check.cjs",
+    "test:build": "node tests/production-build-check.cjs",
+    "test:auth-network": "node tests/auth-network-browser-check.cjs",
+    "test:modernization": "node tests/modernization-journey-check.cjs && node tests/navigation-focus-check.cjs && node tests/loading-modernization-browser.cjs && npm run test:auth-network",
     "test": "node --test tests/*.test.js",
     "test:ui": "node tests/browser-mobile-smoke.cjs",
+    "test:admin": "node tests/protected-admin-browser-check.cjs",
+    "test:journey": "node tests/journey-browser-check.cjs",
+    "test:release": "npm run build && npm test && npm run test:journey && npm run test:modernization && npm run test:admin && npm run test:loading:regressions && npm run test:db && npm run test:build",
     "test:loading": "node tests/loading-states-browser-checks.cjs",
     "test:loading:regressions": "node tests/loading-review-regressions.cjs",
     "test:landing": "node tests/browser-landing-smoke.cjs",
@@ -29,6 +38,8 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.14"
+    "@electric-sql/pglite": "^0.5.14",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
   }
 }

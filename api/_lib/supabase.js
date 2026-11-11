@@ -204,16 +204,18 @@ function getSessionCookie(request) {
 
 function setSessionCookie(response, token) {
   const maxAge = Math.floor(getAccessTokenExpiry(token) / 1000);
+  const secure = process.env.NODE_ENV === "production" || response.req?.protocol !== "http";
   response.setHeader(
     "Set-Cookie",
-    `skillmate_session=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=Lax`,
+    `skillmate_session=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
   );
 }
 
 function clearSessionCookie(response) {
+  const secure = process.env.NODE_ENV === "production" || response.req?.protocol !== "http";
   response.setHeader(
     "Set-Cookie",
-    "skillmate_session=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax",
+    `skillmate_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
   );
 }
 

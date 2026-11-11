@@ -40,6 +40,16 @@
 
   try {
     window.skillmateSupabase = window.supabase.createClient(projectUrl.origin, config.anonKey, {
+      global: {
+        fetch(input, options = {}) {
+          const url = new URL(typeof input === "string" ? input : input.url || input.href, projectUrl.origin);
+          const method = (options.method || input.method || "GET").toUpperCase();
+          const uploading = url.pathname.startsWith("/storage/v1/object/") && ["POST", "PUT"].includes(method);
+          // Reads, RPCs and writes all settle. Uploads get more time for campus
+          // connections; timed-out writes are never retried by this transport.
+          return window.skillmateApi.request(input, options, { timeout: uploading ? 60000 : 15000 });
+        },
+      },
       auth: {
         autoRefreshToken: true,
         persistSession: true,
@@ -81,7 +91,7 @@
 
 window.syncSkillmateServerSession = async function syncSkillmateServerSession(session) {
   if (!session?.access_token) throw new Error("Sign in again to continue.");
-  const syncAccessToken = (accessToken) => fetch("/api/session", {
+  const syncAccessToken = (accessToken) => window.skillmateApi.request("/api/session", {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}` },
     credentials: "same-origin",
@@ -133,7 +143,7 @@ window.clearExpiredSkillmateSession = async function clearExpiredSkillmateSessio
 
 window.clearSkillmateServerSession = function clearSkillmateServerSession() {
   if (!serverSessionClearPromise) {
-    serverSessionClearPromise = fetch("/api/session", { method: "DELETE", credentials: "same-origin" })
+    serverSessionClearPromise = window.skillmateApi.request("/api/session", { method: "DELETE", credentials: "same-origin" })
       .then((response) => {
         if (!response.ok) throw new Error("Could not clear the secure Skillmate session.");
       })

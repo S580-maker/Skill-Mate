@@ -4,6 +4,9 @@ const assert = require('node:assert/strict');
 (async () => {
   const h = await start();
   try {
+    // Compare the default route at every width, rather than retaining the previous
+    // viewport's search-restored notice as if it were part of the default layout.
+    await h.call('Page.addScriptToEvaluateOnNewDocument', { source: 'try { sessionStorage.clear(); } catch {}' });
     for (const width of [320, 375, 768, 1280, 1920]) {
       await h.viewport(width);
       await h.open('index.html?delay=500#home');
@@ -13,6 +16,7 @@ const assert = require('node:assert/strict');
       await h.waitFor('!document.body.classList.contains("app-auth-pending")', 20000);
       await h.wait(400);
       const after = await read(['header.marketplace-header', '#view-home .discover-intro', '#marketplace-grid .provider-card', '.welcome-card']);
+      console.log(JSON.stringify({ width, before, after }));
       for (const i of [0, 1]) {
         assert.ok(Math.abs(before[i].h - after[i].h) <= 2, `${width}: header/hero height changes`);
         assert.ok(Math.abs(before[i].y - after[i].y) <= 2, `${width}: header/hero moves`);
@@ -20,7 +24,6 @@ const assert = require('node:assert/strict');
       assert.ok(Math.abs(before[2].w - after[2].w) <= 1, `${width}: card columns differ`);
       assert.ok(Math.abs(before[2].y - after[2].y) <= 20, `${width}: first card moves more than 20px`);
       assert.ok(Math.abs(before[2].h - after[2].h) <= 32, `${width}: representative card height differs by more than two lines`);
-      console.log(JSON.stringify({ width, before, after }));
     }
   } finally { await h.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

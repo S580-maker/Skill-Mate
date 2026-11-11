@@ -17,7 +17,7 @@ module.exports = async ({ call, evaluate, navigate, wait, screenshot, checkWidth
     await evaluate('showPage("home");state.services=[];renderMarketplace("marketplace-grid",[])');
     await ready("search");
     await checkWidth(`${width}:empty search`);
-    assert.equal(await evaluate('document.querySelector("#marketplace-grid [data-clear-search]").textContent'), "Explore services");
+    assert.equal(await evaluate('document.querySelector("#marketplace-grid [data-clear-search]").textContent'), "Clear search & filters");
     await screenshot(`storyset-search-${width}`);
     await evaluate('document.querySelector("#marketplace-grid [data-clear-search]").click()');
     assert.ok(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length') > 0, "Explore services still works");

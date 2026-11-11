@@ -9,7 +9,7 @@ const growth = require("../marketplace-growth-utils");
 const root = path.join(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 const migration = read("supabase/migrations/20261107120000_client_completion_verification.sql");
-const userScript = read("user.js");
+const userScript = read("user.js") + read("booking-ui.js");
 
 test("providers request completion and only the customer can verify it", () => {
   const statusFunction = migration.slice(
@@ -69,4 +69,63 @@ test("confirmed booking status maps to awaiting verification only after provider
   assert.equal(context.convert({ status: "confirmed", work_started_at: "started", provider_completed_at: null }), "In progress");
   assert.equal(context.convert({ status: "confirmed", work_started_at: "started", provider_completed_at: "finished" }), "Awaiting verification");
   assert.equal(context.convert({ status: "completed", provider_completed_at: "finished" }), "Completed");
+});
+
+test("completion persistence keeps provider verification pending through renders and reconciliation", async (t) => {
+  for (const scenario of [
+    { name: "provider with refreshed data", provider: true, refreshFails: false, writeFails: false, expected: "Awaiting verification" },
+    { name: "provider with failed refresh", provider: true, refreshFails: true, writeFails: false, expected: "Awaiting verification" },
+    { name: "customer confirms completion", provider: false, refreshFails: false, writeFails: false, expected: "Completed" },
+    { name: "provider write rejected", provider: true, refreshFails: false, writeFails: true, expected: "In progress" },
+    { name: "customer verifies during provider reconciliation", provider: true, refreshFails: false, writeFails: false, expected: "Completed" },
+  ]) {
+    await t.test(scenario.name, async () => {
+      const initialStatus = scenario.provider ? "In progress" : "Awaiting verification";
+      const state = { bookings: [{ id: "booking-1", status: initialStatus, price: 70 }] };
+      const renders = [];
+      const calls = [];
+      let finishWrite;
+      const context = {
+        window: { skillmateBookingPolicy: require("../booking-policy") },
+        state, pendingBookingStatuses: new Map(),
+        isOwnBooking: () => scenario.provider,
+        toDatabaseStatus: value => value.toLowerCase(),
+        appSupabase: { rpc(name, args) {
+          calls.push({ name, args });
+          return new Promise(resolve => { finishWrite = resolve; });
+        } },
+        refreshSupabaseState: async () => {
+          if (scenario.refreshFails) throw new Error("refresh offline");
+          // Reconciliation replaces booking objects with the server's status.
+          state.bookings = [{ id: "booking-1", status: scenario.expected, price: 70 }];
+          const statuses = new Map([["booking-1", scenario.expected]]);
+          context.renderAll();
+          return statuses;
+        },
+        recordRender: () => renders.push(state.bookings[0].status),
+        console: { error() {} },
+      };
+      vm.createContext(context);
+      // Exercise the real pending-status overlay used by renderAll, too.
+      vm.runInContext(userScript.slice(userScript.indexOf("function renderAll()"),
+        userScript.indexOf("  window.skillmateGrowth?.render();", userScript.indexOf("function renderAll()")))
+        + "recordRender(); }", context);
+      vm.runInContext(userScript.slice(userScript.indexOf("async function persistBookingStatus"),
+        userScript.indexOf("function handleAppointmentActions")), context);
+      const operation = context.persistBookingStatus("booking-1", "Completed");
+      assert.equal(state.bookings[0].status, scenario.provider ? "Awaiting verification" : "Completed");
+      finishWrite({ error: scenario.writeFails ? new Error("write offline") : null });
+      if (scenario.writeFails) await assert.rejects(operation, /write offline/);
+      else await operation;
+      assert.equal(state.bookings[0].status, scenario.expected);
+      assert.equal(context.pendingBookingStatuses.size, 0);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].name, "update_booking_status");
+      assert.equal(calls[0].args.p_status, "completed", "the RPC still receives the completion action");
+      if (scenario.provider && scenario.expected !== "Completed") {
+        assert.ok(renders.every(status => status !== "Completed"));
+        assert.equal(state.bookings.filter(item => item.status === "Completed").reduce((total, item) => total + item.price, 0), 0);
+      }
+    });
+  }
 });

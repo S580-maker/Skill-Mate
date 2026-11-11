@@ -475,8 +475,9 @@ async function main() {
     assert.equal(await evaluate('document.querySelector(\'[data-activity-count="bookings"]\').textContent'), "1");
     await evaluate('document.querySelector(\'[data-activity-count="bookings"]\').closest("a").click()');
     assert.equal(await evaluate('state.activePage'), "bookings");
-    assert.equal(await evaluate('bookingFilter'), "upcoming");
-    await evaluate('state.bookings=window.__redesignOriginal.bookings;bookingFilter="all";showPage("home");document.querySelector(".offer-skill-card button").click()');
+    assert.equal(await evaluate('activeBookingFilter'), "upcoming");
+    assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#user-booking-list [data-booking-card-id]")).map(card=>card.dataset.bookingCardId)'), ["upcoming-fixture"], "Activity shortcut actually filters the rendered appointments");
+    await evaluate('state.bookings=window.__redesignOriginal.bookings;activeBookingFilter="all";showPage("home");document.querySelector(".offer-skill-card button").click()');
     assert.equal(await evaluate('document.querySelector("#service-modal").open'), true);
     await evaluate('document.querySelector("#service-modal").close();document.querySelector(".side-nav [data-page=activity]").click()');
     assert.equal(await evaluate('location.hash'), "#activity");

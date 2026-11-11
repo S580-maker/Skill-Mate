@@ -1,4 +1,4 @@
-const { maskEmail, getResendRetryDelay } = globalThis.skillmateAuthUtils;
+const { maskEmail, getResendRetryDelay, requestAuth } = globalThis.skillmateAuthUtils;
 const recoveryForm = document.querySelector("#forgot-password-form");
 const recoveryEmail = document.querySelector("#recovery-email");
 const recoveryMessage = document.querySelector("#recovery-message");
@@ -81,7 +81,7 @@ recoveryForm.addEventListener("submit", async (event) => {
   recoveryMessage.textContent = "";
   recoveryMessage.classList.remove("success");
   try {
-    const response = await fetch("/api/auth/password-recovery", {
+    const response = await requestAuth("/api/auth/password-recovery", {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -168,7 +168,7 @@ codeForm.addEventListener("submit", async (event) => {
   codeMessage.textContent = "";
   codeMessage.classList.remove("success");
   try {
-    const response = await fetch("/api/auth/verify", {
+    const response = await requestAuth("/api/auth/verify", {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -222,7 +222,7 @@ resendButton.addEventListener("click", async () => {
   codeMessage.classList.remove("success");
   let response;
   try {
-    response = await fetch("/api/auth/resend", { method: "POST", credentials: "same-origin" });
+    response = await requestAuth("/api/auth/resend", { method: "POST", credentials: "same-origin" });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Could not resend your code.");
     codeMessage.textContent = result.message;
@@ -285,7 +285,7 @@ newPasswordForm.addEventListener("submit", async (event) => {
   newPasswordMessage.textContent = "";
   newPasswordMessage.classList.remove("success");
   try {
-    const response = await fetch("/api/auth/password-recovery", {
+    const response = await requestAuth("/api/auth/password-recovery", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",

@@ -31,7 +31,7 @@ const fakeClient = `(() => {
     ["p6", "Esi Quartey", "Beauty", "Braiding and hair styling", 150],
   ];
   const data = {
-    profiles: [{ id: "me", full_name: "Ama Mensah", university: "University of Ghana", course: "Computer Science", bio: "Third-year student.", campus_verified: true, role: params.has("admin") ? "admin" : "student", skills: ["Design"], avatar_url: "", onboarding_completed: true, phone_number: "", notify_booking_updates: true, notify_messages: true }],
+    profiles: [{ id: "me", full_name: "Ama Mensah", university: "University of Ghana", course: "Computer Science", bio: "Third-year student.", campus_verified: true, role: params.has("admin") ? "admin" : "student", skills: ["Design"], avatar_url: "", onboarding_completed: !params.has("onboarding"), phone_number: "", notify_booking_updates: true, notify_messages: true }],
     notifications: [{ id: "n1", title: "Booking update", body: "Your appointment is confirmed.", created_at: future(-1), read_at: future(-1) }],
     provider_directory: providers.map(([id, name, category, title, price], index) => ({ service_id: "s" + (index + 1), provider_id: id, full_name: name, avatar_url: "", university: "University of Ghana", course: "Student", category, service_title: title, service_description: "Friendly, reliable help from a fellow student.", price, currency: "GHS", accepts_groups: false, campus_verified: index % 2 === 0, completed_bookings: index * 3, negotiation_mode: "fixed", service_created_at: future(-index - 1), skills: [], bio: "" })),
     services: [{ id: "own1", provider_id: "me", title: "Resume review and interview practice", category: "Writing", price: 70, description: "One-hour session.", accepts_groups: false, is_active: true, currency: "GHS", negotiation_mode: "fixed", created_at: future(-2) }],
@@ -73,7 +73,7 @@ const fakeClient = `(() => {
   const session = { access_token: "fake", refresh_token: "fake", user: { id: "me", email: "ama@st.ug.edu.gh", app_metadata: { provider: "email" } } };
   const channel = { on() { return channel; }, subscribe(callback) { callback?.("SUBSCRIBED"); return channel; }, track: async () => "ok", presenceState: () => ({}), send: async () => "ok", unsubscribe: async () => "ok" };
   window.skillmateSupabase = {
-    auth: { onAuthStateChange() { return { data: { subscription: { unsubscribe() {} } } }; }, getSession: async () => ({ data: { session }, error: null }), signOut: async () => ({ error: null }) },
+    auth: { onAuthStateChange() { return { data: { subscription: { unsubscribe() {} } } }; }, getSession: async () => ({ data: { session: params.has("signedout") ? null : session }, error: null }), signOut: async () => ({ error: null }) },
     from: table => query(table, data[table] || []),
     rpc: name => query("rpc:" + name, []),
     channel: () => channel,
@@ -82,9 +82,10 @@ const fakeClient = `(() => {
   };
   window.syncSkillmateServerSession = async () => {};
   window.clearSkillmateServerSession = async () => {};
+  window.skillmateRestoreSession = async () => params.has("signedout") ? null : session;
 })();`;
 
-function createServer() {
+function createServer(siteRoot = root) {
   return http.createServer((req, res) => {
     const name = decodeURIComponent(new URL(req.url, "http://localhost").pathname.slice(1)) || "index.html";
     res.setHeader("Cache-Control", "no-store");
@@ -92,8 +93,8 @@ function createServer() {
     if (name === "supabase-client.js") { res.setHeader("Content-Type", mime[".js"]); res.end(fakeClient); return; }
     if (name === "supabase-config.js") { res.setHeader("Content-Type", mime[".js"]); res.end("window.SKILLMATE_SUPABASE_CONFIG={url:'https://fake.supabase.test',anonKey:'fake'};"); return; }
     if (name.startsWith("assets/vendor/")) { res.setHeader("Content-Type", mime[".js"]); res.end(""); return; }
-    const file = path.resolve(root, name);
-    if (!file.startsWith(root + path.sep) || !mime[path.extname(file)] || !/^(assets[\\/]|[\w.-]+$)/.test(name) || !fs.existsSync(file)) { res.writeHead(404).end(); return; }
+    const file = path.resolve(siteRoot, name);
+    if (!file.startsWith(siteRoot + path.sep) || !mime[path.extname(file)] || !/^(assets[\\/]|[\w.-]+$)/.test(name) || !fs.existsSync(file)) { res.writeHead(404).end(); return; }
     res.setHeader("Content-Type", mime[path.extname(file)]);
     res.end(fs.readFileSync(file));
   });
@@ -101,7 +102,7 @@ function createServer() {
 
 async function start() {
   const output = fs.mkdtempSync(path.join(os.tmpdir(), "skillmate-loading-"));
-  const server = createServer();
+  const server = createServer(path.resolve(process.env.SKILLMATE_TEST_ROOT || root));
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const executable = process.env.CHROME_PATH || [

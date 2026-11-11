@@ -1,4 +1,5 @@
 const { rateLimit } = require("express-rate-limit");
+const { isIP } = require("node:net");
 
 function createUpstashStore(prefix) {
   const rawUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
@@ -40,9 +41,22 @@ function createUpstashStore(prefix) {
 
 const commonOptions = {
   windowMs: 15 * 60 * 1000,
-  standardHeaders: "draft-8",
+  // Draft 7 uses Node's setHeader; draft 8 requires Express response.append.
+  standardHeaders: "draft-7",
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
+  keyGenerator(request) {
+    // Express resolves its configured proxy policy. Raw Vercel functions have no
+    // request.ip or request.app; trust platform headers only on Vercel.
+    const forwarded = process.env.VERCEL === "1"
+      ? request.headers?.["x-vercel-forwarded-for"] || request.headers?.["x-forwarded-for"]
+      : "";
+    const ip = typeof forwarded === "string" && forwarded
+      ? forwarded.split(",")[0].trim()
+      : request.ip || request.socket?.remoteAddress;
+    if (!isIP(ip || "")) throw new Error("Could not determine the client IP for rate limiting.");
+    return ip;
+  },
 };
 
 function createRateLimit(options, prefix) {
@@ -86,7 +100,9 @@ function runRateLimited(request, response, limiter, handler) {
       response.once("close", onClose);
     }
     try {
-      limiter(request, response, () => {
+      limiter(request, response, (error) => {
+        if (error) return settle(error);
+        if (settled || handlerStarted) return;
         handlerStarted = true;
         Promise.resolve().then(handler).then(() => settle(), settle);
       });

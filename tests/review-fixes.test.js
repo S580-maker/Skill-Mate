@@ -52,7 +52,7 @@ test("admin export keeps booking type out of the date column", async () => {
   let exported, click;
   const dateNodes = [{ nodeType: 3, textContent: "29 Oct 2026" }, { nodeType: 1, textContent: "Individual" }];
   const cells = [
-    { querySelector: () => ({ textContent: "Customer" }) },
+    { querySelector: () => ({ textContent: '=HYPERLINK("https://example.test")' }) },
     { querySelector: selector => ({ textContent: selector === "strong" ? "Service" : "Provider" }) },
     { childNodes: [{ nodeType: 1, textContent: "29 Oct 2026Individual" }], querySelector: selector => selector === ".date-cell" ? { childNodes: dateNodes } : { textContent: "Individual" } },
     { textContent: "Individual" }, { textContent: "Confirmed" },
@@ -61,11 +61,12 @@ test("admin export keeps booking type out of the date column", async () => {
     document: { querySelector: () => ({ addEventListener(_, fn) { click = fn; } }), createElement: () => ({ click() {} }) },
     Node: { TEXT_NODE: 3 }, Blob, getBookingRows: () => [{ querySelectorAll: () => cells }],
     URL: { createObjectURL(blob) { exported = blob; return "blob:fixture"; }, revokeObjectURL() {} },
-    window: { setTimeout() {} }, showToast() {},
+    window: { setTimeout() {}, skillmateCsv: require('../csv-utils') }, showToast() {},
   };
   const script = read("script.js");
   vm.runInNewContext(script.slice(script.indexOf('document.querySelector("#export-button").addEventListener'), script.indexOf('document.querySelector("#period-select").addEventListener')), context);
   click();
   assert.match(await exported.text(), /"29 Oct 2026","Individual"/);
   assert.doesNotMatch(await exported.text(), /2026Individual|Individual Individual/);
+  assert.ok((await exported.text()).includes('"\'=HYPERLINK('), 'Admin export neutralizes user-authored formulas');
 });

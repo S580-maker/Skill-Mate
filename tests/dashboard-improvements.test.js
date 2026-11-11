@@ -293,6 +293,7 @@ test("booking status appears immediately and reverts when Supabase rejects the u
   let rejectWrite;
   let renders = 0;
   const context = {
+    window: { skillmateBookingPolicy: require("../booking-policy") },
     appSupabase: { rpc: () => new Promise((_, reject) => { rejectWrite = reject; }) },
     pendingBookingStatuses: new Map(),
     state: { bookings: [booking] },

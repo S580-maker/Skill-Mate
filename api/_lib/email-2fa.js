@@ -14,6 +14,16 @@ const resendCooldownMs = 30 * 1000;
 const maximumChallengesPerWindow = 5;
 const challengeWindowMs = 15 * 60 * 1000;
 
+// Treat JSON fields as data. Coercing an object can throw before the handler's
+// error boundary, or turn an invalid password into "[object Object]".
+function stringField(body, name) {
+  return typeof body?.[name] === "string" ? body[name] : "";
+}
+
+function validEmail(email) {
+  return email.length <= 254 && /^\S+@\S+\.\S+$/.test(email);
+}
+
 function getServiceKey() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!serviceKey) throw new Error("Missing required server setting: SUPABASE_SERVICE_ROLE_KEY.");
@@ -251,9 +261,9 @@ async function requestPasswordRecovery(request, response) {
     response.setHeader("Allow", "POST");
     return respondError(response, 405, "Method not allowed.");
   }
-  const email = String(request.body?.email || "").trim().toLowerCase();
+  const email = stringField(request.body, "email").trim().toLowerCase();
   const genericMessage = "If an account uses this email, a six-digit verification code has been sent.";
-  if (!/^\S+@\S+\.\S+$/.test(email)) return response.status(200).json({ message: genericMessage });
+  if (!validEmail(email)) return response.status(200).json({ message: genericMessage });
 
   try {
     getServiceKey();
@@ -291,7 +301,7 @@ async function updateRecoveredPassword(request, response) {
     return respondError(response, 405, "Method not allowed.");
   }
   const token = getCookie(request, passwordRecoveryCookie);
-  const password = String(request.body?.password || "");
+  const password = stringField(request.body, "password");
   if (!token) return respondError(response, 410, "Your verification expired. Request a new password reset code.");
   if ([...password].length < 8 || Buffer.byteLength(password, "utf8") > 72) {
     return respondError(response, 400, "Choose a password with at least 8 characters and no more than 72 bytes.");
@@ -349,9 +359,9 @@ async function signIn(request, response) {
     return respondError(response, 405, "Method not allowed.");
   }
 
-  const email = String(request.body?.email || "").trim().toLowerCase();
-  const password = String(request.body?.password || "");
-  if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 1 || Buffer.byteLength(password, "utf8") > 72) {
+  const email = stringField(request.body, "email").trim().toLowerCase();
+  const password = stringField(request.body, "password");
+  if (!validEmail(email) || password.length < 1 || Buffer.byteLength(password, "utf8") > 72) {
     return respondError(response, 400, "Enter a valid email address and password.");
   }
 
@@ -399,7 +409,7 @@ async function googleSignIn(request, response) {
     return respondError(response, 405, "Method not allowed.");
   }
   const accessToken = String(request.headers?.authorization || "").match(/^Bearer\s+(.+)$/i)?.[1];
-  const refreshToken = String(request.body?.refresh_token || "");
+  const refreshToken = stringField(request.body, "refresh_token");
   if (!accessToken || !refreshToken || refreshToken.length > 4096) {
     return respondError(response, 401, "Sign in with Google again to continue.");
   }
@@ -448,7 +458,7 @@ async function sessionSignIn(request, response) {
     return respondError(response, 405, "Method not allowed.");
   }
   const accessToken = String(request.headers?.authorization || "").match(/^Bearer\s+(.+)$/i)?.[1];
-  const refreshToken = String(request.body?.refresh_token || "");
+  const refreshToken = stringField(request.body, "refresh_token");
   if (!accessToken || !refreshToken || refreshToken.length > 4096) {
     return respondError(response, 401, "Sign in again to verify your session.");
   }
@@ -497,11 +507,11 @@ async function signUp(request, response) {
     response.setHeader("Allow", "POST");
     return respondError(response, 405, "Method not allowed.");
   }
-  const email = String(request.body?.email || "").trim().toLowerCase();
-  const password = String(request.body?.password || "");
-  const fullName = String(request.body?.fullName || "").trim();
-  const university = String(request.body?.university || "").trim();
-  if (!/^\S+@\S+\.\S+$/.test(email) || [...password].length < 8 || Buffer.byteLength(password, "utf8") > 72
+  const email = stringField(request.body, "email").trim().toLowerCase();
+  const password = stringField(request.body, "password");
+  const fullName = stringField(request.body, "fullName").trim();
+  const university = stringField(request.body, "university").trim();
+  if (!validEmail(email) || [...password].length < 8 || Buffer.byteLength(password, "utf8") > 72
     || fullName.length < 2 || fullName.length > 80 || university.length < 2 || university.length > 120) {
     return respondError(response, 400, "Enter a valid email, a password with at least 8 characters and no more than 72 bytes, name, and university.");
   }
@@ -557,7 +567,7 @@ async function verify(request, response) {
     return respondError(response, 405, "Method not allowed.");
   }
   const token = getCookie(request);
-  const code = String(request.body?.code || "");
+  const code = stringField(request.body, "code");
   if (!token || !/^\d{6}$/.test(code)) return respondError(response, 400, "Enter the six-digit code from your email.");
 
   try {

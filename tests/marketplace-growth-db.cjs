@@ -44,6 +44,8 @@ async function main() {
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261107100000_marketplace_email_notifications.sql"), "utf8"));
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261107110000_system_health_telemetry.sql"), "utf8"));
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261107120000_client_completion_verification.sql"), "utf8"));
+  await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261108100000_service_price_ranges_and_custom_quotes.sql"), "utf8"));
+  await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261111100000_marketplace_journey.sql"), "utf8"));
   console.log("PASS all database migrations compile against PostgreSQL");
   for (const [name, id] of Object.entries(users)) {
     await db.query("insert into auth.users(id,email,raw_user_meta_data) values($1,$2,$3)", [id, `${name}@example.test`, JSON.stringify({ full_name: name, university: name === "outsider" ? "Other University" : "University of Ghana" })]);
@@ -205,5 +207,52 @@ async function main() {
   assert.equal(snapshots[0].auth_ok, true);
   assert.equal(snapshots[0].database_probe_ms, 40);
   console.log("PASS system telemetry captures live database/storage health, retains samples and is service-only");
+
+  // A complete negotiated booking across real customer/provider security contexts.
+  await db.exec("reset role");
+  const negotiatedService = (await rows("insert into public.services(provider_id,title,category,description,price,currency,negotiation_mode) values($1,'Laptop consultation','Tech help','One hour of setup help.',80,'GHS','negotiation') returning id", [users.provider]))[0].id;
+  await asUser("customer");
+  const bookingConversation = (await rows("select public.start_conversation($1) as id", [users.provider]))[0].id;
+  const negotiation = (await rows("select public.create_price_negotiation($1,$2,65,'One hour of setup help.') as id", [negotiatedService, bookingConversation]))[0].id;
+  const offer = (await rows("select id from public.price_offers where negotiation_id=$1", [negotiation]))[0].id;
+  await rejects("select public.decide_price_offer($1,'accept')", [offer], /offer|own|respond/i);
+  await asUser("provider");
+  await db.query("select public.decide_price_offer($1,'accept')", [offer]);
+  await asUser("customer");
+  const agreed = (await rows("select (public.create_booking_from_price_agreement($1,$2,'Please bring setup notes','On campus')).*", [negotiation, `${day}T11:00:00Z`]))[0];
+  assert.equal(Number(agreed.agreed_price), 65);
+  assert.equal(agreed.status, "pending");
+  assert.ok(agreed.scope_snapshot);
+  const duplicate = (await rows("select (public.create_booking_from_price_agreement($1,$2,'Retry','On campus')).id as id", [negotiation, `${day}T11:00:00Z`]))[0].id;
+  assert.equal(duplicate, agreed.id, "retrying an agreement returns the same booking");
+  await asUser("provider");
+  await db.query("select public.update_booking_status($1,'confirmed')", [agreed.id]);
+  await db.query("select public.start_booking_work($1)", [agreed.id]);
+  await db.query("select public.update_booking_status($1,'completed')", [agreed.id]);
+  await asUser("customer");
+  await rejects("insert into public.reviews(booking_id,reviewer_id,provider_id,rating,body) values($1,auth.uid(),$2,5,'Helpful session')", [agreed.id, users.provider]);
+  await db.query("select public.update_booking_status($1,'completed')", [agreed.id]);
+  await db.query("insert into public.reviews(booking_id,reviewer_id,provider_id,rating,body) values($1,auth.uid(),$2,5,'Helpful session')", [agreed.id, users.provider]);
+  await rejects("insert into public.reviews(booking_id,reviewer_id,provider_id,rating,body) values($1,auth.uid(),$2,5,'Duplicate review')", [agreed.id, users.provider]);
+  const cancelled = await makeBooking("11:00");
+  await db.query("select public.update_booking_status($1,'cancelled')", [cancelled]);
+  assert.equal((await rows("select status from public.booking_directory where id=$1", [cancelled]))[0].status, "cancelled");
+  console.log("PASS customer/provider negotiation, agreement retry, booking, verified completion, reviews and cancellation");
+
+  await db.query("select public.record_marketplace_journey('search')");
+  await db.query("select public.record_marketplace_journey('search')");
+  await rejects("select public.record_marketplace_journey('private search text')", [], /Unknown journey/);
+  await rejects("select * from public.marketplace_journey_daily", [], /permission denied/);
+  await rejects("select * from public.read_marketplace_journey()", [], /Administrator/);
+  await asUser("customer", false);
+  await rejects("select public.record_marketplace_journey('search')", [], /verified session/);
+  await asUser("admin");
+  assert.equal(Number((await rows("select * from public.read_marketplace_journey()"))[0].students), 1);
+  await db.exec("reset role");
+  await db.query("insert into public.marketplace_journey_daily(user_id,event_name,event_day) values($1,'discover',current_date-91)", [users.customer]);
+  await asUser("customer"); await db.query("select public.record_marketplace_journey('discover')");
+  await db.exec("reset role");
+  assert.equal((await rows("select count(*)::integer as count from public.marketplace_journey_daily where event_day<current_date-90"))[0].count, 0);
+  console.log("PASS activity aggregates deduplicate stages, reject private text, enforce admin reads and expire old data");
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; }).finally(() => db.close());

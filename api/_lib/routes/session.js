@@ -8,6 +8,7 @@ const {
 } = require("../supabase");
 
 module.exports = async function session(request, response) {
+  response.setHeader("Cache-Control", "private, no-store");
   if (request.method === "DELETE") {
     clearSessionCookie(response);
     return response.status(204).end();
@@ -25,6 +26,7 @@ module.exports = async function session(request, response) {
   try {
     const user = await getSupabaseUser(accessToken);
     if (!user?.id) {
+      clearSessionCookie(response);
       return response.status(401).json({ error: "Your sign-in session has expired. Please sign in again." });
     }
     if (!await isOtpVerifiedSession(accessToken, user.id)) {

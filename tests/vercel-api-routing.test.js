@@ -34,3 +34,12 @@ test("Vercel API router returns 404 for unknown routes", async () => {
   assert.equal(response.statusCode, 404);
   assert.deepEqual(response.body, { error: "Not found." });
 });
+
+test("Vercel API router does not dispatch inherited Object properties", async () => {
+  for (const path of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+    const response = createResponse();
+    await apiRouter({ method: "GET", ip: "127.0.0.1", query: { path } }, response);
+    assert.equal(response.statusCode, 404, path);
+    assert.deepEqual(response.body, { error: "Not found." });
+  }
+});

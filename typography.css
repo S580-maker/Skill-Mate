@@ -76,6 +76,19 @@ button, .button, .auth-access .auth-submit, .auth-access .auth-google,
 .empty-card strong { font-size:15px; line-height:1.5; }
 .empty-card small { max-width:44ch; font-size:13px; line-height:1.65; }
 .provider-card .provider-description { line-height:1.7; }
+.view-heading h1,.panel-heading h2,.booking-title-row>strong,.provider-card h3 { color:var(--dark); }
+.view-heading>div>p:not(.eyebrow),.panel-heading p,.provider-card .provider-description,.booking-main>.booking-date { color:var(--muted); }
+.booking-card { align-items:flex-start; }
+.booking-title-row { row-gap:8px; }
+.booking-main>.booking-next-action { background:var(--surface-quiet); }
+.booking-contract>summary { display:flex; align-items:center; min-height:44px; width:fit-content; cursor:pointer; gap:8px; }
+.booking-contract>summary::before { content:'\203A'; font-size:18px; transition:transform 150ms; }
+.booking-contract[open]>summary::before { transform:rotate(90deg); }
+.booking-contract>summary::-webkit-details-marker { display:none; }
+.provider-card-cover .cover-fallback { background:var(--surface-quiet); }
+.provider-card-cover .cover-fallback strong,.provider-card-cover .cover-fallback>span { color:var(--main); }
+.provider-card-cover .cover-fallback>span { background:var(--surface); }
+.provider-card-cover .cover-fallback small { color:var(--muted); }
 .settings-form label, .modal-frame label { line-height:1.5; }
 .price, .listing-price, .booking-price, .stat-value, .provider-stat strong, .group-seats strong, #earnings-total, .earnings-hero strong, [data-currency] {
   font-variant-numeric: tabular-nums;

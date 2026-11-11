@@ -1,11 +1,13 @@
 const { afterEach, test } = require("node:test");
 const assert = require("node:assert/strict");
-const { createRateLimit, createUpstashStore } = require("../api/_lib/rate-limit");
+const { EventEmitter } = require("node:events");
+const { createRateLimit, createUpstashStore, runRateLimited } = require("../api/_lib/rate-limit");
 
 const originalFetch = global.fetch;
 const originalEnvironment = {
   UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
   UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+  VERCEL: process.env.VERCEL,
 };
 
 afterEach(() => {
@@ -59,4 +61,70 @@ test("rate-limit factory accepts configured shared storage", () => {
   process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.com";
   process.env.UPSTASH_REDIS_REST_TOKEN = "test-token";
   assert.equal(typeof createRateLimit({ limit: 1 }, "test"), "function");
+});
+
+function rateLimitResponse() {
+  return Object.assign(new EventEmitter(), {
+    statusCode: 200,
+    setHeader() {},
+    status(code) { this.statusCode = code; return this; },
+    send(body) { this.body = body; this.writableEnded = true; this.emit("finish"); return this; },
+  });
+}
+
+const rateLimitRequest = () => ({
+  method: "POST", ip: "127.0.0.1", headers: {}, app: { get: () => false },
+});
+
+test("shared rate-limit storage failure rejects without executing the API handler", async () => {
+  process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.com";
+  process.env.UPSTASH_REDIS_REST_TOKEN = "test-token";
+  global.fetch = async () => { throw new Error("Redis unavailable"); };
+  const limiter = createRateLimit({ limit: 1 }, "failure-regression");
+  const response = rateLimitResponse();
+  let calls = 0;
+  await assert.rejects(runRateLimited(rateLimitRequest(), response, limiter, () => { calls++; }), /Redis unavailable/);
+  assert.equal(calls, 0);
+  assert.equal(response.listenerCount("finish"), 0);
+  assert.equal(response.listenerCount("close"), 0);
+});
+
+test("rate-limit wrapper executes allowed handlers and preserves 429 responses", async () => {
+  process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.com";
+  process.env.UPSTASH_REDIS_REST_TOKEN = "test-token";
+  let hits = 0;
+  global.fetch = async () => ({ ok: true, json: async () => ({ result: [++hits, 60_000] }) });
+  const limiter = createRateLimit({ limit: 1 }, "limit-regression");
+  let calls = 0;
+  const allowed = rateLimitResponse();
+  await runRateLimited(rateLimitRequest(), allowed, limiter, () => { calls++; });
+  const blocked = rateLimitResponse();
+  await runRateLimited(rateLimitRequest(), blocked, limiter, () => { calls++; });
+  assert.equal(calls, 1);
+  assert.equal(blocked.statusCode, 429);
+  assert.match(blocked.body.error, /Too many requests/);
+  for (const response of [allowed, blocked]) {
+    assert.equal(response.listenerCount("finish"), 0);
+    assert.equal(response.listenerCount("close"), 0);
+  }
+});
+
+test("raw Vercel requests use platform client IPs and local requests ignore forwarded headers", async () => {
+  process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.com";
+  process.env.UPSTASH_REDIS_REST_TOKEN = "test-token";
+  const keys = [];
+  global.fetch = async (_url, options) => {
+    keys.push(JSON.parse(options.body)[3]);
+    return { ok: true, json: async () => ({ result: [1, 60_000] }) };
+  };
+  const limiter = createRateLimit({ limit: 1 }, "client-ip-regression");
+  process.env.VERCEL = "1";
+  for (const ip of ["192.0.2.1", "192.0.2.2"]) {
+    await runRateLimited({ headers: { "x-vercel-forwarded-for": ip, "x-forwarded-for": "192.0.2.99" } },
+      rateLimitResponse(), limiter, () => {});
+  }
+  delete process.env.VERCEL;
+  await runRateLimited({ headers: { "x-forwarded-for": "192.0.2.99" }, socket: { remoteAddress: "127.0.0.1" } },
+    rateLimitResponse(), limiter, () => {});
+  assert.deepEqual(keys, ["192.0.2.1", "192.0.2.2", "127.0.0.1"].map(ip => `skillmate:rate-limit:v1:client-ip-regression:${ip}`));
 });

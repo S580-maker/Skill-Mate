@@ -21,7 +21,7 @@ const routes = {
 const { apiRateLimit, authRateLimit, runRateLimited } = require("./_lib/rate-limit");
 
 async function dispatchApiRequest(request, response, route) {
-  const handler = routes[route];
+  const handler = Object.hasOwn(routes, route) ? routes[route] : null;
   if (!handler) return response.status(404).json({ error: "Not found." });
   return handler(request, response);
 }

@@ -1,0 +1,227 @@
+{
+  "conditions": "Chromium,375x900,4x CPU throttle,60ms latency,300000 bytes/s download,cold browser/cache,local fake Supabase,3 alternating runs per mode. Source and built use identical current functionality. No HTTP compression; fixture replaces Supabase SDK/client. Not field CWV; no INP claim.",
+  "summary": {
+    "source": {
+      "readyMs": 4306.70000000298,
+      "lcpMs": 2212,
+      "cls": 0,
+      "cssRequests": 11,
+      "cssBytes": 234878,
+      "jsBytes": 460827
+    },
+    "built": {
+      "readyMs": 3896.2999999970198,
+      "lcpMs": 1596,
+      "cls": 0,
+      "cssRequests": 1,
+      "cssBytes": 201456,
+      "jsBytes": 380530
+    }
+  },
+  "samples": [
+    {
+      "mode": "source",
+      "round": 0,
+      "lcp": 2212,
+      "cls": 0,
+      "ready": 4209.800000000745,
+      "css": [
+        {
+          "file": "/landing-fonts.css",
+          "bytes": 492
+        },
+        {
+          "file": "/user.css",
+          "bytes": 121395
+        },
+        {
+          "file": "/app-refresh.css",
+          "bytes": 36695
+        },
+        {
+          "file": "/marketplace-growth.css",
+          "bytes": 10323
+        },
+        {
+          "file": "/student-gold.css",
+          "bytes": 4257
+        },
+        {
+          "file": "/marketplace-redesign.css",
+          "bytes": 20215
+        },
+        {
+          "file": "/brand-colors.css",
+          "bytes": 4329
+        },
+        {
+          "file": "/typography.css",
+          "bytes": 4435
+        },
+        {
+          "file": "/illustrations.css",
+          "bytes": 4539
+        },
+        {
+          "file": "/skeleton.css",
+          "bytes": 25908
+        },
+        {
+          "file": "/journey.css",
+          "bytes": 2290
+        }
+      ],
+      "js": 460827
+    },
+    {
+      "mode": "built",
+      "round": 0,
+      "lcp": 1560,
+      "cls": 0,
+      "ready": 3896.2999999970198,
+      "css": [
+        {
+          "file": "/styles-1f99d13dbd9c.css",
+          "bytes": 201456
+        }
+      ],
+      "js": 380530
+    },
+    {
+      "mode": "source",
+      "round": 1,
+      "lcp": 1584,
+      "cls": 0,
+      "ready": 4342.800000000745,
+      "css": [
+        {
+          "file": "/landing-fonts.css",
+          "bytes": 492
+        },
+        {
+          "file": "/user.css",
+          "bytes": 121395
+        },
+        {
+          "file": "/app-refresh.css",
+          "bytes": 36695
+        },
+        {
+          "file": "/marketplace-growth.css",
+          "bytes": 10323
+        },
+        {
+          "file": "/student-gold.css",
+          "bytes": 4257
+        },
+        {
+          "file": "/marketplace-redesign.css",
+          "bytes": 20215
+        },
+        {
+          "file": "/brand-colors.css",
+          "bytes": 4329
+        },
+        {
+          "file": "/typography.css",
+          "bytes": 4435
+        },
+        {
+          "file": "/illustrations.css",
+          "bytes": 4539
+        },
+        {
+          "file": "/skeleton.css",
+          "bytes": 25908
+        },
+        {
+          "file": "/journey.css",
+          "bytes": 2290
+        }
+      ],
+      "js": 460827
+    },
+    {
+      "mode": "built",
+      "round": 1,
+      "lcp": 1596,
+      "cls": 0,
+      "ready": 3865.800000000745,
+      "css": [
+        {
+          "file": "/styles-1f99d13dbd9c.css",
+          "bytes": 201456
+        }
+      ],
+      "js": 380530
+    },
+    {
+      "mode": "source",
+      "round": 2,
+      "lcp": 2248,
+      "cls": 0,
+      "ready": 4306.70000000298,
+      "css": [
+        {
+          "file": "/landing-fonts.css",
+          "bytes": 492
+        },
+        {
+          "file": "/user.css",
+          "bytes": 121395
+        },
+        {
+          "file": "/app-refresh.css",
+          "bytes": 36695
+        },
+        {
+          "file": "/marketplace-growth.css",
+          "bytes": 10323
+        },
+        {
+          "file": "/student-gold.css",
+          "bytes": 4257
+        },
+        {
+          "file": "/marketplace-redesign.css",
+          "bytes": 20215
+        },
+        {
+          "file": "/brand-colors.css",
+          "bytes": 4329
+        },
+        {
+          "file": "/typography.css",
+          "bytes": 4435
+        },
+        {
+          "file": "/illustrations.css",
+          "bytes": 4539
+        },
+        {
+          "file": "/skeleton.css",
+          "bytes": 25908
+        },
+        {
+          "file": "/journey.css",
+          "bytes": 2290
+        }
+      ],
+      "js": 460827
+    },
+    {
+      "mode": "built",
+      "round": 2,
+      "lcp": 2032,
+      "cls": 0,
+      "ready": 4558.89999999851,
+      "css": [
+        {
+          "file": "/styles-1f99d13dbd9c.css",
+          "bytes": 201456
+        }
+      ],
+      "js": 380530
+    }
+  ]
+}

@@ -110,7 +110,7 @@ document.querySelector("#export-button").addEventListener("click", () => {
       ];
     }),
   ];
-  const csv = rows.map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\r\n");
+  const csv = window.skillmateCsv.encode(rows);
   const downloadUrl = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const downloadLink = document.createElement("a");
   downloadLink.href = downloadUrl;

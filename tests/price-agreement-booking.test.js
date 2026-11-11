@@ -8,7 +8,7 @@ const migration = fs.readFileSync(
   path.join(root, "supabase", "migrations", "20261104130000_customer_confirmed_price_agreement_bookings.sql"),
   "utf8",
 );
-const userScript = fs.readFileSync(path.join(root, "user.js"), "utf8");
+const userScript = fs.readFileSync(path.join(root, "user.js"), "utf8") + fs.readFileSync(path.join(__dirname, "..", "booking-ui.js"), "utf8") + fs.readFileSync(path.join(__dirname, "..", "provider-profile.js"), "utf8");
 const userStyle = fs.readFileSync(path.join(root, "user.css"), "utf8");
 const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const notifications = fs.readFileSync(path.join(root, "notifications.js"), "utf8");

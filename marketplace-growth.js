@@ -107,12 +107,17 @@
     matches(provider) { return utils.matchesFilters(provider, readFilters(), Boolean(scheduleFor(provider.id))); },
     compare(left, right) { return utils.compareServices(left, right, readFilters().sort); },
     reviewDismissed() { return reviewDismissal === reviewKey(); },
-    progress(booking, providerView) {
+    progress(booking, providerView, { showNext = true } = {}) {
       const progress = utils.bookingProgress(booking, providerView);
       const stages = ["Requested", "Confirmed", "In progress", "Client verification", "Completed"];
-      return `${progress.step < 0 ? "" : `<ol class="booking-progress" aria-label="Booking progress">${stages.map((label, index) => `<li${index === progress.step ? ' aria-current="step"' : ""} class="${index < progress.step ? "is-done" : ""}">${index < progress.step ? "✓ " : ""}${label}</li>`).join("")}</ol>`}<small class="booking-next-step">${escapeHTML(progress.next)}</small>`;
+      return `${progress.step < 0 ? "" : `<ol class="booking-progress" aria-label="Booking progress">${stages.map((label, index) => `<li${index === progress.step ? ' aria-current="step"' : ""} class="${index < progress.step ? "is-done" : ""}">${index < progress.step ? "✓ " : ""}${label}</li>`).join("")}</ol>`}${showNext ? `<small class="booking-next-step">${escapeHTML(progress.next)}</small>` : ""}`;
     },
     canStartWork() { return !appSupabase || schedulesAvailable; },
+    availabilitySummary(providerId) {
+      const schedule = scheduleFor(providerId);
+      return schedule ? `Published appointment hours · ${schedule.timezone}. Choose a date to check current slots.`
+        : "Ask the provider about available times. Your requested appointment needs their confirmation.";
+    },
     async refresh({ read = request => window.skillmateLoading.withTimeout(request) } = {}) {
       if (!appSupabase || !appUser) return;
       try {
@@ -296,7 +301,7 @@
     });
   });
   $("#booking-date").addEventListener("change", growth.refreshSlots);
-  $("#booking-service").addEventListener("change", growth.refreshSlots);
+  // Service changes reopen their own draft and refresh slots in openBooking().
   function openPost() {
     $("#request-post-form").reset();
     $("#request-category").innerHTML = serviceCategories.map(category => `<option>${escapeHTML(category)}</option>`).join("");

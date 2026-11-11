@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/public",
   "crons": [
     {
       "path": "/api/booking-reminders",
@@ -9,7 +11,7 @@
   ],
   "functions": {
     "api/admin.js": {
-      "includeFiles": "api/_lib/admin.html"
+      "includeFiles": "dist/api/_lib/admin.html"
     }
   },
   "redirects": [

@@ -1,0 +1,33 @@
+name: Verify marketplace
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  release-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Chrome is installed on GitHub's Ubuntu runner. All auth/data are isolated fixtures.
+      - run: npm run test:release
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+      - run: npm run test:ui && npm run test:landing && npm run test:loading && npm run test:visual
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-review
+          path: |
+            docs/modernization/screenshots/*after*.png
+            docs/modernization/after-visual-metrics.json
+            dist/build-report.json

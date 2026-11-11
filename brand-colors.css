@@ -24,6 +24,15 @@
   --radius-md:12px;
   --radius-lg:16px;
   --radius-xl:24px;
+  --space-1:4px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-6:24px;
+  --space-8:32px;
+  --surface-quiet:#F2F5FA;
+  --focus-ring:#805911;
+  --control-height:44px;
 }
 :root[data-theme="dark"] {
   --main:#9DB8F0;
@@ -43,6 +52,8 @@
   --accent-gold-line:#806A3C;
   --muted:#B5C1D5;
   --control-border:#6F819D;
+  --surface-quiet:#1B2D4B;
+  --focus-ring:#E0B65C;
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -52,7 +63,19 @@
     scroll-behavior: auto !important;
   }
 }
-:root :focus-visible { outline-color: var(--accent-gold); }
+:root :focus-visible { outline:3px solid var(--focus-ring); outline-offset:3px; }
+/* A shared keyboard entry point across public, student and admin pages. */
+.skip-link { position:fixed; top:12px; left:12px; z-index:10000; transform:translateY(-180%); padding:12px 18px; border-radius:var(--radius-sm); background:var(--surface); color:var(--dark); box-shadow:0 2px 12px #0003; font-weight:600; }
+.skip-link:focus { transform:translateY(0); }
+main { scroll-margin-top:90px; }
+:where(.button,.icon-button,.auth-text-button,.theme-toggle,.provider-evidence-links button) { min-height:var(--control-height); }
+:where(.icon-button) { min-width:var(--control-height); }
+:where(button,input,select,textarea):disabled { cursor:not-allowed; }
+input[aria-invalid="true"],select[aria-invalid="true"],textarea[aria-invalid="true"] { border-width:2px; border-color:var(--danger,#B42318); }
+:root[data-theme="dark"] input[aria-invalid="true"],:root[data-theme="dark"] select[aria-invalid="true"],:root[data-theme="dark"] textarea[aria-invalid="true"] { border-color:#FCA5A5; }
+@media(max-width:768px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),select,textarea { font-size:16px; }
+}
 /* Gold is reserved for focus and selected states, rather than every card border. */
 .marketplace-header .nav-link.active, .category-strip .category-chip.selected {
   color:var(--accent-gold); background:var(--accent-gold-soft); border-color:var(--accent-gold-line);
@@ -62,13 +85,14 @@
 .hero .status-dot { background:var(--accent-gold); }
 .auth-access .showcase-copy h1 em { color:#E9DDBA; }
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { border-color:var(--control-border); }
+.onboarding-card input:not([type="checkbox"]),.onboarding-card textarea { border-color:var(--control-border); background:var(--bg); }
 :root[data-theme="dark"] input::placeholder, :root[data-theme="dark"] textarea::placeholder { color:#B5C1D5; opacity:1; }
 :root[data-theme="dark"] .auth-access .auth-message:not(.success) { color:#FCA5A5; }
 .auth-access { --auth-action:#102D72; --auth-action-hover:#0C235A; }
 .auth-access .auth-showcase { background:#102D72; }
 .auth-access .auth-showcase,.auth-access .showcase-copy h1 { color:#F7F4EC; }
 .auth-access .showcase-copy h1 em { color:#E9DDBA; }
-.discover-intro { background:linear-gradient(110deg,#163B8A,#102D72 90%); border-color:#102D72; }
-.offer-skill-card { background:linear-gradient(135deg,#163B8A,#102D72); }
+.discover-intro { background:#102D72; border-color:#102D72; }
+.offer-skill-card { background:#102D72; }
 .aurora-blob--blue { background:radial-gradient(circle at 40% 40%,#102D7233,#102D7200 68%); }
 .aurora-blob--sky { background:radial-gradient(circle,#9DB8F033,#9DB8F000 70%); }

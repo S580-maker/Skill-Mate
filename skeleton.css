@@ -11,8 +11,15 @@ html[data-theme="dark"] {
 
 /* Primitives */
 .sk { position: relative; display: block; min-width: 0; flex-shrink: 0; overflow: hidden; border-radius: var(--sk-radius); background: var(--sk-base); pointer-events: none; }
-.sk::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, var(--sk-highlight), transparent); animation: sk-shimmer 2.4s ease-in-out infinite; }
-@keyframes sk-shimmer { to { transform: translateX(100%); } }
+/* One opacity animation per region, rather than an infinite animation for every
+   line and avatar. A gentle pulse keeps the placeholder geometry fixed. */
+:where(.sk-header, .sk-heading, .sk-search, .sk-welcome-art, .sk-chips, .sk-section-head,
+  .sk-grid, .sk-list, .sk-stats, .sk-chat, .sk-notes, .sk-detail, .sk-side-card,
+  .sk-page > .sk-surface, .sk-stack--profile .sk-panel, .sk-stack--conversations .sk-chat-list,
+  .sk-admin-grid, .sk-admin-shortcuts, .sk-admin-table, .sk-admin-chart) {
+  animation: sk-pulse 2.4s ease-in-out infinite;
+}
+@keyframes sk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
 .sk-line { height: 12px; border-radius: 6px; }
 .sk-line--xs { height: 10px; }
 .sk-line--md { height: 16px; }
@@ -220,7 +227,6 @@ html[data-theme="dark"] {
 .sk-admin-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
 .sk-admin-side { position: fixed; inset: 0 auto 0 0; display: grid; width: 252px; align-content: start; gap: 12px; padding: 25px 17px; background: var(--nav-bg); }
 .sk-admin-side .sk { height: 40px; background: color-mix(in srgb, #fff 7%, var(--nav-bg)); }
-.sk-admin-side .sk::after { background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 9%, transparent), transparent); }
 .sk-admin-side .sk-admin-brand { width: 120px; height: 24px; margin-bottom: 18px; }
 .sk-admin-main { margin-left: 252px; }
 .sk-admin-content { padding: 31px 35px 20px; max-width: 1500px; margin: auto; }
@@ -349,5 +355,9 @@ body.app-auth-pending, html:has(body.app-auth-pending) { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .loading-spinner, .chat-opening-spinner, .save-button.is-saving::after, .modal-feedback[data-state="loading"]::before { animation: none; }
   .sk::after { animation: none; transform: none; background: none; }
+  :where(.sk-header, .sk-heading, .sk-search, .sk-welcome-art, .sk-chips, .sk-section-head,
+    .sk-grid, .sk-list, .sk-stats, .sk-chat, .sk-notes, .sk-detail, .sk-side-card,
+    .sk-page > .sk-surface, .sk-stack--profile .sk-panel, .sk-stack--conversations .sk-chat-list,
+    .sk-admin-grid, .sk-admin-shortcuts, .sk-admin-table, .sk-admin-chart) { animation: none; }
   .sk-fade-in { animation: none; }
 }

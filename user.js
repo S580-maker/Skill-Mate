@@ -365,6 +365,14 @@ function createChatMessageId() {
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   return [...bytes].map((byte, index) => `${[4, 6, 8, 10].includes(index) ? "-" : ""}${byte.toString(16).padStart(2, "0")}`).join("");
 }
+function createOutgoingMessage(text, replyTo = null) {
+  const createdAt = new Date();
+  return {
+    id: createChatMessageId(), sender: "You", senderId: appUser.id, text,
+    createdAt: createdAt.toISOString(), time: formatChatTime(createdAt),
+    replyTo, sendStatus: navigator.onLine ? "sending" : "failed",
+  };
+}
 function queuePendingMessage(chat, message) {
   const pending = { ...message, conversationId: chat.id, senderId: appUser.id, sendStatus: "failed" };
   pendingOutgoingMessages.set(String(pending.id), pending);
@@ -409,9 +417,10 @@ async function sendPendingMessage(chat, message) {
     }
     if (result.error?.code === "23505") {
       const existing = await appSupabase.from("messages")
-        .select(legacyMessageColumns).eq("id", message.id).maybeSingle();
+        .select(legacyMessageColumns).eq("id", message.id).eq("conversation_id", chat.id).maybeSingle();
       if (existing.error) throw existing.error;
-      if (existing.data?.sender_id === appUser.id && existing.data.body === message.text) {
+      if (existing.data?.sender_id === appUser.id && existing.data.conversation_id === chat.id
+          && existing.data.body === message.text) {
         result = { data: existing.data, error: null };
       }
     }
@@ -748,8 +757,10 @@ function syncMessageChannels() {
             presenceTypingTimers.delete(chat.id);
           }, 2500));
         }
-      })
-      .subscribe(async (status, error) => {
+      });
+    // Register before subscribing: a transport may report its status immediately.
+    messageChannels.set(chat.id, channel);
+    channel.subscribe(async (status, error) => {
         if (messageChannels.get(chat.id) !== channel) return;
         if (status === "SUBSCRIBED") {
           messageChannelRetryAttempts.delete(chat.id);
@@ -777,7 +788,6 @@ function syncMessageChannels() {
           retryMessageChannel(chat.id, channel);
         }
       });
-    messageChannels.set(chat.id, channel);
   }
 }
 async function broadcastTyping(chatId, typing) {
@@ -1172,7 +1182,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
         ${serviceDetailLabel(provider) ? `<p class="service-delivery-label">${escapeHTML(serviceDetailLabel(provider))}</p>` : ""}
         <div class="provider-card-footer"><span class="price"><small>Price</small>${escapeHTML(servicePriceLabel(provider))}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">${provider.priceType === "range" ? "Request a quote" : "Request booking"}</button></span>`}</div>
       </div>
-    </article>`).join("") : `<div class="empty-card"><span aria-hidden="true">⌕</span><strong>${targetId === "saved-grid" ? "Your shortlist starts here" : "No services found"}</strong><small>${targetId === "saved-grid" ? "Tap the heart on a service to save its provider for later." : "Try another skill or browse all categories."}</small><button class="button button-outline" type="button" ${targetId === "saved-grid" ? 'data-page-link="home"' : 'data-clear-search'}>Explore services</button></div>`;
+    </article>`).join("") : `<div class="empty-card"><span aria-hidden="true">⌕</span><strong>${targetId === "saved-grid" ? "Your shortlist starts here" : "No services found"}</strong><small>${targetId === "saved-grid" ? "Tap the heart on a service to save its provider for later." : "Try a broader skill, adjust your budget, or post your task for students to respond."}</small><button class="button button-outline" type="button" ${targetId === "saved-grid" ? 'data-page-link="home"' : 'data-clear-search'}>${targetId === "saved-grid" ? "Explore services" : "Clear search & filters"}</button>${targetId === "saved-grid" ? "" : '<button class="button button-primary" type="button" data-new-request>Post a campus request</button>'}</div>`;
   if (targetId === "recent-grid" && !visible.length) target.innerHTML = '<p class="recent-empty">No recently published services to show yet.</p>';
   if (!visible.length && ["marketplace-grid", "saved-grid"].includes(targetId)) {
     const empty = target.querySelector(".empty-card");
@@ -1257,54 +1267,6 @@ function parseLocalAppointment(dateValue, timeValue) {
     return null;
   }
   return appointment;
-}
-function renderBookingList(targetId, list, options = {}) {
-  const target = document.getElementById(targetId);
-  if (!target) return;
-  if (renderPendingData(target, list.length, "bookings")) return;
-  if (!list.length && renderLoadFailure(target)) return;
-  if (options.provider) list = window.skillmateMarketplace.filterBookings(list, { direction: "received", ownId: ownProviderId() });
-  target.innerHTML = list.length ? list.map((booking) => {
-    const provider = getProvider(booking.providerId);
-    const status = booking.status;
-    const providerView = options.provider || isOwnBooking(booking);
-    const appointmentProposalPending = Boolean(booking.pendingAppointmentProposalId);
-    const actions = providerView
-      ? `${booking.status === "Pending" ? `${appointmentProposalPending ? "" : `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button>`}<button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : ["Confirmed", "In progress"].includes(booking.status) ? `${booking.status === "Confirmed" && window.skillmateGrowth?.canStartWork() ? `<button class="button button-small button-primary" data-decision="In progress" data-booking-id="${escapeHTML(booking.id)}">Start work</button>` : ""}<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : ""}${["Pending", "Confirmed"].includes(status) && !appointmentProposalPending ? `<button class="subtle-button" data-propose-appointment="${escapeHTML(booking.id)}">Suggest another time</button>` : ""}<button class="subtle-button" data-message="customer:${escapeHTML(booking.id)}">Message student</button>`
-      : `${status === "Awaiting verification" ? `<button class="button button-small button-primary" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Confirm completion</button>` : ""}${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-primary review-required-button" data-review="${escapeHTML(booking.id)}">Leave a review</button>` : ""}${appointmentProposalPending ? `<button class="button button-small button-primary" data-appointment-response="accept" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Accept suggested time</button><button class="button button-small button-outline" data-appointment-response="reject" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Keep original time</button>` : ""}${!booking.groupId && ["Pending", "Confirmed"].includes(status) ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
-    const statusLabel = status === "Awaiting verification"
-      ? providerView ? "Awaiting client verification" : "Verify completion"
-      : status === "Pending" ? providerView ? appointmentProposalPending ? "Time change awaiting customer" : "Needs your reply" : "Awaiting confirmation"
-      : status;
-    const repeatAction = !providerView && status === "Completed" ? `<button class="button button-small button-outline" data-rebook="${escapeHTML(booking.id)}">Book again</button>` : "";
-    const progress = window.skillmateGrowth?.progress(booking, providerView) || "";
-    const priceChatAction = booking.priceNegotiationId
-      ? `<button class="subtle-button" data-negotiation-chat="${escapeHTML(booking.priceNegotiationId)}">Open price chat</button>` : "";
-    const location = ["Confirmed", "In progress"].includes(status) && booking.otherLocation
-      ? `<div class="booking-location"><strong>${providerView ? "Customer" : "Provider"}’s hostel or campus: ${escapeHTML(booking.otherLocation)}</strong><small>Shared for this confirmed booking. Approximate distance isn’t available without map pins.</small></div>`
-      : "";
-    const listedPriceNote = Number.isFinite(booking.listedPrice) && booking.listedPrice !== booking.price
-      ? `<small class="booking-note">Original listed price: ${currency(booking.listedPrice)}</small>` : "";
-    const appointmentSuggestion = appointmentProposalPending
-      ? `<div class="booking-appointment-proposal"><strong>Suggested time</strong><span>${escapeHTML(new Date(booking.pendingAppointmentAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }))}</span><small>${providerView ? "Waiting for the customer to approve this change." : "Choose whether this new time works for you. Your booking is not confirmed yet."}</small></div>`
-      : "";
-    const requestedArrangement = booking.requestedLocation
-      ? `<small class="booking-note">Arrangement: ${escapeHTML(booking.requestedLocation)}</small>` : "";
-    const agreedScope = booking.scopeSnapshot
-      ? `<div class="booking-location"><strong>${booking.priceAgreementId ? "Agreed service scope" : "Service details"}</strong><small>${escapeHTML(booking.scopeSnapshot)}</small></div>` : "";
-    return `<article class="booking-card${!providerView && status === "Completed" && !booking.reviewed ? " booking-awaiting-review" : ""}" data-booking-card-id="${escapeHTML(booking.id)}"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span>${booking.priceAgreementId ? '<span class="booking-type-pill">Agreed price</span>' : ""}<span class="status status-${escapeHTML(status.toLowerCase().replaceAll(" ", "-"))}">${escapeHTML(statusLabel)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${appointmentSuggestion}${listedPriceNote}${requestedArrangement}${booking.note ? `<small class="booking-note">Instructions: “${escapeHTML(booking.note)}”</small>` : ""}${agreedScope}${progress}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${repeatAction}${priceChatAction}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
-  }).join("") : '<div class="empty-card"><span class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><strong>Nothing here just yet</strong><small>Your bookings and requests will appear here.</small></div>';
-  if (!list.length && targetId === "user-booking-list") {
-    const empty = target.querySelector(".empty-card");
-    window.skillmateIllustrations?.mount(empty, "bookings", empty?.querySelector(":scope > span"));
-  }
-  target.querySelectorAll("[data-decision], [data-propose-appointment], [data-review]").forEach(button => {
-    const id = button.dataset.bookingId || button.dataset.proposeAppointment || button.dataset.review;
-    if (pendingBookingStatuses.has(id) || id?.startsWith("pending-booking-")) {
-      button.disabled = true;
-      button.setAttribute("aria-busy", "true");
-    }
-  });
 }
 function resizeChatInput(input) {
   input.style.height = "auto";
@@ -1825,7 +1787,7 @@ function renderChat(options = {}) {
       empty.append(spinner, label);
     } else {
       empty.removeAttribute("role");
-      empty.textContent = "No messages yet. Start a conversation from a provider's profile.";
+      empty.textContent = "No messages yet. Send a message below to introduce yourself.";
     }
     orderedChildren.push(empty);
   }
@@ -2355,6 +2317,7 @@ async function loadSupabaseState(read = request => Promise.resolve(request)) {
       reviewed: (ownReviews.data || []).some((review) => review.booking_id === booking.id),
     };
   });
+  const refreshedBookingStatuses = new Map(state.bookings.map(booking => [booking.id, booking.status]));
   const joinedSet = new Set((joinedGroups.data || []).map((item) => item.group_booking_id));
   state.groups = (groups.data || []).map((group) => ({
     id: group.id, hostId: group.host_id, providerId: group.provider_id, serviceId: group.service_id,
@@ -2404,6 +2367,7 @@ async function loadSupabaseState(read = request => Promise.resolve(request)) {
   reportTarget.innerHTML = '<option value="">Choose a student</option>' + connectedProviders
     .filter((provider) => provider.id !== appUser.id)
     .map((provider) => `<option value="${escapeHTML(provider.id)}">${escapeHTML(provider.name)}</option>`).join("");
+  return refreshedBookingStatuses;
 }
 async function refreshLiveBookings() {
   const [bookings, userLocations, ownReviews] = await Promise.all([
@@ -2513,9 +2477,10 @@ async function persistBookingStatus(bookingId, status) {
   const booking = state.bookings.find((item) => item.id === bookingId);
   const previousStatus = booking?.status;
   const previousWorkStartedAt = booking?.workStartedAt;
-  pendingBookingStatuses.set(bookingId, status);
+  const localStatus = window.skillmateBookingPolicy.localStatus(status, Boolean(status === "Completed" && booking && isOwnBooking(booking)));
+  pendingBookingStatuses.set(bookingId, localStatus);
   if (booking) {
-    booking.status = status === "Completed" && isOwnBooking(booking) ? "Awaiting verification" : status;
+    booking.status = localStatus;
     if (status === "In progress") booking.workStartedAt = new Date().toISOString();
     renderAll();
   }
@@ -2537,13 +2502,15 @@ async function persistBookingStatus(bookingId, status) {
     }
     throw error;
   }
+  let refreshedStatus;
   try {
-    await refreshSupabaseState();
+    const statuses = await refreshSupabaseState();
+    refreshedStatus = statuses?.get(bookingId);
   } catch (error) {
     console.error("Booking status was saved, but the latest account data could not be refreshed.", error);
   }
   const currentBooking = state.bookings.find(item => item.id === bookingId);
-  if (currentBooking) currentBooking.status = status;
+  if (currentBooking) currentBooking.status = refreshedStatus || localStatus;
   pendingBookingStatuses.delete(bookingId);
   renderAll();
 }
@@ -2820,6 +2787,7 @@ function showConnectedApp() {
   document.body.classList.remove("app-auth-pending");
   document.querySelector("#app-shell").hidden = false;
   status.hidden = true;
+  document.dispatchEvent(new CustomEvent("skillmate:workspace-ready"));
 }
 function syncSellerNavigation() {
   const isSeller = state.services.length > 0;
@@ -3039,6 +3007,13 @@ function showPage(page, options = {}) {
   if (page === "provider") { renderListings(); renderPortfolio(); }
   if (page === "earnings") renderEarnings();
   if (page === "bookings") renderBookingList("user-booking-list", bookingsForActiveFilter());
+  if (options.focusHeading) {
+    const heading = view.querySelector("h1, h2");
+    const destination = heading?.getClientRects().length ? heading : view;
+    if (destination === view) destination.setAttribute("aria-label", pageTitle);
+    destination.tabIndex = -1;
+    destination.focus({ preventScroll: true });
+  }
   // Section switches and history restores jump instantly; a smooth scroll left running from one section would override a restore.
   window.scrollTo({ top: Number.isFinite(options.restoreScroll) ? Math.max(0, options.restoreScroll) : 0, behavior: "instant" });
   if (appSupabase && appUser && ["home", "bookings", "messages", "provider", "earnings"].includes(page)) {
@@ -3085,8 +3060,8 @@ function openBooking(providerId, serviceId, negotiationId = "") {
   else if (serviceId && services.some(service => service.id === serviceId)) document.querySelector("#booking-service").value = serviceId;
   document.querySelector("#booking-service-switch").hidden = services.length <= 1 || Boolean(negotiation);
   const selectedService = negotiation ? bookingService : services.find(item => item.id === document.querySelector("#booking-service").value);
-  const savedDraft = !negotiation && selectedService
-    ? bookingDrafts.get(`${providerId}:${selectedService.id}`)
+  const savedDraft = selectedService
+    ? window.skillmateJourney?.bookingDraft(providerId, selectedService.id, negotiationId) || (!negotiation ? bookingDrafts.get(`${providerId}:${selectedService.id}`) : null)
     : null;
   document.querySelector("#booking-confirm-label").hidden = !negotiation;
   document.querySelector("#booking-confirm-details").required = Boolean(negotiation);
@@ -3118,7 +3093,20 @@ function openBooking(providerId, serviceId, negotiationId = "") {
     updateBookingLocationVisibility();
   }
   openModal("booking-modal");
-  window.skillmateGrowth?.refreshSlots();
+  window.skillmateJourney?.bookingOpened(Boolean(savedDraft));
+  const modal = document.querySelector("#booking-modal");
+  const draftRequest = crypto.randomUUID();
+  modal.dataset.draftRequest = draftRequest;
+  const slots = window.skillmateGrowth?.refreshSlots();
+  if (savedDraft?.slot && slots) Promise.resolve(slots).then(() => {
+    const select = document.querySelector("#booking-slot");
+    if (!modal.open || modal.dataset.draftRequest !== draftRequest
+      || document.querySelector("#booking-date").value !== savedDraft.date || select.value) return;
+    if ([...select.options].some(option => option.value === savedDraft.slot)) {
+      select.value = savedDraft.slot;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }).catch(error => console.warn("Could not restore the saved appointment slot.", error));
 }
 function updateBookingLocationVisibility() {
   const isOtherLocation = document.querySelector("#booking-location-type").value === "other";
@@ -3212,7 +3200,10 @@ function updateBookingSummary() {
     document.querySelector("#booking-agreed-price").textContent = currency(negotiation.agreedPrice);
   }
 }
-document.querySelector("#booking-service").addEventListener("change", updateBookingSummary);
+document.querySelector("#booking-service").addEventListener("change", () => {
+  if (!document.querySelector("#booking-modal").open) { updateBookingSummary(); return; }
+  openBooking(document.querySelector("#booking-provider-id").value, document.querySelector("#booking-service").value);
+});
 document.querySelector("#booking-location-type").addEventListener("change", updateBookingLocationVisibility);
 document.querySelector("#booking-negotiate").addEventListener("click", (event) => {
   const providerId = document.querySelector("#booking-provider-id").value;
@@ -3314,6 +3305,7 @@ async function openServiceDiscussion(providerId, serviceId, triggerButton, initi
     showPage("messages", { openConversation: true });
     let quoteRequestSent = false;
     let quoteMessageSent = false;
+    let quoteMessageQueued = false;
     try {
       const { data: negotiationId, error: negotiationError } = await appSupabase.rpc("create_price_negotiation", {
         p_service_id: serviceId, p_conversation_id: conversationId,
@@ -3322,14 +3314,15 @@ async function openServiceDiscussion(providerId, serviceId, triggerButton, initi
       if (negotiationError) throw negotiationError;
       if (initialMessage) {
         const service = connectedServices.find(item => item.id === serviceId);
-        const { error: messageError } = await appSupabase.from("messages").insert({
-          conversation_id: conversationId, sender_id: appUser.id,
-          body: `Custom quote request for ${service?.title || "this service"}: ${initialMessage}`,
-        });
-        if (messageError) throw messageError;
+        const message = createOutgoingMessage(`Custom quote request for ${service?.title || "this service"}: ${initialMessage}`);
+        chat.messages.push(message);
+        queuePendingMessage(chat, message);
+        cacheConversationMessages(state.messages);
+        quoteMessageQueued = true;
+        await sendPendingMessage(chat, message);
         quoteMessageSent = true;
       }
-      chat.messages = await loadConversationMessages(conversationId, provider.name);
+      chat.messages = retainLocalOutgoingMessages(chat.messages, await loadConversationMessages(conversationId, provider.name));
       conversationMessageRefreshTimes.set(conversationId, Date.now());
       cacheConversationMessages(state.messages);
       const negotiation = await loadConversationPriceNegotiation(negotiationId);
@@ -3343,7 +3336,9 @@ async function openServiceDiscussion(providerId, serviceId, triggerButton, initi
       showToast(initialMessage
         ? quoteMessageSent
           ? "Quote request sent, but the conversation could not refresh. Reopen it to see the provider’s response."
-          : "Chat is open, but your quote request could not be sent. Try again from this conversation."
+          : quoteMessageQueued
+            ? "Your quote message was not confirmed as sent. It is saved in this conversation; tap Retry to send it."
+            : "Chat is open, but your quote request could not be sent. Try again from this conversation."
         : "Chat is open, but the price discussion could not finish loading. You can still message the provider.", "error");
     } finally {
       conversationsOpeningNegotiation.delete(conversationId);
@@ -3361,7 +3356,7 @@ document.querySelector("#price-offer-form").addEventListener("submit", event => 
   const amountInput = document.querySelector("#price-offer-amount");
   if (!form.reportValidity()) return;
   const amount = Number(amountInput.value);
-  if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100) {
+  if (!Number.isFinite(amount) || amount <= 0 || !/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(amountInput.value)) {
     showToast("Enter a price with no more than two decimal places.", "error");
     amountInput.focus();
     return;
@@ -3412,103 +3407,11 @@ document.querySelector("#price-offer-form").addEventListener("submit", event => 
     friendlyFailureMessage: "The price proposal could not be sent. Check the conversation and current offer status, then try again.",
   });
 });
-async function openProviderProfile(providerId, serviceId) {
-  const provider = getProvider(providerId);
-  if (!provider) return;
-  const rating = providerReviewSummary(provider);
-  const services = providerServices(providerId);
-  const selectedService = services.find(service => service.id === serviceId) || services[0];
-  const profile = document.querySelector("#provider-detail-content");
-  const requestId = crypto.randomUUID();
-  profile.dataset.requestId = requestId;
-  document.querySelector("#provider-detail-title").textContent = selectedService?.title || provider.service;
-  const hasCv = appSupabase && provider.cvPath
-    && /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.pdf$/i.test(provider.cvPath)
-    && provider.cvPath.startsWith(`${providerId}/`);
-  const skills = (provider.skills || []).filter(Boolean);
-  const reviews = providerReviews(providerId);
-  const portfolioMarkup = (provider.portfolio || []).map(item => {
-    const work = typeof item === "string" ? { title: item } : item;
-    const image = window.skillmateMarketplace.safeImageUrl(work.image);
-    return `<article class="showcase-work-card">${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(work.title)}" loading="lazy" decoding="async" />` : `<div class="portfolio-placeholder" aria-hidden="true">${getCategoryIcon(provider.category)}</div>`}<div><strong>${escapeHTML(work.title)}</strong>${work.description ? `<p>${escapeHTML(work.description)}</p>` : ""}</div></article>`;
-  }).join("");
-  const reviewMarkup = reviews.map(review => `<article class="showcase-review-card"><div class="showcase-review-heading"><span aria-label="${Number(review.rating)} out of 5 stars">${"★".repeat(Number(review.rating))}${"☆".repeat(5 - Number(review.rating))}</span><time>${escapeHTML(new Date(review.date).toLocaleDateString(undefined, { month: "short", year: "numeric" }))}</time></div><p>${escapeHTML(review.text)}</p><small>Verified completed booking</small></article>`).join("");
-  profile.innerHTML = `
-    <header class="showcase-hero">
-      <div class="showcase-orbit" aria-hidden="true"></div>
-      <div class="showcase-identity">${providerAvatarMarkup(provider)}<div><span class="showcase-kicker">${provider.verified ? "✦ CAMPUS VERIFIED" : "SKILLMATE PROVIDER"}</span><h2>${escapeHTML(provider.name)}</h2><p>${escapeHTML(provider.course || "Student provider")} · ${escapeHTML(provider.campus)}</p></div></div>
-      <p class="showcase-bio">${escapeHTML(provider.bio || provider.description || "A student sharing their skills with the campus community.")}</p>
-      <div class="showcase-stats"><div><strong>${escapeHTML(rating.rating)}</strong><span>${rating.count} ${rating.count === 1 ? "review" : "reviews"}</span></div><i></i><div><strong>${Number(provider.bookings) || 0}</strong><span>completed works</span></div><i></i><div><strong>${services.length}</strong><span>${services.length === 1 ? "service" : "services"}</span></div></div>
-    </header>
-    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>01</span><h3>Services</h3></div>${services.map((service) => `<div class="detail-service"><span><strong>${escapeHTML(service.title)}</strong><small>${escapeHTML(service.category)} · ${servicePriceLabel(service)}</small><small>${escapeHTML(serviceDetailLabel(service))}</small>${service.providerId !== appUser?.id ? `<small>${service.priceType === "range" ? "Price range · custom quote required" : service.negotiationMode === "fixed" ? "Fixed Price" : service.negotiationMode === "hybrid" ? "Custom price & scope" : "Negotiation · price only"}</small>${service.negotiationMode !== "fixed" ? `<span class="detail-negotiation-actions"><button class="button button-small button-outline" type="button" data-negotiation-action="offer" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Make an offer</button><button class="button button-small button-outline" type="button" data-negotiation-action="discuss" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Discuss price</button></span>` : ""}` : ""}</span>${service.groups ? '<span class="detail-group-tag">Group bookings welcome</span>' : ""}</div>`).join("")}</section>
-    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>02</span><h3>Education &amp; skills</h3></div><p class="showcase-education"><strong>${escapeHTML(provider.course || "Student")}</strong><span>${escapeHTML(provider.campus)}</span></p><div class="showcase-skills">${skills.length ? skills.map(skill => `<span>${escapeHTML(skill)}</span>`).join("") : '<span>Skills and specialities shared through listed services</span>'}</div>${hasCv ? '<div class="showcase-cv-status" data-provider-cv role="status"></div>' : ""}</section>
-    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>03</span><h3>Selected work</h3></div><div class="showcase-work-grid">${portfolioMarkup || '<p class="detail-empty">No work samples added yet. Ask the provider about their experience.</p>'}</div></section>
-    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>04</span><h3>Student reviews</h3><span class="showcase-review-score">${rating.count ? `★ ${escapeHTML(rating.rating)}` : "NEW"}</span></div><div class="showcase-review-list">${reviewMarkup || '<p class="detail-empty">No reviews yet. Completed work can be reviewed by the customer.</p>'}</div></section>
-    ${services.some(service => service.groups) ? `<section class="detail-section group-detail-callout"><div><h3>Need help as a group?</h3><p>This provider welcomes group requests.</p></div><button class="button button-outline" type="button" data-open="groups-modal" data-group-provider="${escapeHTML(providerId)}">Book with friends</button></section>` : ""}`;
-  document.querySelector("#provider-detail-title").textContent = selectedService?.title || provider.service;
-  document.querySelector("#provider-detail-book").dataset.book = providerId;
-  document.querySelector("#provider-detail-book").dataset.service = selectedService?.id || "";
-  document.querySelector("#provider-detail-message").dataset.message = providerId;
-  document.querySelector("#provider-detail-message").dataset.service = selectedService?.id || "";
-  document.querySelector("#provider-detail-report").dataset.report = providerId;
-  document.querySelector("#provider-detail-book").disabled = false;
-  document.querySelector("#provider-detail-message").disabled = false;
-  document.querySelector("#provider-detail-report").disabled = false;
-  openModal("provider-detail-modal");
-  if (hasCv) void loadProviderCv(provider, profile, requestId);
-}
-async function loadProviderCv(provider, profile, requestId) {
-  const region = profile.querySelector("[data-provider-cv]");
-  const modal = document.querySelector("#provider-detail-modal");
-  if (!region || profile.dataset.requestId !== requestId || !modal.open) return;
-  const previousFocus = document.activeElement;
-  const restoreFocus = region.contains(previousFocus);
-  const isCurrent = () => profile.dataset.requestId === requestId && modal.open && region.isConnected;
-  const cancel = () => {
-    if (profile.dataset.requestId === requestId) profile.dataset.requestId = "";
-    region.removeAttribute("aria-busy");
-  };
-  modal.addEventListener("close", cancel, { once: true });
-  region.setAttribute("aria-busy", "true");
-  region.setAttribute("role", "status");
-  region.textContent = "Loading professional CV…";
-  let nextFocus;
-  try {
-    const { data, error } = await window.skillmateLoading.withTimeout(
-      appSupabase.storage.from("provider-cvs").createSignedUrl(provider.cvPath, 900),
-    );
-    if (!isCurrent()) return;
-    if (error) throw error;
-    const url = new URL(data?.signedUrl);
-    if (!["https:", "http:"].includes(url.protocol)) throw new Error("Invalid CV link");
-    const link = document.createElement("a");
-    link.className = "showcase-cv-link";
-    link.href = url.href;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.innerHTML = `<span aria-hidden="true">↗</span><span><strong>View professional CV</strong><small>${escapeHTML(provider.cvName || "PDF document")} · Secure link expires in 15 minutes</small></span>`;
-    region.replaceChildren(link);
-    nextFocus = link;
-  } catch (error) {
-    if (!isCurrent()) return;
-    console.error("Could not create a signed provider CV link.", error);
-    region.setAttribute("role", "alert");
-    const message = document.createElement("span");
-    message.textContent = "The CV is unavailable. You can still book or message this student.";
-    const retry = document.createElement("button");
-    retry.type = "button";
-    retry.className = "button button-small button-outline";
-    retry.textContent = "Retry CV";
-    retry.addEventListener("click", () => void loadProviderCv(provider, profile, requestId));
-    region.replaceChildren(message, retry);
-    nextFocus = retry;
-  } finally {
-    region.removeAttribute("aria-busy");
-    modal.removeEventListener("close", cancel);
-    if (isCurrent() && restoreFocus && (document.activeElement === document.body || document.activeElement === previousFocus)) nextFocus?.focus();
-  }
-}
 function openMessage(providerId, messageFor = "provider", serviceId) {
+  if (document.querySelector("#message-form").dataset.sending) {
+    showToast("Your conversation is still opening. Please wait before starting another.");
+    return;
+  }
   const provider = providerId.startsWith("customer:") ? getProvider(providerId) : getProvider(providerId);
   if (!provider || state.blocked.includes(providerId)) { showToast("You can’t message this student."); return; }
   const service = serviceId && providerServices(providerId).find(item => item.id === serviceId);
@@ -3550,6 +3453,8 @@ function openProviderConversation(providerId) {
   }, "Could not open this conversation.", "Opening conversation…");
 }
 async function startConversation(providerId, text) {
+  text = text.trim();
+  if (!text) throw new Error("Write a message before sending.");
   if (appSupabase) {
     let otherUserId = providerId;
     let bookingId = null;
@@ -3564,13 +3469,18 @@ async function startConversation(providerId, text) {
       p_other_user_id: otherUserId, p_booking_id: bookingId,
     });
     if (conversationError) throw conversationError;
-    const { error: messageError } = await appSupabase.from("messages").insert({
-      conversation_id: conversationId, sender_id: appUser.id, body: text,
-    });
-    if (messageError) throw messageError;
+    let chat = state.messages.find(item => item.id === conversationId);
+    if (!chat) {
+      chat = { id: conversationId, providerId: otherUserId, name: getProvider(providerId)?.name || "Student", messages: [] };
+      state.messages.unshift(chat);
+    }
+    // First messages use the same persisted, idempotent outbox as the chat composer.
+    const message = createOutgoingMessage(text);
+    chat.messages.push(message);
+    queuePendingMessage(chat, message);
+    cacheConversationMessages(state.messages);
     setActiveConversation(conversationId);
-    await refreshSupabaseState();
-    return;
+    return { chat, message };
   }
   let chat = state.messages.find((item) => item.providerId === providerId);
   if (!chat) {
@@ -3621,13 +3531,13 @@ function addGroup(group) {
 
 document.querySelectorAll(".nav-link[data-page]").forEach((link) => link.addEventListener("click", (event) => {
   event.preventDefault();
-  showPage(link.dataset.page);
+  showPage(link.dataset.page, { focusHeading: true });
 }));
 document.addEventListener("click", event => {
   const link = event.target.closest("[data-page-link]");
   if (!link) return;
   event.preventDefault();
-  showPage(link.dataset.pageLink);
+  showPage(link.dataset.pageLink, { focusHeading: true });
 });
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-open]");
@@ -3857,7 +3767,7 @@ document.querySelector("#recent-view-all").addEventListener("click", () => {
 });
 document.querySelectorAll('[data-activity-count="bookings"]').forEach(node => node.closest("a").addEventListener("click", () => {
   bookingDirection = "made";
-  bookingFilter = "upcoming";
+  activeBookingFilter = "upcoming";
   document.querySelectorAll("[data-booking-direction]").forEach(button => {
     const active = button.dataset.bookingDirection === "made";
     button.classList.toggle("active", active);
@@ -3884,7 +3794,7 @@ document.addEventListener("keydown", event => {
   if (event.key === "Escape" && account.open) { account.open = false; account.querySelector("summary").focus(); }
 });
 document.querySelector("#mode-switch").addEventListener("click", () => {
-  if (state.services.length) showPage("provider");
+  if (state.services.length) showPage("provider", { focusHeading: true });
   else {
     window.skillmateServiceEditor.prepare();
     openModal("service-modal");
@@ -3895,6 +3805,12 @@ document.querySelector("#marketplace-grid").addEventListener("click", handleCard
 document.querySelector("#saved-grid").addEventListener("click", handleCardAction);
 document.querySelector("#recent-grid").addEventListener("click", handleCardAction);
 document.querySelector("#provider-detail-modal").addEventListener("click", (event) => {
+  const jump = event.target.closest("[data-showcase-jump]");
+  if (jump) {
+    const heading = [...document.querySelectorAll("#provider-detail-content h3")].find(item => item.textContent === (jump.dataset.showcaseJump === "work" ? "Selected work" : "Student reviews"));
+    if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); heading.scrollIntoView({ block: "start", behavior: "auto" }); }
+    return;
+  }
   const negotiation = event.target.closest("[data-negotiation-action]");
   if (negotiation) {
     if (negotiation.dataset.negotiationAction === "offer") {
@@ -4054,7 +3970,10 @@ document.querySelector("#group-grid").addEventListener("click", (event) => {
 });
 document.querySelector("#booking-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  if (bookingSubmissionPending) return;
+  if (bookingSubmissionPending) {
+    showToast("Another booking request is still sending. Wait for its result before sending this one.");
+    return;
+  }
   if (document.querySelector("#booking-confirm-details").required
       && !document.querySelector("#booking-confirm-details").checked) {
     showToast("Review the booking details and confirm before sending the request.", "error");
@@ -4114,8 +4033,12 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
     window.skillmateIllustrations?.hideBookingSuccess();
     bookingSubmissionPending = true;
     const temporaryId = `pending-booking-${Date.now()}`;
+    const submittedDraft = window.skillmateJourney?.bookingDraft(providerId, service.id, negotiationId);
+    const submittedDraftRequest = document.querySelector("#booking-modal").dataset.draftRequest;
+    const bookingRequestId = window.skillmateJourney?.requestId(JSON.stringify([providerId, service.id, scheduledAt.toISOString(), document.querySelector("#booking-note").value.trim(), bookingLocationValue()])) || crypto.randomUUID();
     const pendingBooking = {
       id: temporaryId, serviceId: service.id, providerId, customerId: appUser.id, customer: state.profile.name,
+      scheduledAt: scheduledAt.toISOString(),
       service: service.title, category: service.category, price: negotiation?.agreedPrice ?? Number(service.price),
       listedPrice: negotiation?.listedPrice ?? Number(service.price), priceNegotiationId: negotiationId,
       scopeSnapshot: negotiation?.agreedScope || "",
@@ -4131,7 +4054,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
     showPage("bookings");
     runAction(async () => {
       try {
-        const result = negotiationId
+        let result = negotiationId
           ? await appSupabase.rpc("create_booking_from_price_agreement", {
             p_negotiation_id: negotiationId,
             p_scheduled_at: scheduledAt.toISOString(),
@@ -4139,23 +4062,35 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
             p_location: pendingBooking.requestedLocation,
           })
           : await appSupabase.from("bookings").insert({
+            id: bookingRequestId,
             service_id: service.id, customer_id: appUser.id, provider_id: providerId,
             scheduled_at: scheduledAt.toISOString(), note: pendingBooking.note,
             location: pendingBooking.requestedLocation,
             agreed_price: service.price, listed_price: service.price, currency: service.currency || "GHS",
           });
+        if (!negotiationId && result.error?.code === "23505") {
+          const existing = await appSupabase.from("bookings").select("id").eq("id", bookingRequestId).eq("customer_id", appUser.id).eq("provider_id", providerId).eq("service_id", service.id).maybeSingle();
+          if (!existing.error && existing.data?.id === bookingRequestId) result = { data: existing.data, error: null };
+        }
         const { error } = result;
         if (error) throw error;
+        // A saved request remains usable even if the subsequent read fails.
+        pendingBooking.id = negotiationId ? (Array.isArray(result.data) ? result.data[0]?.id : result.data?.id) || temporaryId : bookingRequestId;
         await reconcileSavedChange();
-        bookingDrafts.delete(bookingDraftKey);
+        if (!window.skillmateJourney) bookingDrafts.delete(bookingDraftKey);
+        document.dispatchEvent(new CustomEvent("skillmate:booking-save", { detail: { state: "saved", providerId, serviceId: service.id, agreementId: negotiationId, requestId: bookingRequestId, submittedDraft } }));
         renderAll();
         window.skillmateIllustrations?.showBookingSuccess();
         showToast("Booking request sent. You can track it in My bookings.", "success");
       } catch (error) {
         state.bookings = state.bookings.filter((booking) => booking.id !== temporaryId);
         renderAll();
-        window.skillmateGrowth?.refreshSlots();
-        if (!document.querySelector("dialog[open]")) openModal("booking-modal");
+        const sameDraft = document.querySelector("#booking-modal").dataset.draftRequest === submittedDraftRequest;
+        if (sameDraft) {
+          window.skillmateGrowth?.refreshSlots();
+          if (!document.querySelector("dialog[open]")) openModal("booking-modal");
+        }
+        document.dispatchEvent(new CustomEvent("skillmate:booking-save", { detail: { state: "failed", draftRequest: submittedDraftRequest } }));
         throw error;
       }
     }, "Could not send the booking request.").finally(() => {
@@ -4220,7 +4155,7 @@ document.querySelector("#group-form").addEventListener("submit", (event) => {
   state.bookings.unshift({
     id: `booking-${Date.now()}`, groupId, providerId, service: service.title,
     price: groupPrice, date, time: "Time to be arranged", customer: state.profile.name,
-    status: "Pending", type: "Group booking", customer: state.profile.name,
+    status: "Pending", type: "Group booking",
     note: "Hosting this group booking", reviewed: false,
   });
   saveState();
@@ -4230,14 +4165,30 @@ document.querySelector("#group-form").addEventListener("submit", (event) => {
 });
 document.querySelector("#message-form").addEventListener("submit", (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
+  if (form.dataset.sending) return;
+  const input = document.querySelector("#message-first-text");
+  const text = input.value.trim();
+  if (!text) {
+    showToast("Write a message before sending.", "error");
+    input.focus();
+    return;
+  }
+  const providerId = document.querySelector("#message-provider-id").value;
+  form.dataset.sending = "true";
   runAction(async () => {
-    await startConversation(document.querySelector("#message-provider-id").value, document.querySelector("#message-first-text").value.trim());
+    const queued = await startConversation(providerId, text);
     event.target.closest("dialog").close();
     document.querySelector("#messages-layout").dataset.chatOpen = "true";
     renderConversations();
     showPage("messages", { openConversation: true });
-    showToast("Conversation started.");
-  }, "Could not send your message.");
+    if (queued) {
+      if (navigator.onLine) sendMessageWithoutBlocking(queued.chat, queued.message, "Message wasn't sent. It is saved on this device; tap Retry to try again.");
+      else showToast("You’re offline. This message is saved on this device; tap Retry when you reconnect.");
+    } else showToast("Conversation started.");
+  }, "Could not open the conversation. Your message is still here.", "Opening conversation…", {
+    submitButton: form.querySelector('button[type="submit"]'),
+  }).finally(() => { delete form.dataset.sending; });
 });
 document.querySelector("#conversation-list").addEventListener("click", (event) => {
   const button = event.target.closest("[data-chat]");
@@ -4481,16 +4432,7 @@ document.querySelector("#chat-panel").addEventListener("submit", (event) => {
   saveChatDraft(chat.id, "");
   pendingReplyId = null;
   if (appSupabase) {
-    const message = {
-      id: createChatMessageId(),
-      sender: "You",
-      senderId: appUser.id,
-      text,
-      createdAt: new Date().toISOString(),
-      time: formatChatTime(new Date()),
-      replyTo: replyTo || null,
-      sendStatus: navigator.onLine ? "sending" : "failed",
-    };
+    const message = createOutgoingMessage(text, replyTo || null);
     chat.messages.push(message);
     queuePendingMessage(chat, message);
     cacheConversationMessages(state.messages);
@@ -4746,7 +4688,7 @@ function openStudentProfileEditor() {
   document.querySelector("#profile-location").value = state.profile.location || "";
   openModal("profile-modal");
 }
-document.querySelector("#profile-menu").addEventListener("click", () => showPage("profile-settings"));
+document.querySelector("#profile-menu").addEventListener("click", () => showPage("profile-settings", { focusHeading: true }));
 async function updatePushSettingsStatus() {
   const button = document.querySelector("#settings-push-toggle");
   const help = document.querySelector("#settings-push-help");
@@ -5703,7 +5645,7 @@ document.querySelector("#booking-tabs").addEventListener("click", (event) => {
 document.querySelector("#earnings-export").addEventListener("click", () => {
   const completed = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Completed");
   const rows = [["Service", "Customer", "Date", "Amount"], ...completed.map((booking) => [booking.service, booking.customer || state.profile.name, booking.date, currency(booking.price)])];
-  const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\r\n");
+  const csv = window.skillmateCsv.encode(rows);
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url; link.download = "skillmate-earnings.csv"; link.click();

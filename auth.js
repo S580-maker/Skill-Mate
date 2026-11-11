@@ -1,4 +1,4 @@
-const { maskEmail, getResendRetryDelay } = globalThis.skillmateAuthUtils;
+const { maskEmail, getResendRetryDelay, requestAuth } = globalThis.skillmateAuthUtils;
 const authClient = window.skillmateSupabase;
 const authForm = document.querySelector("#auth-form");
 const authMessage = document.querySelector("#auth-message");
@@ -74,7 +74,7 @@ async function startSessionOtp(session) {
   googleButton.disabled = true;
   authMessage.textContent = "Sending your verification code…";
   try {
-    const response = await fetch("/api/auth/session-otp", {
+    const response = await requestAuth("/api/auth/session-otp", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -116,7 +116,7 @@ async function startGoogleOtp(session) {
   button.setAttribute("aria-busy", "true");
   authMessage.textContent = "Sending your verification code…";
   try {
-    const response = await fetch("/api/auth/google-2fa", {
+    const response = await requestAuth("/api/auth/google-2fa", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -173,6 +173,7 @@ function setPasswordVisibility(input, button, visible, label) {
 function friendlyAuthError(error, mode) {
   const code = (error?.code || "").toLowerCase();
   const message = (error?.message || "").toLowerCase();
+  if (error?.cause?.name === "TimeoutError") return error.message;
   if (isInvalidRefreshTokenError(error)) {
     return "Your sign-in session expired. Please sign in again.";
   }
@@ -310,7 +311,7 @@ async function submitOtpCode(event) {
   message.classList.remove("success");
   challenge.classList.remove("is-error");
   try {
-    const response = await fetch("/api/auth/verify", {
+    const response = await requestAuth("/api/auth/verify", {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -467,7 +468,7 @@ document.querySelector("#otp-resend").addEventListener("click", async () => {
   message.classList.remove("success");
   let response;
   try {
-    response = await fetch("/api/auth/resend", { method: "POST", credentials: "same-origin" });
+    response = await requestAuth("/api/auth/resend", { method: "POST", credentials: "same-origin" });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Could not resend your code.");
     message.textContent = result.message;
@@ -494,7 +495,7 @@ document.querySelector("#otp-resend").addEventListener("click", async () => {
 
 document.querySelector("#otp-back").addEventListener("click", () => {
   if (authSubmitting || document.querySelector("#auth-otp").classList.contains("is-success")) return;
-  fetch("/api/auth/sign-in", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
+  requestAuth("/api/auth/sign-in", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
   sessionOtpStarted = false;
   if (window.sessionStorage.getItem("skillmate-google-otp-active") === "1" || sessionOtpStarted) {
     sessionOtpStarted = false;
@@ -705,7 +706,7 @@ authForm.addEventListener("submit", async (event) => {
         authMessage.textContent = "Enter your name and university to create an account.";
         return;
       }
-      const response = await fetch("/api/auth/sign-up", {
+      const response = await requestAuth("/api/auth/sign-up", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",
@@ -730,7 +731,7 @@ authForm.addEventListener("submit", async (event) => {
       await window.syncSkillmateServerSession(refreshedSession.session);
       window.location.assign("index.html");
     } else {
-      const response = await fetch("/api/auth/sign-in", {
+      const response = await requestAuth("/api/auth/sign-in", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",

@@ -21,7 +21,9 @@
   async function readAsset(file) {
     if (!/^[a-z-]+\.(svg|html)$/.test(file)) throw new Error("Unsupported illustration path");
     if (!cache.has(file)) {
-      const request = fetch(`/assets/illustrations/storyset/${file}`, { credentials: "omit" })
+      const controller = new AbortController();
+      const deadline = setTimeout(() => controller.abort(), 8000);
+      const request = fetch(`/assets/illustrations/storyset/${file}`, { credentials: "omit", signal: controller.signal })
         .then(async response => {
           if (!response.ok) throw new Error("Illustration unavailable");
           const text = await response.text();
@@ -45,7 +47,8 @@
           svg.setAttribute("aria-hidden", "true");
           svg.setAttribute("focusable", "false");
           return { svg, styles };
-        }).catch(error => { cache.delete(file); throw error; });
+        }).catch(error => { if (cache.get(file) === request) cache.delete(file); throw error; })
+        .finally(() => clearTimeout(deadline));
       cache.set(file, request);
     }
     return cache.get(file);
@@ -77,6 +80,9 @@
     connectedCallback() {
       this.asset = assets[this.getAttribute("name")];
       if (!this.asset) return;
+      // A removed empty state can be reattached after connectivity recovers.
+      this.failed = false;
+      this.removeAttribute("data-unavailable");
       mounted.add(this);
       if (!this.shadowRoot.firstChild) {
         const style = document.createElement("style"); style.textContent = frameStyles;
@@ -103,20 +109,22 @@
       this.syncMotion();
     }
     async load() {
-      if (this.loading || this.failed) return;
+      if (this.loading || this.failed || this.hasAttribute("data-ready")) return;
       this.loading = true;
       const version = ++this.version;
       try {
         this.staticAsset = await readAsset(`${this.getAttribute("name")}.svg`);
         let artwork = this.staticAsset;
-        if (this.asset.animatedFile && !reducedMotion.matches) {
+        if (this.asset.animatedFile && !reducedMotion.matches && !this.finished) {
           try { artwork = await readAsset(this.asset.animatedFile); } catch { /* Use the original SVG. */ }
         }
         if (!this.isConnected || version !== this.version) return;
-        this.paint(artwork, artwork === this.staticAsset && !reducedMotion.matches);
+        if (reducedMotion.matches || this.finished) artwork = this.staticAsset;
+        this.paint(artwork, artwork === this.staticAsset && !reducedMotion.matches && !this.finished);
         this.setAttribute("data-ready", "");
         this.syncMotion();
       } catch {
+        if (!this.isConnected || version !== this.version) return;
         this.failed = true;
         this.setAttribute("data-unavailable", "");
         // The original icon, copy and action remain usable without the artwork.
@@ -124,10 +132,19 @@
         if (version === this.version) this.loading = false;
       }
     }
+    retry() {
+      if (!this.failed) return;
+      this.failed = false;
+      this.removeAttribute("data-unavailable");
+      if (this.visible || this.getAttribute("loading") === "eager") this.load();
+    }
     paint(artwork, gentle = false) {
+      if (this.paintedAsset === artwork && this.gentle === gentle) return;
       const style = document.createElement("style"); style.textContent = artwork.styles;
       this.art.replaceChildren(style, artwork.svg.cloneNode(true));
       this.art.classList.toggle("gentle", gentle);
+      this.paintedAsset = artwork;
+      this.gentle = gentle;
     }
     animations() { return this.art?.getAnimations({ subtree: true }) || []; }
     pause() { this.animations().forEach(animation => animation.pause()); }
@@ -141,7 +158,7 @@
       if (!this.art) return;
       if (reducedMotion.matches) { this.settle(); return; }
       if (!this.visible || document.hidden) { this.pause(); return; }
-      if (this.finished) { if (this.staticAsset) this.paint(this.staticAsset); return; }
+      if (this.finished) return;
       this.animations().forEach(animation => { if (animation.playState === "paused") animation.play(); });
       // Even an infinite official export settles back to the original static artwork.
       if (this.hasAttribute("data-ready") && !this.finishTimer) this.finishTimer = setTimeout(() => this.settle(), 4500);
@@ -150,6 +167,7 @@
   customElements.define("skillmate-illustration", SkillmateIllustration);
   reducedMotion.addEventListener("change", () => mounted.forEach(element => element.syncMotion()));
   document.addEventListener("visibilitychange", () => mounted.forEach(element => element.syncMotion()));
+  window.addEventListener("online", () => mounted.forEach(element => element.retry()));
 
   function mount(target, name, fallback) {
     if (!target || !assets[name] || target.querySelector("skillmate-illustration")) return;
