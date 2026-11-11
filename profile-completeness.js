@@ -5,7 +5,7 @@
   window.renderProfileCompleteness = (profile) => {
     container.replaceChildren();
     const fields = [profile.name, profile.university, profile.studentIdNumber].map(value => Boolean(value?.trim()));
-    const dismissalKey = `skillmate-profile-reminder:${profile.email || profile.name || "student"}`;
+    const dismissalKey = `skillflex-profile-reminder:${profile.email || profile.name || "student"}`;
     let storedDismissal = false;
     try { storedDismissal = window.sessionStorage?.getItem(dismissalKey) === "dismissed"; } catch {}
     if (profile.identityComplete || fields.every(Boolean) || dismissed.has(dismissalKey) || storedDismissal) return;
@@ -21,7 +21,7 @@
     section.querySelector(".profile-completeness-value span").textContent = completed + " of 3 details added";
     section.querySelector("[role=progressbar]").setAttribute("aria-valuenow", percentage);
     section.querySelector(".profile-completeness-track span").style.width = percentage + "%";
-    section.querySelector("button").addEventListener("click", () => window.dispatchEvent(new Event("skillmate:edit-profile")));
+    section.querySelector("button").addEventListener("click", () => window.dispatchEvent(new Event("skillflex:edit-profile")));
     section.querySelector(".reminder-dismiss").addEventListener("click", () => {
       dismissed.add(dismissalKey);
       try { window.sessionStorage?.setItem(dismissalKey, "dismissed"); } catch {}

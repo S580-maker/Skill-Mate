@@ -45,7 +45,7 @@ test("Edge Function rejects other database events before forwarding", async () =
   const handler = await createEdgeFunction({
     environment: {
       PUSH_DISPATCH_SECRET: "server-secret",
-      PUSH_DISPATCH_URL: "https://skillmate.example/api/push-dispatch",
+      PUSH_DISPATCH_URL: "https://skillflex.example/api/push-dispatch",
     },
     fetchHandler: async () => { dispatched = true; return new Response("{}", { status: 200 }); },
   });
@@ -77,7 +77,7 @@ test("Edge Function forwards valid notification inserts using the server-only di
   const handler = await createEdgeFunction({
     environment: {
       PUSH_DISPATCH_SECRET: "server-secret",
-      PUSH_DISPATCH_URL: "https://skillmate.example/api/push-dispatch",
+      PUSH_DISPATCH_URL: "https://skillflex.example/api/push-dispatch",
     },
     fetchHandler: async (url, options) => {
       forwarded = { url: String(url), options };
@@ -90,8 +90,8 @@ test("Edge Function forwards valid notification inserts using the server-only di
     body: JSON.stringify(insertEvent()),
   }));
   assert.equal(response.status, 200);
-  assert.equal(forwarded.url, "https://skillmate.example/api/push-dispatch");
-  assert.equal(forwarded.options.headers["x-skillmate-push-secret"], "server-secret");
+  assert.equal(forwarded.url, "https://skillflex.example/api/push-dispatch");
+  assert.equal(forwarded.options.headers["x-skillflex-push-secret"], "server-secret");
   assert.deepEqual(JSON.parse(forwarded.options.body), insertEvent());
 });
 
@@ -100,7 +100,7 @@ test("Edge Function forwards negotiation notifications linked to their conversat
   const handler = await createEdgeFunction({
     environment: {
       PUSH_DISPATCH_SECRET: "server-secret",
-      PUSH_DISPATCH_URL: "https://skillmate.example/api/push-dispatch",
+      PUSH_DISPATCH_URL: "https://skillflex.example/api/push-dispatch",
     },
     fetchHandler: async (url, options) => {
       forwarded = { url: String(url), options };
@@ -123,7 +123,7 @@ test("Edge Function refuses to forward to a non-HTTPS dispatch URL", async () =>
   const handler = await createEdgeFunction({
     environment: {
       PUSH_DISPATCH_SECRET: "server-secret",
-      PUSH_DISPATCH_URL: "http://skillmate.example/api/push-dispatch",
+      PUSH_DISPATCH_URL: "http://skillflex.example/api/push-dispatch",
     },
   });
   const response = await handler(new Request("https://edge.example/functions/v1/push-notification-webhook", {

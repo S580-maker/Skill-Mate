@@ -1,4 +1,4 @@
-# Skillmate modernization — 11 November 2026
+# Skill Flex modernization — 11 November 2026
 
 This is an incremental modernization of the existing marketplace. Express, Supabase authentication, existing database records and server-authoritative booking permissions are retained. No production deployment, production database migration, RLS change, authentication-provider change or real email/message send was performed.
 

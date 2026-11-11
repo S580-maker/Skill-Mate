@@ -2,7 +2,7 @@
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
-  else root.skillmateApi = api;
+  else root.skillflexApi = api;
 })(typeof window === "undefined" ? globalThis : window, function () {
   /** @param {string | URL | Request} url @param {RequestInit} [options] @param {RequestConfig} [config] */
   async function request(url, options = {}, { fetch: transport = globalThis.fetch, timeout = 15000 } = {}) {

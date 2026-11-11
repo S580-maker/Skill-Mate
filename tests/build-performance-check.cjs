@@ -8,7 +8,7 @@ const root = path.resolve(__dirname,'..');
 (async()=>{
  const samples=[];
  for (let round=0;round<3;round++) for(const mode of ['source','built']) {
-  process.env.SKILLMATE_TEST_ROOT=mode==='built'?path.join(root,'dist/public'):root;
+  process.env.SKILLFLEX_TEST_ROOT=mode==='built'?path.join(root,'dist/public'):root;
   const h=await start();
   try {
    await h.viewport(375,900);
@@ -17,7 +17,7 @@ const root = path.resolve(__dirname,'..');
    await h.call('Network.setCacheDisabled',{cacheDisabled:true});
    await h.call('Network.emulateNetworkConditions',{offline:false,latency:60,downloadThroughput:300000,uploadThroughput:125000});
    await h.call('Emulation.setCPUThrottlingRate',{rate:4});
-   await h.call('Page.addScriptToEvaluateOnNewDocument',{source:`window.__perf={lcp:0,cls:0};new PerformanceObserver(list=>list.getEntries().forEach(e=>window.__perf.lcp=e.startTime)).observe({type:'largest-contentful-paint',buffered:true});new PerformanceObserver(list=>list.getEntries().forEach(e=>{if(!e.hadRecentInput)window.__perf.cls+=e.value})).observe({type:'layout-shift',buffered:true});document.addEventListener('skillmate:workspace-ready',()=>window.__perf.ready=performance.now(),{once:true});`});
+   await h.call('Page.addScriptToEvaluateOnNewDocument',{source:`window.__perf={lcp:0,cls:0};new PerformanceObserver(list=>list.getEntries().forEach(e=>window.__perf.lcp=e.startTime)).observe({type:'largest-contentful-paint',buffered:true});new PerformanceObserver(list=>list.getEntries().forEach(e=>{if(!e.hadRecentInput)window.__perf.cls+=e.value})).observe({type:'layout-shift',buffered:true});document.addEventListener('skillflex:workspace-ready',()=>window.__perf.ready=performance.now(),{once:true});`});
    await h.open('index.html#home');
    await h.waitFor('window.__perf.ready',30000);
    await h.evaluate('document.fonts.ready');await h.wait(1000);

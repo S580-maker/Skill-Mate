@@ -127,7 +127,7 @@
     const route = String(hash).replace(/^#/, "") || "home";
     root.innerHTML = `<div class="sk-contents" aria-hidden="true">${pageMarkup(route)}</div>`;
     root.setAttribute("aria-busy", "true");
-    root.setAttribute("aria-label", "Loading your Skillmate workspace");
+    root.setAttribute("aria-label", "Loading your Skill Flex workspace");
     root.dataset.skeletonRoute = Object.hasOwn(routes, route) ? route : "generic";
   }
 
@@ -145,7 +145,7 @@
     if (root) { root.innerHTML = adminMarkup(); root.parentElement?.setAttribute("aria-busy", "true"); }
   }
 
-  window.skillmateLoading = { markup, show, showError, withTimeout, errorMarkup, pageMarkup, mountStartup, mountAdmin };
+  window.skillflexLoading = { markup, show, showError, withTimeout, errorMarkup, pageMarkup, mountStartup, mountAdmin };
   if (typeof document.getElementById === "function") { mountStartup(); mountAdmin(); }
   window.addEventListener?.("hashchange", () => {
     if (document.body.classList.contains("app-auth-pending")) mountStartup();

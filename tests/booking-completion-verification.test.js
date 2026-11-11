@@ -86,7 +86,7 @@ test("completion persistence keeps provider verification pending through renders
       const calls = [];
       let finishWrite;
       const context = {
-        window: { skillmateBookingPolicy: require("../booking-policy") },
+        window: { skillflexBookingPolicy: require("../booking-policy") },
         state, pendingBookingStatuses: new Map(),
         isOwnBooking: () => scenario.provider,
         toDatabaseStatus: value => value.toLowerCase(),
@@ -108,7 +108,7 @@ test("completion persistence keeps provider verification pending through renders
       vm.createContext(context);
       // Exercise the real pending-status overlay used by renderAll, too.
       vm.runInContext(userScript.slice(userScript.indexOf("function renderAll()"),
-        userScript.indexOf("  window.skillmateGrowth?.render();", userScript.indexOf("function renderAll()")))
+        userScript.indexOf("  window.skillflexGrowth?.render();", userScript.indexOf("function renderAll()")))
         + "recordRender(); }", context);
       vm.runInContext(userScript.slice(userScript.indexOf("async function persistBookingStatus"),
         userScript.indexOf("function handleAppointmentActions")), context);

@@ -72,7 +72,7 @@ const fakeClient = `(() => {
   };
   const session = { access_token: "fake", refresh_token: "fake", user: { id: "me", email: "ama@st.ug.edu.gh", app_metadata: { provider: "email" } } };
   const channel = { on() { return channel; }, subscribe(callback) { callback?.("SUBSCRIBED"); return channel; }, track: async () => "ok", presenceState: () => ({}), send: async () => "ok", unsubscribe: async () => "ok" };
-  window.skillmateSupabase = {
+  window.skillflexSupabase = {
     auth: { onAuthStateChange() { return { data: { subscription: { unsubscribe() {} } } }; }, getSession: async () => ({ data: { session: params.has("signedout") ? null : session }, error: null }), signOut: async () => ({ error: null }) },
     from: table => query(table, data[table] || []),
     rpc: name => query("rpc:" + name, []),
@@ -80,9 +80,9 @@ const fakeClient = `(() => {
     removeChannel: async () => "ok",
     storage: { from: () => ({ getPublicUrl: () => ({ data: { publicUrl: "" } }), createSignedUrl: async () => ({ data: null, error: null }) }) },
   };
-  window.syncSkillmateServerSession = async () => {};
-  window.clearSkillmateServerSession = async () => {};
-  window.skillmateRestoreSession = async () => params.has("signedout") ? null : session;
+  window.syncSkillflexServerSession = async () => {};
+  window.clearSkillflexServerSession = async () => {};
+  window.skillflexRestoreSession = async () => params.has("signedout") ? null : session;
 })();`;
 
 function createServer(siteRoot = root) {
@@ -91,7 +91,7 @@ function createServer(siteRoot = root) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Content-Security-Policy", serializePolicy(contentSecurityPolicy({ production: false })));
     if (name === "supabase-client.js") { res.setHeader("Content-Type", mime[".js"]); res.end(fakeClient); return; }
-    if (name === "supabase-config.js") { res.setHeader("Content-Type", mime[".js"]); res.end("window.SKILLMATE_SUPABASE_CONFIG={url:'https://fake.supabase.test',anonKey:'fake'};"); return; }
+    if (name === "supabase-config.js") { res.setHeader("Content-Type", mime[".js"]); res.end("window.SKILLFLEX_SUPABASE_CONFIG={url:'https://fake.supabase.test',anonKey:'fake'};"); return; }
     if (name.startsWith("assets/vendor/")) { res.setHeader("Content-Type", mime[".js"]); res.end(""); return; }
     const file = path.resolve(siteRoot, name);
     if (!file.startsWith(siteRoot + path.sep) || !mime[path.extname(file)] || !/^(assets[\\/]|[\w.-]+$)/.test(name) || !fs.existsSync(file)) { res.writeHead(404).end(); return; }
@@ -101,8 +101,8 @@ function createServer(siteRoot = root) {
 }
 
 async function start() {
-  const output = fs.mkdtempSync(path.join(os.tmpdir(), "skillmate-loading-"));
-  const server = createServer(path.resolve(process.env.SKILLMATE_TEST_ROOT || root));
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), "skillflex-loading-"));
+  const server = createServer(path.resolve(process.env.SKILLFLEX_TEST_ROOT || root));
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const executable = process.env.CHROME_PATH || [
@@ -157,7 +157,7 @@ async function start() {
     // theme.js reads this key before first paint, so it is set ahead of every document.
     async setTheme(theme) {
       if (themeScript) await call("Page.removeScriptToEvaluateOnNewDocument", { identifier: themeScript });
-      ({ identifier: themeScript } = await call("Page.addScriptToEvaluateOnNewDocument", { source: `try{localStorage.setItem("skillmate-theme",${JSON.stringify(theme)})}catch{}` }));
+      ({ identifier: themeScript } = await call("Page.addScriptToEvaluateOnNewDocument", { source: `try{localStorage.setItem("skillflex-theme",${JSON.stringify(theme)})}catch{}` }));
     },
     async open(route) {
       // A hash-only change would be a same-document navigation, so reset the page first.

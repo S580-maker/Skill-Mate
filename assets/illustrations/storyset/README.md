@@ -1,8 +1,8 @@
-# Skillmate Storyset illustrations
+# Skill Flex Storyset illustrations
 
 Seven genuine **Rafiki** SVG illustrations were downloaded from the official Storyset illustration pages on 2026-11-09. No generated or third-party substitute artwork is included. See `sources.json` for the official page URLs, download URLs, original and installed SHA-256 hashes, and modifications.
 
-The installed files are official **static SVG artwork with Skillmate-authored CSS motion** (a short entrance and gentle float). They are not prebuilt animations exported from Storyset's animation editor. The helper also supports reviewed official animation exports as described below.
+The installed files are official **static SVG artwork with Skill Flex-authored CSS motion** (a short entrance and gentle float). They are not prebuilt animations exported from Storyset's animation editor. The helper also supports reviewed official animation exports as described below.
 
 | Placement | Official illustration | Installed file |
 | --- | --- | --- |
@@ -14,13 +14,13 @@ The installed files are official **static SVG artwork with Skillmate-authored CS
 | No selected chat | [Chatting — Rafiki](https://storyset.com/illustration/chatting/rafiki) | `messages.svg` |
 | Booking request saved | [Confirmed — Rafiki](https://storyset.com/illustration/confirmed/rafiki) | `success.svg` |
 
-The original blue accent is recolored to Skillmate navy `#102D72`, with muted gold `#E9DDBA` and cream `#F7F4EC` replacing two neutral shades. Shapes, skin tones, and remaining colors are preserved. The cream illustration canvas keeps dark artwork readable in both app themes.
+The original blue accent is recolored to Skill Flex navy `#102D72`, with muted gold `#E9DDBA` and cream `#F7F4EC` replacing two neutral shades. Shapes, skin tones, and remaining colors are preserved. The cream illustration canvas keeps dark artwork readable in both app themes.
 
 ## License and attribution
 
 - Artwork is by Storyset / Freepik Company and remains subject to [Storyset's terms](https://storyset.com/terms).
 - This integration uses the attribution-required license. Each page displays one keyboard-accessible "Artwork: Storyset" link in its footer. Repeated labels under individual illustrations have been removed. Keep the footer credit when using the assets.
-- Storyset permits modification under its license; it restricts resale, sublicensing and distribution as standalone stock resources. These assets are used as part of Skillmate, not as an asset library for redistribution.
+- Storyset permits modification under its license; it restricts resale, sublicensing and distribution as standalone stock resources. These assets are used as part of Skill Flex, not as an asset library for redistribution.
 - Do not remove attribution based merely on having a Freepik account. Storyset's terms specify a qualifying Flaticon Premium subscription and downloading during that subscription for attribution-free use. Retain the relevant license evidence if switching licenses.
 - If handing this project to another owner or distributing the repository, review the terms' transfer/client-use conditions; these source files do not grant others a stock-asset license.
 
@@ -50,7 +50,7 @@ The same official assets also appear on the main pages, independently of empty l
 
 The public hero and auth art are eager-loaded and have preloaded native image fallbacks, so they do not depend on scrolling or JavaScript to become visible. Each page footer includes an attribution link that remains visible with or without JavaScript. The existing seven placements are retained. No additional asset downloads or libraries are needed.
 
-- `window.skillmateIllustrations.mount(container, name, existingIcon)` adds a reusable `<skillmate-illustration>` while retaining the existing icon as its fallback.
+- `window.skillflexIllustrations.mount(container, name, existingIcon)` adds a reusable `<skillflex-illustration>` while retaining the existing icon as its fallback.
 - Assets are fetched when visible (or immediately with `loading="eager"`), from this local directory, and cached in memory. No runtime Storyset requests or animation libraries are used.
 - Shadow DOM isolates repeated SVG IDs, styles, and keyframes. Only known asset keys and local filenames are accepted.
 - Offscreen/hidden-tab motion pauses. Motion settles to the original static SVG within 4.5 seconds of its first visible playback, including infinite exported animations.

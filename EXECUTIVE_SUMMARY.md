@@ -1,4 +1,4 @@
-# Executive Summary: Skill-Mate State Management Check
+# Executive Summary: Skill Flex State Management Check
 
 **Question Asked:** "Check the website if has state management everywhere"
 
@@ -53,7 +53,7 @@ In-Memory Maps (7 types)   ← Lost on refresh
   └─ priceNegotiations
 
 HTTP Cookies (1)           ← Server-side session
-  └─ skillmate_session
+  └─ skillflex_session
 ```
 
 **Verdict:** Storage is **fragmented across 4+ systems with no coordination**.
@@ -90,7 +90,7 @@ When you:
    - SPA gets slower over extended sessions
 
 4. **No State Versioning**
-   - localStorage key: `"skillmate-student-demo-v1"` (hardcoded)
+   - localStorage key: `"skillflex-student-demo-v1"` (hardcoded)
    - No migration for schema changes
    - Old cached data could break new features
 
@@ -122,19 +122,19 @@ When you:
 1. **Implement global state bus**
    ```javascript
    // All pages subscribe to changes
-   window.addEventListener('skillmate:state-change', (e) => {
+   window.addEventListener('skillflex:state-change', (e) => {
      // Refresh local state if needed
    });
    ```
 
 2. **Add logout cleanup**
    ```javascript
-   window.skillmateSignOut = async () => {
+   window.skillflexSignOut = async () => {
      // Clear all storage
      localStorage.clear();
      sessionStorage.clear();
      // Notify all pages
-     window.dispatchEvent(new CustomEvent('skillmate:signed-out'));
+     window.dispatchEvent(new CustomEvent('skillflex:signed-out'));
    };
    ```
 
@@ -168,7 +168,7 @@ When you:
 
 6. **Implement Broadcast Channel API**
    ```javascript
-   const channel = new BroadcastChannel('skillmate-state');
+   const channel = new BroadcastChannel('skillflex-state');
    channel.postMessage({ type: 'booking:updated', data });
    channel.onmessage = (e) => handleStateChange(e.data);
    ```
@@ -209,7 +209,7 @@ All files created in: `C:\Users\beans\Desktop\Skill-Mate-main\`
 
 ## Bottom Line
 
-**"Does Skill-Mate have state management everywhere?"**
+**"Does Skill Flex have state management everywhere?"**
 
 ❌ **No.**
 

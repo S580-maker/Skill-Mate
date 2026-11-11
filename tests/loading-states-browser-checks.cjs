@@ -141,7 +141,7 @@ const pass = message => console.log(`PASS ${message}`);
     assert.ok(await evaluate('Boolean(document.querySelector("#provider-detail-content .showcase-identity"))'));
     assert.equal(await evaluate('document.querySelector("#provider-detail-book").disabled'),false);
     assert.equal(await evaluate('document.querySelector("[data-provider-cv]").getAttribute("aria-busy")'),"true");
-    await harness.screenshot(require('node:path').join(process.env.TEMP || harness.output,'skillmate-detail-loading.png'));
+    await harness.screenshot(require('node:path').join(process.env.TEMP || harness.output,'skillflex-detail-loading.png'));
     await run('await openProviderProfile(window.__second.id);window.__finishCV({data:{signedUrl:"https://example.test/old.pdf"},error:null})');
     await wait(50);
     assert.equal(await evaluate('document.querySelector(".showcase-identity h2").textContent'),await evaluate('window.__second.name'));
@@ -158,7 +158,7 @@ const pass = message => console.log(`PASS ${message}`);
       await waitFor('Boolean(document.querySelector(".sk-admin-chart"))');
       await waitFor('getComputedStyle(document.querySelector("#admin-skeleton")).visibility === "visible"');
       assert.ok(await evaluate(`document.querySelector("#admin-skeleton").scrollWidth <= ${width + 1}`));
-      await harness.screenshot(require('node:path').join(process.env.TEMP || harness.output, `skillmate-admin-loading-${width}.png`));
+      await harness.screenshot(require('node:path').join(process.env.TEMP || harness.output, `skillflex-admin-loading-${width}.png`));
     }
     await harness.open('admin.html?admin=1&delay=0');
     await waitFor('document.body.classList.contains("admin-ready")', 20000);

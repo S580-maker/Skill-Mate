@@ -1,4 +1,4 @@
-# Skillmate UI polish and verification — 10 November 2026
+# Skill Flex UI polish and verification — 10 November 2026
 
 ## Completed work
 

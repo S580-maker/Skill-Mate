@@ -19,7 +19,7 @@
 
 ### Authentication
 - **Where:** `supabase-client.js` + `auth.js`
-- **State:** `window.skillmateSession`, `authMode`, OTP flags
+- **State:** `window.skillflexSession`, `authMode`, OTP flags
 - **Storage:** IndexedDB (Supabase), sessionStorage (OTP), HTTP cookies
 - **Auto-sync:** Yes (Supabase handles refresh)
 
@@ -59,22 +59,22 @@
 
 ### localStorage (Browser)
 ```javascript
-localStorage.setItem('skillmate-student-demo-v1', JSON.stringify(state));
-localStorage.setItem('skillmate-theme', 'dark');
-localStorage.setItem('skillmate-chat-messages:user-123', JSON.stringify(messages));
-localStorage.setItem('skillmate-dashboard-load-estimate-ms-v1', '5234');
+localStorage.setItem('skillflex-student-demo-v1', JSON.stringify(state));
+localStorage.setItem('skillflex-theme', 'dark');
+localStorage.setItem('skillflex-chat-messages:user-123', JSON.stringify(messages));
+localStorage.setItem('skillflex-dashboard-load-estimate-ms-v1', '5234');
 ```
 
 ### sessionStorage (Tab-specific)
 ```javascript
-sessionStorage.setItem('skillmate-google-otp-pending', '1');
-sessionStorage.setItem('skillmate-google-otp-active', '1');
+sessionStorage.setItem('skillflex-google-otp-pending', '1');
+sessionStorage.setItem('skillflex-google-otp-active', '1');
 ```
 
 ### IndexedDB (Supabase SDK)
 - Automatically managed by Supabase
 - Stores: Session tokens, user metadata, cached queries
-- Accessed via: `window.skillmateSupabase.auth`
+- Accessed via: `window.skillflexSupabase.auth`
 
 ### Supabase Tables
 ```sql
@@ -88,7 +88,7 @@ price_negotiations    -- Negotiation history (if migration applied)
 ```
 
 ### HTTP Cookies
-- `skillmate_session`: Server-side session cookie (secure, httpOnly)
+- `skillflex_session`: Server-side session cookie (secure, httpOnly)
 - Set by: `/api/session` endpoint
 - Used for: CSRF protection, server-side auth
 
@@ -127,7 +127,7 @@ User clicks theme toggle
 theme.js click handler
        ↓
 document.documentElement.dataset.theme = 'dark'
-localStorage.setItem('skillmate-theme', 'dark')
+localStorage.setItem('skillflex-theme', 'dark')
        ↓
 CSS [data-theme="dark"] rules apply
        ↓
@@ -191,7 +191,7 @@ Search input filters DOM
 
 - [ ] **Check localStorage:**
   ```js
-  Object.entries(localStorage).filter(([k]) => k.includes('skillmate')).forEach(([k,v]) => console.log(k, JSON.parse(v)))
+  Object.entries(localStorage).filter(([k]) => k.includes('skillflex')).forEach(([k,v]) => console.log(k, JSON.parse(v)))
   ```
 
 - [ ] **Check sessionStorage:**
@@ -201,7 +201,7 @@ Search input filters DOM
 
 - [ ] **Check auth state:**
   ```js
-  console.log(window.skillmateSession, window.skillmateSupabase?.auth.session())
+  console.log(window.skillflexSession, window.skillflexSupabase?.auth.session())
   ```
 
 - [ ] **Check dashboard state:**
@@ -221,7 +221,7 @@ Search input filters DOM
 
 - [ ] **Verify Supabase connection:**
   ```js
-  console.log(window.skillmateSupabase.channel('*').state)
+  console.log(window.skillflexSupabase.channel('*').state)
   ```
 
 - [ ] **Check for errors in console:**
@@ -250,7 +250,7 @@ Search input filters DOM
 1. **Always call `saveState()` after mutations** (dashboard only)
 2. **Use `renderAll()` to sync UI** after async updates
 3. **Wrap async actions in `runAction()`** for loading/error states
-4. **Listen to `skillmate:auth-state-change`** events in other components
+4. **Listen to `skillflex:auth-state-change`** events in other components
 5. **Check `appSupabase` before accessing Supabase data** (might be null)
 6. **Use real-time subscriptions for live updates**, not polling
 7. **Clear drafts on successful send**, not before

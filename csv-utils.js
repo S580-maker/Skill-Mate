@@ -2,7 +2,7 @@
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
-  else root.skillmateCsv = api;
+  else root.skillflexCsv = api;
 })(typeof window === "undefined" ? globalThis : window, function () {
   function cell(value) {
     const text = String(value ?? "");

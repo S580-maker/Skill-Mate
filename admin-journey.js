@@ -7,12 +7,12 @@
   const stages = { discover: "Discover", search: "Search", profile_open: "Provider profiles", booking_open: "Booking forms", booking_sent: "Requests sent" };
   let busy = false;
   async function refresh() {
-    if (busy || !window.skillmateSupabase) return;
+    if (busy || !window.skillflexSupabase) return;
     busy = true; button.disabled = true;
     status.textContent = "Loading activity…";
     panel.setAttribute("aria-busy", "true");
     try {
-      const { data, error } = await withAdminTimeout(window.skillmateSupabase.rpc("read_marketplace_journey"), "Activity took too long to load.");
+      const { data, error } = await withAdminTimeout(window.skillflexSupabase.rpc("read_marketplace_journey"), "Activity took too long to load.");
       if (error) throw error;
       panel.replaceChildren();
       for (const [event, label] of Object.entries(stages)) {

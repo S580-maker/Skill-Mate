@@ -8,7 +8,7 @@
   if (!isOAuthCallback) return;
 
   const loginUrl = new URL("/login.html", window.location.origin);
-  loginUrl.searchParams.set("skillmate-google-otp", "1");
+  loginUrl.searchParams.set("skillflex-google-otp", "1");
   for (const parameter of ["code", "state", "next", "error", "error_description", "error_code"]) {
     if (queryParams.has(parameter)) loginUrl.searchParams.set(parameter, queryParams.get(parameter));
   }

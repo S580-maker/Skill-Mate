@@ -1,11 +1,11 @@
 /* Extra marketplace flows. All connected writes go through verified-session RPCs. */
 (() => {
-  const utils = window.skillmateGrowthUtils;
+  const utils = window.skillflexGrowthUtils;
   const $ = selector => document.querySelector(selector);
   const filters = $("#marketplace-filters");
   const filtersToggle = $("#marketplace-filter-trigger");
   const ownId = () => appUser?.id || ownProviderId();
-  const demoKey = "skillmate-marketplace-growth-v1";
+  const demoKey = "skillflex-marketplace-growth-v1";
   let schedules = [];
   let requests = [];
   let responses = [];
@@ -103,7 +103,7 @@
     $("#availability-summary-status").textContent = "Unsaved changes";
   });
   function reviewKey() { return `${ownId()}:${pendingCustomerReviews().map(item => item.id).sort().join(",")}`; }
-  const growth = window.skillmateGrowth = {
+  const growth = window.skillflexGrowth = {
     matches(provider) { return utils.matchesFilters(provider, readFilters(), Boolean(scheduleFor(provider.id))); },
     compare(left, right) { return utils.compareServices(left, right, readFilters().sort); },
     reviewDismissed() { return reviewDismissal === reviewKey(); },
@@ -118,7 +118,7 @@
       return schedule ? `Published appointment hours · ${schedule.timezone}. Choose a date to check current slots.`
         : "Ask the provider about available times. Your requested appointment needs their confirmation.";
     },
-    async refresh({ read = request => window.skillmateLoading.withTimeout(request) } = {}) {
+    async refresh({ read = request => window.skillflexLoading.withTimeout(request) } = {}) {
       if (!appSupabase || !appUser) return;
       try {
         const result = await read(appSupabase.from("provider_availability").select("*").limit(1000));
@@ -192,16 +192,16 @@
       $("#request-board-refresh").disabled = true;
       const hadRequests = requests.length > 0;
       if (!hadRequests) $("#request-board-grid").replaceChildren();
-      const finishLoading = window.skillmateLoading
-        ? window.skillmateLoading.show($("#request-board-grid"), { count: 6, variant: "requests", label: "Loading campus requests", delay: 150, preserve: hadRequests })
+      const finishLoading = window.skillflexLoading
+        ? window.skillflexLoading.show($("#request-board-grid"), { count: 6, variant: "requests", label: "Loading campus requests", delay: 150, preserve: hadRequests })
         : () => {};
       feedback("#request-board-feedback", "Loading campus requests…");
       try {
         if (appSupabase) {
-          const result = await window.skillmateLoading.withTimeout(appSupabase.from("campus_request_directory").select("*").order("created_at", { ascending: false }).range(0, boardLimit - 1));
+          const result = await window.skillflexLoading.withTimeout(appSupabase.from("campus_request_directory").select("*").order("created_at", { ascending: false }).range(0, boardLimit - 1));
           if (result.error) throw result.error;
           const nextRequests = result.data || [];
-          const replyResult = nextRequests.length ? await window.skillmateLoading.withTimeout(appSupabase.from("campus_request_response_directory").select("*").in("request_id", nextRequests.map(item => item.id)).order("created_at", { ascending: false }).limit(500)) : { data: [] };
+          const replyResult = nextRequests.length ? await window.skillflexLoading.withTimeout(appSupabase.from("campus_request_response_directory").select("*").in("request_id", nextRequests.map(item => item.id)).order("created_at", { ascending: false }).limit(500)) : { data: [] };
           if (replyResult.error) throw replyResult.error;
           requests = nextRequests;
           responses = replyResult.data || [];
@@ -212,7 +212,7 @@
         feedback("#request-board-feedback", "Campus requests could not load. Try Refresh in a moment.", true);
         if (hadRequests) return; // Keep the last successful result during a failed refresh.
         $("#request-board-grid").replaceChildren();
-        window.skillmateLoading.showError($("#request-board-grid"), {
+        window.skillflexLoading.showError($("#request-board-grid"), {
           title: "Requests are temporarily unavailable",
           message: "Your existing bookings and messages are still available.",
           onRetry: () => {
@@ -392,7 +392,7 @@
       try {
         const conversationId = await rpc("start_request_conversation", { p_request_id: button.dataset.requestChat, p_responder_id: button.dataset.responder });
         await refreshSupabaseState();
-        document.dispatchEvent(new CustomEvent("skillmate:open-conversation", { detail: { conversationId } }));
+        document.dispatchEvent(new CustomEvent("skillflex:open-conversation", { detail: { conversationId } }));
       } catch(error) { showToast(error.message, "error"); } finally { button.disabled = false; }
     } else if (button.hasAttribute("data-more-requests")) { boardLimit += 24; growth.refreshBoard(); }
   });

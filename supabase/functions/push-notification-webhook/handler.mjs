@@ -64,7 +64,7 @@ export function createPushWebhookHandler({ getEnv, fetcher = fetch, logError = c
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-skillmate-push-secret": dispatchSecret,
+          "x-skillflex-push-secret": dispatchSecret,
         },
         body: JSON.stringify(event),
         signal: AbortSignal.timeout(10000),

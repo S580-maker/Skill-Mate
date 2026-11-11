@@ -14,7 +14,7 @@ process.env.SMTP_HOST = "smtp.example.test";
 process.env.SMTP_PORT = "587";
 process.env.SMTP_USER = "mailer@example.test";
 process.env.SMTP_PASS = "test-password";
-process.env.SMTP_FROM = "Skillmate <mailer@example.test>";
+process.env.SMTP_FROM = "Skill Flex <mailer@example.test>";
 
 const {
   googleSignIn,
@@ -44,8 +44,8 @@ function envelope(value) {
   const key = Buffer.from(crypto.hkdfSync(
     "sha256",
     Buffer.from(otpSecret, "utf8"),
-    Buffer.from("Skillmate auth key derivation v1"),
-    Buffer.from("skillmate:challenge-encryption:v1"),
+    Buffer.from("Skill Flex auth key derivation v1"),
+        Buffer.from("skillflex:challenge-encryption:v1"),
     32,
   ));
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
@@ -136,13 +136,13 @@ test("signup stores a pending password only inside authenticated encrypted chall
     assert.equal(requests.some(({ url }) => url.includes("/auth/v1/admin/users")), false);
 
     const challengeToken = decodeURIComponent(startResponse.headers["set-cookie"]
-      .find((cookie) => cookie.startsWith("skillmate_login_challenge="))
+      .find((cookie) => cookie.startsWith("skillflex_login_challenge="))
       .split(";")[0].split("=")[1]);
     const verifyResponse = responseStub();
     const code = emailMessage.text.match(/code is (\d{6})\./)?.[1];
     await verify({
       method: "POST",
-      cookies: { skillmate_login_challenge: challengeToken },
+      cookies: { skillflex_login_challenge: challengeToken },
       body: { code },
     }, verifyResponse);
 
@@ -175,7 +175,7 @@ test("signup and password recovery reject passwords over bcrypt's 72-byte limit"
   const recoveryResponse = responseStub();
   await updateRecoveredPassword({
     method: "PUT",
-    cookies: { skillmate_password_recovery: "recovery-token" },
+    cookies: { skillflex_password_recovery: "recovery-token" },
     body: { password: oversizedPassword },
   }, recoveryResponse);
   assert.equal(recoveryResponse.statusCode, 400);
@@ -240,13 +240,13 @@ test("Google sign-in requires email verification before returning a Supabase ses
     assert.match(emailMessage.text, /finish signing in/);
     assert.equal(storedChallenge.email, "student@example.test");
     const challengeToken = decodeURIComponent(startResponse.headers["set-cookie"]
-      .find(cookie => cookie.startsWith("skillmate_login_challenge="))
+      .find(cookie => cookie.startsWith("skillflex_login_challenge="))
       .split(";")[0].split("=")[1]);
 
     const verifyResponse = responseStub();
     await verify({
       method: "POST",
-      cookies: { skillmate_login_challenge: challengeToken },
+      cookies: { skillflex_login_challenge: challengeToken },
       body: { code: emailMessage.text.match(/code is (\d{6})\./)?.[1] },
     }, verifyResponse);
     assert.equal(verifyResponse.statusCode, 200);
@@ -323,19 +323,19 @@ test("password recovery sends a six-digit code, verifies it, and redeems a one-t
     assert.ok(code, "Recovery email contains exactly six digits");
 
     const challengeCookies = startResponse.headers["set-cookie"];
-    const challengeCookie = challengeCookies.find(cookie => cookie.startsWith("skillmate_login_challenge="));
+    const challengeCookie = challengeCookies.find(cookie => cookie.startsWith("skillflex_login_challenge="));
     assert.ok(challengeCookie);
     const challengeToken = decodeURIComponent(challengeCookie.split(";")[0].split("=")[1]);
 
     const verifyResponse = responseStub();
     await verify(
-      { method: "POST", cookies: { skillmate_login_challenge: challengeToken }, body: { code } },
+      { method: "POST", cookies: { skillflex_login_challenge: challengeToken }, body: { code } },
       verifyResponse,
     );
     assert.equal(verifyResponse.statusCode, 200);
     assert.deepEqual(verifyResponse.body, { recovery: true });
     const recoveryCookie = verifyResponse.headers["set-cookie"]
-      .find(cookie => cookie.startsWith("skillmate_password_recovery="));
+      .find(cookie => cookie.startsWith("skillflex_password_recovery="));
     assert.ok(recoveryCookie, "Successful code verification issues the reset-only cookie");
     const recoveryToken = decodeURIComponent(recoveryCookie.split(";")[0].split("=")[1]);
 
@@ -343,7 +343,7 @@ test("password recovery sends a six-digit code, verifies it, and redeems a one-t
     await updateRecoveredPassword(
       {
         method: "PUT",
-        cookies: { skillmate_password_recovery: recoveryToken },
+        cookies: { skillflex_password_recovery: recoveryToken },
         body: { password: "new-password-123" },
       },
       updateResponse,
@@ -353,12 +353,12 @@ test("password recovery sends a six-digit code, verifies it, and redeems a one-t
     const passwordUpdate = requests.find(request => request.path.endsWith("/auth/v1/admin/users/student-user-id"));
     assert.deepEqual(passwordUpdate.body, { password: "new-password-123" });
     assert.equal(updateResponse.body.session, undefined, "Recovery does not issue a sign-in session");
-    assert.ok(updateResponse.headers["set-cookie"].some(cookie => cookie.startsWith("skillmate_password_recovery=; Max-Age=0")));
+    assert.ok(updateResponse.headers["set-cookie"].some(cookie => cookie.startsWith("skillflex_password_recovery=; Max-Age=0")));
     const replayResponse = responseStub();
     await updateRecoveredPassword(
       {
         method: "PUT",
-        cookies: { skillmate_password_recovery: recoveryToken },
+        cookies: { skillflex_password_recovery: recoveryToken },
         body: { password: "replayed-password-123" },
       },
       replayResponse,
@@ -387,7 +387,7 @@ test("password recovery rejects short passwords before consuming the reset grant
   await updateRecoveredPassword(
     {
       method: "PUT",
-      cookies: { skillmate_password_recovery: "valid-token" },
+      cookies: { skillflex_password_recovery: "valid-token" },
       body: { password: "short" },
     },
     response,
@@ -422,7 +422,7 @@ test("email delivery failure leaves the existing sign-in code active", async () 
     const response = responseStub();
     await resend({
       method: "POST",
-      cookies: { skillmate_login_challenge: "existing-challenge-token" },
+      cookies: { skillflex_login_challenge: "existing-challenge-token" },
     }, response);
 
     assert.equal(response.statusCode, 503);

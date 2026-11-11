@@ -1,4 +1,4 @@
-const adminClient = window.skillmateSupabase;
+const adminClient = window.skillflexSupabase;
 const adminStatus = document.querySelector("#admin-auth-status");
 
 function showAdminGate(message, withLogin = false, withReload = false) {
@@ -80,7 +80,7 @@ async function refreshAdminSystemStatus() {
       ? `Service issue: ${unavailable.join(" and ")} unavailable`
       : "Some services are unavailable";
   } catch (error) {
-    console.error("Could not check Skillmate system status.", error);
+    console.error("Could not check Skill Flex system status.", error);
     status.dataset.status = "unavailable";
     label.textContent = "System status unavailable";
     authStatus.textContent = "Unavailable";
@@ -226,7 +226,7 @@ async function fetchSupportTickets() {
   const status = document.querySelector("#support-queue-status");
   const rows = document.querySelector("#support-ticket-rows");
   status.textContent = "Loading support tickets…";
-  const finishLoading = window.skillmateLoading?.show(rows, { count: 2, variant: "notifications", label: "Loading support tickets", delay: 150, preserve: rows.children.length > 0 }) || (() => {});
+  const finishLoading = window.skillflexLoading?.show(rows, { count: 2, variant: "notifications", label: "Loading support tickets", delay: 150, preserve: rows.children.length > 0 }) || (() => {});
   try {
     const { data, error } = await withAdminTimeout(adminClient.from("support_tickets")
       .select("id, user_id, category, message, status, screenshot_url, created_at")
@@ -299,7 +299,7 @@ async function fetchSupportTickets() {
     status.textContent = ["PGRST205", "42P01"].includes(error.code)
       ? "Support tickets require the settings and support database migration."
       : "Could not load support tickets. Refresh to try again.";
-    if (!rows.children.length) window.skillmateLoading.showError(rows, { message: status.textContent, onRetry: fetchSupportTickets });
+    if (!rows.children.length) window.skillflexLoading.showError(rows, { message: status.textContent, onRetry: fetchSupportTickets });
   }
 }
 
@@ -468,8 +468,8 @@ function updateAdminChart(days) {
 
 async function protectAdminDashboard() {
   if (!adminClient) {
-    showAdminGate(window.skillmateSupabaseError
-      ? `Admin access is locked. ${window.skillmateSupabaseError}`
+    showAdminGate(window.skillflexSupabaseError
+      ? `Admin access is locked. ${window.skillflexSupabaseError}`
       : "Admin access is locked. Configure the Supabase Project URL and public key in the server environment.", true);
     return;
   }
@@ -486,7 +486,7 @@ async function protectAdminDashboard() {
     }
     adminStatus.textContent = "Securing your session…";
     await withAdminTimeout(
-      window.syncSkillmateServerSession(sessionData.session),
+      window.syncSkillflexServerSession(sessionData.session),
       "Securing your session timed out. Check your connection and try again.",
     );
     adminStatus.textContent = "Verifying administrator role…";
@@ -535,7 +535,7 @@ async function protectAdminDashboard() {
     signout.addEventListener("click", async () => {
       signout.disabled = true;
       try {
-        await window.skillmateSignOut();
+        await window.skillflexSignOut();
         window.location.replace("/");
       } catch (error) {
         console.error("Could not sign out.", error);
@@ -699,13 +699,13 @@ async function protectAdminDashboard() {
 if (adminClient) {
   adminClient.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_OUT") {
-      window.clearSkillmateServerSession()
-        .catch((sessionError) => console.error("Could not clear the secure Skillmate session.", sessionError))
+      window.clearSkillflexServerSession()
+        .catch((sessionError) => console.error("Could not clear the secure Skill Flex session.", sessionError))
         .finally(() => window.location.replace("login.html?next=admin"));
     }
     if (event === "TOKEN_REFRESHED" && session) {
-      window.syncSkillmateServerSession(session).catch((syncError) => {
-        console.error("Could not refresh the secure Skillmate session.", syncError);
+      window.syncSkillflexServerSession(session).catch((syncError) => {
+        console.error("Could not refresh the secure Skill Flex session.", syncError);
       });
     }
   });

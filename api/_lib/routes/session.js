@@ -46,7 +46,7 @@ module.exports = async function session(request, response) {
     setSessionCookie(response, accessToken);
     return response.status(204).end();
   } catch (error) {
-    console.error("Could not validate the Skillmate session.", error);
-    return response.status(503).json({ error: "Skillmate could not validate your session. Please try again." });
+    console.error("Could not validate the Skill Flex session.", error);
+    return response.status(503).json({ error: "Skill Flex could not validate your session. Please try again." });
   }
 };

@@ -18,7 +18,7 @@ function createUpstashStore(prefix) {
       const response = await fetch(url, {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify(["EVAL", command, "1", `skillmate:rate-limit:v1:${prefix}:${key}`, String(ttl)]),
+        body: JSON.stringify(["EVAL", command, "1", `skillflex:rate-limit:v1:${prefix}:${key}`, String(ttl)]),
         signal: AbortSignal.timeout(3000),
       });
       if (!response.ok) throw new Error(`Shared rate-limit store returned HTTP ${response.status}.`);

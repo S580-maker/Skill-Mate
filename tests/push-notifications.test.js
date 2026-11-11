@@ -27,7 +27,7 @@ function token(claims = {}) {
 }
 
 function configureSupabase() {
-  process.env.SUPABASE_URL = "https://skillmate-test.supabase.co";
+  process.env.SUPABASE_URL = "https://skillflex-test.supabase.co";
   process.env.SUPABASE_ANON_KEY = token({ role: "anon" });
   process.env.SUPABASE_SERVICE_ROLE_KEY = "server-only-service-key";
 }
@@ -124,7 +124,7 @@ test("push dispatch rejects untrusted webhook requests before accessing subscrip
   const response = responseFixture();
   await handlePushDispatch({
     method: "POST",
-    headers: { "x-skillmate-push-secret": "wrong-secret" },
+    headers: { "x-skillflex-push-secret": "wrong-secret" },
     body: {},
   }, response);
   assert.equal(response.statusCode, 401);
@@ -134,7 +134,7 @@ test("push configuration is withheld until every server-side delivery setting ex
   delete process.env.PUSH_DISPATCH_SECRET;
   process.env.VAPID_PUBLIC_KEY = "public";
   process.env.VAPID_PRIVATE_KEY = "private";
-  process.env.VAPID_SUBJECT = "mailto:admin@skillmate.example";
+    process.env.VAPID_SUBJECT = "mailto:admin@skillflex.example";
   const response = responseFixture();
   const { handlePushConfig } = require("../api/_lib/push");
   await handlePushConfig({}, response);
@@ -146,7 +146,7 @@ test("push dispatch sends a valid notification insert to the recipient's subscri
   const vapid = webpush.generateVAPIDKeys();
   process.env.VAPID_PUBLIC_KEY = vapid.publicKey;
   process.env.VAPID_PRIVATE_KEY = vapid.privateKey;
-  process.env.VAPID_SUBJECT = "mailto:admin@skillmate.example";
+  process.env.VAPID_SUBJECT = "mailto:admin@skillflex.example";
   process.env.PUSH_DISPATCH_SECRET = "expected-secret";
   let requestUrl = "";
   global.fetch = async (url) => {
@@ -156,7 +156,7 @@ test("push dispatch sends a valid notification insert to the recipient's subscri
   const response = responseFixture();
   await handlePushDispatch({
     method: "POST",
-    headers: { "x-skillmate-push-secret": "expected-secret" },
+    headers: { "x-skillflex-push-secret": "expected-secret" },
     body: {
       type: "INSERT",
       table: "notifications",
@@ -180,7 +180,7 @@ test("push dispatch accepts negotiation notification kinds and routes them to me
   const vapid = webpush.generateVAPIDKeys();
   process.env.VAPID_PUBLIC_KEY = vapid.publicKey;
   process.env.VAPID_PRIVATE_KEY = vapid.privateKey;
-  process.env.VAPID_SUBJECT = "mailto:admin@skillmate.example";
+  process.env.VAPID_SUBJECT = "mailto:admin@skillflex.example";
   process.env.PUSH_DISPATCH_SECRET = "expected-secret";
   let requestUrl = "";
   global.fetch = async (url) => {
@@ -190,7 +190,7 @@ test("push dispatch accepts negotiation notification kinds and routes them to me
   const response = responseFixture();
   await handlePushDispatch({
     method: "POST",
-    headers: { "x-skillmate-push-secret": "expected-secret" },
+    headers: { "x-skillflex-push-secret": "expected-secret" },
     body: {
       type: "INSERT",
       table: "notifications",

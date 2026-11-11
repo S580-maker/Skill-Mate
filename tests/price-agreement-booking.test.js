@@ -61,8 +61,8 @@ test("agreed booking UI requires customer confirmation and exposes time approval
   assert.match(userScript, /p_proposed_at: proposedAt\.toISOString\(\)/);
   assert.match(userScript, /p_accept: accept/);
   assert.match(notifications, /conversation_id, booking_id/);
-  assert.match(notifications, /skillmate:open-booking/);
-  assert.match(userScript, /skillmate:open-booking/);
+  assert.match(notifications, /skillflex:open-booking/);
+  assert.match(userScript, /skillflex:open-booking/);
 });
 
 test("existing chats expose the compact service bar and agreed booking link", () => {

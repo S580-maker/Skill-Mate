@@ -132,14 +132,14 @@ async function handlePushSubscriptions(request, response) {
     });
     return response.status(201).json({ message: "Push notifications are enabled on this device." });
   } catch (error) {
-    console.error("Could not manage Skillmate push subscriptions.", error);
+    console.error("Could not manage Skill Flex push subscriptions.", error);
     return response.status(503).json({ error: "Push notifications could not be updated. Please try again." });
   }
 }
 
 function hasValidDispatchSecret(request) {
   const expected = process.env.PUSH_DISPATCH_SECRET?.trim();
-  const provided = getHeader(request, "x-skillmate-push-secret");
+  const provided = getHeader(request, "x-skillflex-push-secret");
   if (!expected || !provided) return false;
   const expectedBuffer = Buffer.from(expected);
   const providedBuffer = Buffer.from(provided);
@@ -189,7 +189,7 @@ async function handlePushDispatch(request, response) {
     const payload = JSON.stringify({
       title: notification.title,
       body: notification.kind === "message"
-        ? "You have a new message in Skillmate."
+        ? "You have a new message in Skill Flex."
         : notification.body,
       path: notification.target_path === "messages" ? "/index.html#messages" : notification.target_path === "requests" ? "/index.html#requests" : "/index.html#bookings",
     });
@@ -219,7 +219,7 @@ async function handlePushDispatch(request, response) {
       }
     }));
     if (failures.length) {
-      console.error("Some Skillmate push notifications could not be delivered.", {
+      console.error("Some Skill Flex push notifications could not be delivered.", {
         userId: notification.user_id,
         failedCount: failures.length,
         statusCodes: failures.map((error) => error.statusCode || null),
@@ -228,7 +228,7 @@ async function handlePushDispatch(request, response) {
     }
     return response.status(200).json({ sent });
   } catch (error) {
-    console.error("Could not dispatch Skillmate push notifications.", error);
+    console.error("Could not dispatch Skill Flex push notifications.", error);
     return response.status(503).json({ error: "Push notifications could not be dispatched." });
   }
 }

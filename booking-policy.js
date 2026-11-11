@@ -2,7 +2,7 @@
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
-  else root.skillmateBookingPolicy = api;
+  else root.skillflexBookingPolicy = api;
 })(typeof window === "undefined" ? globalThis : window, function () {
   /** @param {BookingStatus} action @param {boolean} providerView @returns {BookingStatus} */
   function localStatus(action, providerView) {

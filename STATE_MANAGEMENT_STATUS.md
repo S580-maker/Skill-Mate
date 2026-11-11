@@ -22,7 +22,7 @@
 ## 📊 State Management Coverage Map
 
 ```
-SKILL-MATE PAGES & STATE MANAGEMENT
+SKILL FLEX PAGES & STATE MANAGEMENT
 ═════════════════════════════════════════════════════════════════
 
 ┌─ Landing (/landing.html)
@@ -74,10 +74,10 @@ localStorage                    sessionStorage
 ┌──────────────────────────┐    ┌──────────────────────────┐
 │ Persistent               │    │ Temporary (Tab-specific) │
 │                          │    │                          │
-│ ✓ skillmate-student...   │    │ ✓ skillmate-google-otp-* │
-│ ✓ skillmate-theme        │    │ (cleared on tab close)   │
-│ ✓ skillmate-chat-msg...  │    │                          │
-│ ✓ skillmate-dashboard... │    │ Used for: OTP flow only  │
+│ ✓ skillflex-student...   │    │ ✓ skillflex-google-otp-* │
+│ ✓ skillflex-theme        │    │ (cleared on tab close)   │
+│ ✓ skillflex-chat-msg...  │    │                          │
+│ ✓ skillflex-dashboard... │    │ Used for: OTP flow only  │
 │                          │    │                          │
 │ Size: 5-10 MB            │    │ Size: 5-10 MB            │
 │ Scope: Per-origin        │    │ Scope: Per-tab           │
@@ -101,7 +101,7 @@ IndexedDB                       In-Memory
 
 HTTP Cookies
 ┌──────────────────────────┐
-│ skillmate_session        │
+│ skillflex_session        │
 │ (httpOnly, Secure)       │
 │ Used for: Server auth    │
 │ Size: ~4 KB              │
@@ -130,7 +130,7 @@ USER ACTION
     │       └─ Realtime: WebSocket broadcast
     │
     ├─→ Other Tabs (IF listening)
-    │   └─ Custom Event: skillmate:auth-state-change
+    │   └─ Custom Event: skillflex:auth-state-change
     │      or Realtime subscription
     │
     └─→ UI Update
@@ -155,7 +155,7 @@ USER OPENS APP
     T1 ├─ Initialize Supabase client
     │  └─ Restore session from IndexedDB
     │
-    T2 ├─ Dispatch 'skillmate:auth-state-change' event
+    T2 ├─ Dispatch 'skillflex:auth-state-change' event
     │  └─ All listening pages receive this
     │
     T3 ├─ Load state from localStorage (demo)

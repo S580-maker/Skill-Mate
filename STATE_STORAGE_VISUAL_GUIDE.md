@@ -14,10 +14,10 @@
     │  │ • HTTP & HTTPS separate stores       │  │
     │  │ • Accessible from all tabs           │  │
     │  │ • Keys:                              │  │
-    │  │   - skillmate-student-demo-v1        │  │
-    │  │   - skillmate-theme                  │  │
-    │  │   - skillmate-chat-messages:id       │  │
-    │  │   - skillmate-dashboard-load-est-v1  │  │
+    │  │   - skillflex-student-demo-v1        │  │
+    │  │   - skillflex-theme                  │  │
+    │  │   - skillflex-chat-messages:id       │  │
+    │  │   - skillflex-dashboard-load-est-v1  │  │
     │  └──────────────────────────────────────┘  │
     │                                            │
     │  ┌──────────────────────────────────────┐  │
@@ -27,8 +27,8 @@
     │  │ • 5-10MB limit (same as localStorage)│  │
     │  │ • Used for temporary flags only      │  │
     │  │ • Keys:                              │  │
-    │  │   - skillmate-google-otp-pending     │  │
-    │  │   - skillmate-google-otp-active      │  │
+    │  │   - skillflex-google-otp-pending     │  │
+    │  │   - skillflex-google-otp-active      │  │
     │  └──────────────────────────────────────┘  │
     │                                            │
     │  ┌──────────────────────────────────────┐  │
@@ -67,7 +67,7 @@
     ┌────────────────────────────────────────────┐
     │        HTTP Cookies (Secure)               │
     ├────────────────────────────────────────────┤
-    │ • skillmate_session (httpOnly, Secure)    │
+    │ • skillflex_session (httpOnly, Secure)    │
     │ • Path: /                                  │
     │ • Domain: localhost (dev) / domain (prod)  │
     │ • SameSite: lax                            │
@@ -100,19 +100,19 @@ T0:  User navigates to /index.html
 
 T1:  DOMContentLoaded fires
      ├─ theme.js runs
-     │  └─ Checks localStorage.skillmate-theme
+     │  └─ Checks localStorage.skillflex-theme
      │     └─ If found: set document.dataset.theme
      │     └─ Else: use system preference
      │
      └─ supabase-client.js runs
-        └─ Initializes window.skillmateSupabase
+        └─ Initializes window.skillflexSupabase
            └─ Checks IndexedDB for session tokens
               └─ If found: restore session
               └─ Else: user is logged out
 
 T2:  user.js runs (deferred script)
      ├─ Calls loadState()
-     │  └─ Checks localStorage.skillmate-student-demo-v1
+     │  └─ Checks localStorage.skillflex-student-demo-v1
      │     └─ If found (demo): use cached state
      │     └─ Else: use defaultState
      │
@@ -216,7 +216,7 @@ T2:  Optimistic Update
      │
      └─ localStorage Cache:
         └─ cacheConversationMessages(state.messages)
-           └─ localStorage.setItem('skillmate-chat-messages:userId', ...)
+           └─ localStorage.setItem('skillflex-chat-messages:userId', ...)
 
 T3:  Backend Request Starts
      ├─ appSupabase.from('messages').insert({...})
@@ -340,7 +340,7 @@ Session Expires (T1.5):
 Response Arrives (T2):
   ├─ 401 Unauthorized
   ├─ Error caught by supabase-client.js
-  └─ window.clearExpiredSkillmateSession()
+  └─ window.clearExpiredSkillflexSession()
      ├─ Sign out locally
      ├─ Clear IndexedDB
      ├─ Clear localStorage (dashboard state)
@@ -360,7 +360,7 @@ Result:
 // Print all localStorage entries
 console.table(
   Object.entries(localStorage)
-    .filter(([k]) => k.includes('skillmate'))
+    .filter(([k]) => k.includes('skillflex'))
     .reduce((obj, [k, v]) => ({
       ...obj,
       [k]: v.length > 100 ? v.slice(0, 100) + '...' : v
@@ -372,9 +372,9 @@ console.table(Object.entries(sessionStorage));
 
 // Print current auth state
 console.log('Session:', {
-  user: window.skillmateSession?.user,
-  expiresAt: window.skillmateSession?.expires_at,
-  expiresIn: window.skillmateSession?.expires_in
+  user: window.skillflexSession?.user,
+  expiresAt: window.skillflexSession?.expires_at,
+  expiresIn: window.skillflexSession?.expires_in
 });
 
 // Print dashboard state (if authenticated)
@@ -393,7 +393,7 @@ console.log('Real-time:', {
 });
 
 // Check IndexedDB contents (Supabase)
-window.skillmateSupabase.auth.getSession()
+window.skillflexSupabase.auth.getSession()
   .then(({ data, error }) => console.log('Session:', data.session, 'Error:', error));
 ```
 

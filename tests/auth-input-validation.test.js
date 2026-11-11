@@ -36,7 +36,7 @@ test("auth endpoints reject non-string fields without coercion or upstream calls
         await auth[scenario.handler]({
           method: scenario.method || "POST",
           body: { ...scenario.body, [field]: value },
-          cookies: { skillmate_login_challenge: "fixture", skillmate_password_recovery: "fixture" },
+          cookies: { skillflex_login_challenge: "fixture", skillflex_password_recovery: "fixture" },
           headers: { authorization: "Bearer fixture-token" },
         }, response);
         assert.equal(response.statusCode, scenario.status, `${scenario.handler}: ${field}=${JSON.stringify(value)}`);

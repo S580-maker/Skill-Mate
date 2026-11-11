@@ -11,7 +11,7 @@ test("marketplace search ranking prioritizes service names over provider details
   const source = read("user.js");
   const start = source.indexOf("function marketplaceSearchScore");
   const end = source.indexOf("function renderMarketplace", start);
-  const context = { window: { skillmateSmartSearch: smartSearch } };
+  const context = { window: { skillflexSmartSearch: smartSearch } };
   vm.createContext(context);
   vm.runInContext(source.slice(start, end), context);
 
@@ -35,7 +35,7 @@ test("search suggestions show popular starting points and ranked matching servic
       body: { classList: { contains: () => true } },
       querySelector: () => target,
     },
-    window: { skillmateSmartSearch: smartSearch, skillmateMarketplace: marketplace },
+    window: { skillflexSmartSearch: smartSearch, skillflexMarketplace: marketplace },
     appSupabase: null,
     seedProviders: providers,
     state: { blocked: [] },

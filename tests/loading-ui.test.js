@@ -17,7 +17,7 @@ test("loading placeholders preserve existing content and clean up on success or 
     remove() { const index = children.indexOf(this); if (index >= 0) children.splice(index, 1); },
   }) } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "loading-ui.js"), "utf8"), context);
-  const loading = context.window.skillmateLoading;
+  const loading = context.window.skillflexLoading;
   for (const result of ["success", "failure"]) {
     const finish = loading.show(target, { label: 'Loading <updates> "now"', variant: "cards", delay: 0 });
     assert.equal(children[0], existing, result);
@@ -42,7 +42,7 @@ test("loading ownership cancels obsolete timers and never steals focus or delete
   const context = { window: {}, setTimeout: callback => { timers.set(++id, callback); return id; }, clearTimeout: key => timers.delete(key),
     document: { createElement: () => ({ remove() { const index = children.indexOf(this); if (index >= 0) children.splice(index, 1); } }) } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "loading-ui.js"), "utf8"), context);
-  const { show } = context.window.skillmateLoading;
+  const { show } = context.window.skillflexLoading;
   const fast = show(target);
   fast();
   assert.equal(timers.size, 0, "fast result cancels the delayed placeholder");
@@ -65,7 +65,7 @@ test("loading ownership cancels obsolete timers and never steals focus or delete
 test("read deadline rejects hung requests and releases its timer on success", async () => {
   const context = { window: {}, document: {}, setTimeout, clearTimeout };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "loading-ui.js"), "utf8"), context);
-  const { withTimeout } = context.window.skillmateLoading;
+  const { withTimeout } = context.window.skillflexLoading;
   assert.equal(await withTimeout(Promise.resolve("ready"), 30), "ready");
   await assert.rejects(withTimeout(new Promise(() => {}), 5), /timed out/);
 });

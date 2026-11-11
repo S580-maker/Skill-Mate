@@ -24,9 +24,9 @@ const { start } = require("./support/loading-harness.cjs");
 
     // A hung retry releases the shared promise; the late obsolete response cannot change recovered state.
     await h.open('index.html?fail=provider_directory#home'); await ready();
-    await run(`window.__from = appSupabase.from; window.__timeout = window.skillmateLoading.withTimeout;
+    await run(`window.__from = appSupabase.from; window.__timeout = window.skillflexLoading.withTimeout;
       window.__fake.failing.clear();
-      window.skillmateLoading.withTimeout = (request, ms) => window.__timeout(request, Math.min(ms, 80));
+      window.skillflexLoading.withTimeout = (request, ms) => window.__timeout(request, Math.min(ms, 80));
       appSupabase.from = table => {
         if (table !== "provider_directory") return window.__from(table);
         const builder = new Proxy({}, { get(_, key) {
@@ -36,7 +36,7 @@ const { start } = require("./support/loading-harness.cjs");
       }; await retryDashboardData();`);
     assert.ok(await h.evaluate('Boolean(dashboardLoadError) && dashboardRefreshPromise === null'));
     assert.equal(await h.evaluate('document.querySelectorAll("[aria-busy=true]").length'), 0);
-    await run('appSupabase.from=window.__from;window.skillmateLoading.withTimeout=window.__timeout;await retryDashboardData()');
+    await run('appSupabase.from=window.__from;window.skillflexLoading.withTimeout=window.__timeout;await retryDashboardData()');
     const recovered = await h.evaluate('connectedProviders.length');
     assert.ok(recovered > 0);
     await run('window.__lateDirectory({data:[],error:null})'); await h.wait(50);
@@ -48,7 +48,7 @@ const { start } = require("./support/loading-harness.cjs");
     await h.waitFor('Boolean(document.querySelector("#request-board-grid [data-loading-retry]"))');
     await run('document.querySelector("#request-board-grid [data-loading-retry]").focus();window.__fake.failing.clear();document.activeElement.click()');
     await h.waitFor('document.activeElement.id === "request-board-grid"');
-    await run('window.__fake.failing.add("campus_request_directory");await window.skillmateGrowth.refreshBoard()');
+    await run('window.__fake.failing.add("campus_request_directory");await window.skillflexGrowth.refreshBoard()');
     await run('window.__fake.failing.clear();window.__fake.delay=100;document.querySelector("#request-board-grid [data-loading-retry]").focus();document.activeElement.click();document.querySelector("#request-board-filter").focus()');
     await h.waitFor('!document.querySelector("#request-board-refresh").disabled');
     assert.equal(await h.evaluate('document.activeElement.id'), "request-board-filter");
@@ -70,10 +70,10 @@ const { start } = require("./support/loading-harness.cjs");
     await h.wait(30);
     assert.equal(await h.evaluate('document.querySelector(".showcase-identity h2").textContent'), await h.evaluate('window.__second.name'));
     assert.equal(await h.evaluate('document.querySelector(".showcase-cv-link")'), null);
-    await run('window.__timeout=window.skillmateLoading.withTimeout;window.skillmateLoading.withTimeout=request=>window.__timeout(request,40);await openProviderProfile(window.__first.id)');
+    await run('window.__timeout=window.skillflexLoading.withTimeout;window.skillflexLoading.withTimeout=request=>window.__timeout(request,40);await openProviderProfile(window.__first.id)');
     await h.waitFor('document.querySelector("[data-provider-cv]").textContent.includes("Retry CV")');
     assert.equal(await h.evaluate('document.querySelector("#provider-detail-book").disabled'), false);
-    await run('window.skillmateLoading.withTimeout=window.__timeout;document.querySelector("[data-provider-cv] button").focus();document.activeElement.click();window.__cv({data:{signedUrl:"https://example.test/retry.pdf"},error:null})');
+    await run('window.skillflexLoading.withTimeout=window.__timeout;document.querySelector("[data-provider-cv] button").focus();document.activeElement.click();window.__cv({data:{signedUrl:"https://example.test/retry.pdf"},error:null})');
     await h.waitFor('document.activeElement.classList.contains("showcase-cv-link")');
     await run('await openProviderProfile(window.__first.id);document.querySelector("#provider-detail-modal").close()'); await h.wait(30);
     assert.equal(await h.evaluate('document.querySelector("[data-provider-cv]").hasAttribute("aria-busy")'), false);

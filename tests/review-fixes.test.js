@@ -61,7 +61,7 @@ test("admin export keeps booking type out of the date column", async () => {
     document: { querySelector: () => ({ addEventListener(_, fn) { click = fn; } }), createElement: () => ({ click() {} }) },
     Node: { TEXT_NODE: 3 }, Blob, getBookingRows: () => [{ querySelectorAll: () => cells }],
     URL: { createObjectURL(blob) { exported = blob; return "blob:fixture"; }, revokeObjectURL() {} },
-    window: { setTimeout() {}, skillmateCsv: require('../csv-utils') }, showToast() {},
+    window: { setTimeout() {}, skillflexCsv: require('../csv-utils') }, showToast() {},
   };
   const script = read("script.js");
   vm.runInNewContext(script.slice(script.indexOf('document.querySelector("#export-button").addEventListener'), script.indexOf('document.querySelector("#period-select").addEventListener')), context);

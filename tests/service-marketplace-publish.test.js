@@ -20,7 +20,7 @@ function createMarketplaceFixture({ providers = [], services = [] } = {}) {
       name: "Alex Student", university: "Campus University", course: "Student",
       bio: "", verified: false, avatarUrl: "",
     } },
-    window: { skillmateMarketplace: marketplace, skillmateServiceUtils: serviceUtils },
+    window: { skillflexMarketplace: marketplace, skillflexServiceUtils: serviceUtils },
     ownProviderId: () => "owner",
     initialsFor: name => name.split(/\s+/).map(part => part[0]).slice(0, 2).join("").toUpperCase(),
     renderMarketplace() { renderCount++; },

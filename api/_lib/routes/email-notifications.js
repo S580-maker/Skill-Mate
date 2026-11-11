@@ -33,16 +33,16 @@ function buildMessage(events) {
   const messages = events.filter((event) => event.event_type === "message").length;
   const bookings = events.filter((event) => event.event_type.startsWith("booking_")).length;
   const lines = [];
-  if (messages) lines.push(`You have ${messages} unread message${messages === 1 ? "" : "s"} waiting in Skillmate.`);
-  if (bookings) lines.push(`You have ${bookings} booking update${bookings === 1 ? "" : "s"} in Skillmate.`);
-  const text = `${lines.join("\n\n")}\n\nSign in to Skillmate to view them.`;
-  const html = `<div style="font-family:Arial,sans-serif;color:#172033;max-width:480px;margin:0 auto;padding:32px"><div style="font-size:13px;font-weight:700;letter-spacing:2px;color:#596b8a">SKILLMATE</div><h1 style="font-size:24px;margin:28px 0 16px">You have an update</h1>${lines.map((line) => `<p style="color:#596273;line-height:1.6">${line}</p>`).join("")}<p style="color:#596273;line-height:1.6">Sign in to Skillmate to view it.</p></div>`;
+  if (messages) lines.push(`You have ${messages} unread message${messages === 1 ? "" : "s"} waiting in Skill Flex.`);
+  if (bookings) lines.push(`You have ${bookings} booking update${bookings === 1 ? "" : "s"} in Skill Flex.`);
+  const text = `${lines.join("\n\n")}\n\nSign in to Skill Flex to view them.`;
+  const html = `<div style="font-family:Arial,sans-serif;color:#172033;max-width:480px;margin:0 auto;padding:32px"><div style="font-size:13px;font-weight:700;letter-spacing:2px;color:#596b8a">SKILL FLEX</div><h1 style="font-size:24px;margin:28px 0 16px">You have an update</h1>${lines.map((line) => `<p style="color:#596273;line-height:1.6">${line}</p>`).join("")}<p style="color:#596273;line-height:1.6">Sign in to Skill Flex to view it.</p></div>`;
   return {
     subject: messages && bookings
-      ? "New messages and booking updates on Skillmate"
+      ? "New messages and booking updates on Skill Flex"
       : messages
-        ? "You have unread messages on Skillmate"
-        : "You have a booking update on Skillmate",
+        ? "You have unread messages on Skill Flex"
+        : "You have a booking update on Skill Flex",
     text,
     html,
   };

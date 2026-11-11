@@ -1,6 +1,6 @@
-# Skillmate setup
+# Skill Flex setup
 
-Skillmate runs locally as a Node.js/Express application and can be deployed to Vercel with serverless API functions. Supabase provides authentication, the database, and portfolio image storage. Both hosting options load configuration from server-side environment variables, synchronize authenticated sessions, and protect the administrator page server-side.
+Skill Flex runs locally as a Node.js/Express application and can be deployed to Vercel with serverless API functions. Supabase provides authentication, the database, and portfolio image storage. Both hosting options load configuration from server-side environment variables, synchronize authenticated sessions, and protect the administrator page server-side.
 
 ## 1. Create a Supabase project
 
@@ -35,7 +35,7 @@ New accounts must provide a university and student ID number. The ID number is s
 
 Users may optionally save a hostel or campus location in **Edit profile**. It is private by default and is shared with the other participant only while a booking is confirmed. The app currently collects place names, not coordinates, so it cannot calculate distance. On an existing project, apply `supabase/migrations/20261024_user_locations.sql` once in the SQL Editor; on a new project, the main schema already includes it.
 
-On existing projects, apply `supabase/migrations/20261025090000_public_provider_directory.sql` once in the SQL Editor to show every active service—including administrator-owned listings—to signed-in Skillmate users. The directory remains unavailable to anonymous visitors and continues to exclude listings hidden by a block. New projects include this directory definition in `supabase/schema.sql`.
+On existing projects, apply `supabase/migrations/20261025090000_public_provider_directory.sql` once in the SQL Editor to show every active service—including administrator-owned listings—to signed-in Skill Flex users. The directory remains unavailable to anonymous visitors and continues to exclude listings hidden by a block. New projects include this directory definition in `supabase/schema.sql`.
 
 On existing projects, apply `supabase/migrations/20261025100000_whatsapp_style_messaging.sql` once in the SQL Editor before using the redesigned Messages page. It adds delivery and reply metadata, restricts message access and changes to conversation participants, permits recipients to update read/delivery timestamps, allows senders to delete their own messages, and adds messages to Supabase Realtime when that publication is available. The app uses `conversation_id` and `conversation_members` for recipient membership; it does not need a separate `receiver_id` column. New projects include the same fields, policies, and realtime publication setup in `supabase/schema.sql`.
 
@@ -71,9 +71,9 @@ Chat Realtime is scoped to the currently open conversation; a 30-second polling 
 
 Rate limits use per-process memory by default. For counters shared across server instances, create an Upstash Redis database and set both `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in every server environment. HTTPS is required. Never add these values to browser configuration. HTTP request metrics are logged by the Express server; Vercel serverless functions and Supabase database/storage usage need their respective hosting and Supabase dashboards and are not measured by this middleware.
 
-Run `npm run test:load` only against a local Skillmate server. It sends a bounded set of requests to the local static login page; it is a smoke/load check, not a capacity claim for database, storage, Realtime, or 1,000 concurrent users. Do not target production Supabase with synthetic load without an approved test plan.
+Run `npm run test:load` only against a local Skill Flex server. It sends a bounded set of requests to the local static login page; it is a smoke/load check, not a capacity claim for database, storage, Realtime, or 1,000 concurrent users. Do not target production Supabase with synthetic load without an approved test plan.
 
-## 3. Install and run Skillmate
+## 3. Install and run Skill Flex
 
 Install dependencies and start the Express server:
 
@@ -112,10 +112,10 @@ http://localhost:3000/reset.html
 For deployment, set the Site URL to your production HTTPS domain and add the corresponding callback URL, for example:
 
 ```text
-https://your-skillmate-domain.vercel.app
-https://your-skillmate-domain.vercel.app/index.html
-https://your-skillmate-domain.vercel.app/login.html
-https://your-skillmate-domain.vercel.app/reset.html
+https://your-skillflex-domain.vercel.app
+https://your-skillflex-domain.vercel.app/index.html
+https://your-skillflex-domain.vercel.app/login.html
+https://your-skillflex-domain.vercel.app/reset.html
 ```
 
 Configure email/password sign-in and decide whether email confirmation is required. If confirmation is enabled, use the email link before signing in.
@@ -130,9 +130,9 @@ Set these server-only environment variables locally and on Vercel:
 - `AUTH_OTP_SECRET` with at least 32 random characters. Generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`; keep the same value across deployments so pending codes remain verifiable.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` for your mail provider. Use the provider's submission host and a verified sender address. `SMTP_SECURE=true` is normally used with port 465; port 587 normally uses `false`.
 
-Codes expire after 10 minutes, can be resent after 30 seconds up to five times per challenge, and allow at most five guesses. Google sign-in also requires this email code after Google authenticates the account; the Skillmate app session is not established until the code is verified.
+Codes expire after 10 minutes, can be resent after 30 seconds up to five times per challenge, and allow at most five guesses. Google sign-in also requires this email code after Google authenticates the account; the Skill Flex app session is not established until the code is verified.
 
-Supabase Auth stores password verifiers using bcrypt with a unique random salt. Do not hash or salt passwords in browser code or before sending them to Supabase: Auth must receive the original password to verify sign-ins, and a client-side hash would become a password-equivalent credential. Supabase does not expose a custom password-pepper setting. Skillmate limits passwords to at least 8 characters and at most 72 UTF-8 bytes (bcrypt's input limit); during email-code signup, the pending password is encrypted at rest in the short-lived challenge using a separate HKDF-derived encryption key, and is sent to Supabase Auth only after code verification. Enable leaked-password protection in **Authentication → Providers → Email** when available on your plan, and retain Supabase's minimum password length setting.
+Supabase Auth stores password verifiers using bcrypt with a unique random salt. Do not hash or salt passwords in browser code or before sending them to Supabase: Auth must receive the original password to verify sign-ins, and a client-side hash would become a password-equivalent credential. Supabase does not expose a custom password-pepper setting. Skill Flex limits passwords to at least 8 characters and at most 72 UTF-8 bytes (bcrypt's input limit); during email-code signup, the pending password is encrypted at rest in the short-lived challenge using a separate HKDF-derived encryption key, and is sent to Supabase Auth only after code verification. Enable leaked-password protection in **Authentication → Providers → Email** when available on your plan, and retain Supabase's minimum password length setting.
 
 ## 5. Deploy to Vercel
 
@@ -149,7 +149,7 @@ Supabase Auth stores password verifiers using bcrypt with a unique random salt. 
    SMTP_SECURE=false
    SMTP_USER=your-smtp-username
    SMTP_PASS=your-smtp-password
-   SMTP_FROM=Skillmate <no-reply@your-domain.example>
+   SMTP_FROM=Skill Flex <no-reply@your-domain.example>
    CRON_SECRET=your-random-scheduler-secret
    SUPABASE_DB_LIMIT_BYTES=your-plan-database-capacity-in-bytes
    SUPABASE_STORAGE_LIMIT_BYTES=your-plan-storage-capacity-in-bytes
@@ -166,19 +166,19 @@ Supabase Auth stores password verifiers using bcrypt with a unique random salt. 
 The email worker is `POST /api/email-notifications` and requires the `CRON_SECRET` configured above. For dependable 10-minute unread checks on Vercel Hobby, schedule it from Supabase instead of adding a frequent Vercel Cron job:
 
 - In Supabase **Database → Extensions**, enable `pg_cron`, `pg_net`, and **Vault** if they are not already enabled.
-- In **Database → Vault**, create secrets named `skillmate_email_worker_url` (`https://your-domain.example/api/email-notifications`), `skillmate_system_health_url` (`https://your-domain.example/api/system-health-snapshot`), and `skillmate_email_worker_secret` (the exact `CRON_SECRET` value). Keep the token in Vault; do not commit it or paste it into application source.
+- In **Database → Vault**, create secrets named `skillflex_email_worker_url` (`https://your-domain.example/api/email-notifications`), `skillflex_system_health_url` (`https://your-domain.example/api/system-health-snapshot`), and `skillflex_email_worker_secret` (the exact `CRON_SECRET` value). Keep the token in Vault; do not commit it or paste it into application source.
 - In the Supabase SQL Editor, schedule the worker once:
 
    ```sql
    select cron.schedule(
-     'skillmate-marketplace-email',
+     'skillflex-marketplace-email',
      '*/5 * * * *',
      $$
      select net.http_post(
-       url := (select decrypted_secret from vault.decrypted_secrets where name = 'skillmate_email_worker_url' limit 1),
+            url := (select decrypted_secret from vault.decrypted_secrets where name = 'skillflex_email_worker_url' limit 1),
        headers := jsonb_build_object(
          'Authorization',
-         'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'skillmate_email_worker_secret' limit 1)
+              'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'skillflex_email_worker_secret' limit 1)
        ),
        body := '{}'::jsonb
      );
@@ -192,14 +192,14 @@ The email worker is `POST /api/email-notifications` and requires the `CRON_SECRE
 
   ```sql
   select cron.schedule(
-    'skillmate-system-health',
+    'skillflex-system-health',
     '*/5 * * * *',
     $$
     select net.http_post(
-      url := (select decrypted_secret from vault.decrypted_secrets where name = 'skillmate_system_health_url' limit 1),
+          url := (select decrypted_secret from vault.decrypted_secrets where name = 'skillflex_system_health_url' limit 1),
       headers := jsonb_build_object(
         'Authorization',
-        'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'skillmate_email_worker_secret' limit 1)
+            'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'skillflex_email_worker_secret' limit 1)
       ),
       body := '{}'::jsonb
     );
@@ -222,7 +222,7 @@ The repository includes Vercel configuration and does not include `.env` or loca
 Browser push alerts work on supported browsers over HTTPS (localhost is allowed for development). They are opt-in per device: users enable them from **Profile & Settings → Notifications**, and can disable each device there. Booking and message push alerts still respect each user's **Booking updates** and **Messages** preferences. Push message bodies are generic so message contents are not exposed on a locked screen.
 
 1. Apply `supabase/migrations/20261102100000_web_push_notifications.sql` in the Supabase SQL Editor. This creates a private subscription table; browser roles have no access to it.
-2. Generate a VAPID key pair with `npx web-push generate-vapid-keys`. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` on the Skillmate server. `VAPID_SUBJECT` must be a contact URI such as `mailto:admin@your-domain.edu` or an HTTPS URL. Only the public key is sent to browsers.
+2. Generate a VAPID key pair with `npx web-push generate-vapid-keys`. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` on the Skill Flex server. `VAPID_SUBJECT` must be a contact URI such as `mailto:admin@your-domain.edu` or an HTTPS URL. Only the public key is sent to browsers.
 3. Generate a new random secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. Do not reuse the value previously shared in chat; treat it as exposed. Set the new value as `PUSH_DISPATCH_SECRET` in `.env` locally, in Vercel, and in Supabase Edge Function Secrets. Redeploy Vercel after updating it. Keep this secret server-only.
 4. Install the Supabase CLI if needed. On Windows with Scoop, open PowerShell and run:
 
@@ -231,7 +231,7 @@ Browser push alerts work on supported browsers over HTTPS (localhost is allowed 
    scoop install supabase
    ```
 
-   Then, from the Skillmate repository root, link the project and deploy the Edge Function:
+   Then, from the Skill Flex repository root, link the project and deploy the Edge Function:
 
    ```powershell
    supabase login
@@ -244,11 +244,11 @@ Browser push alerts work on supported browsers over HTTPS (localhost is allowed 
 
    | Name | Value |
    |---|---|
-   | `PUSH_DISPATCH_SECRET` | Exactly the same new value set on the Skillmate server/Vercel |
+   | `PUSH_DISPATCH_SECRET` | Exactly the same new value set on the Skill Flex server/Vercel |
    | `PUSH_DISPATCH_URL` | `https://your-domain/api/push-dispatch` |
 
    Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` as Vercel/server environment variables too. Do not put VAPID private keys or the dispatch secret in browser code.
-6. In Supabase, open **Database → Webhooks → Create a new webhook** and choose **Supabase Edge Functions**. Select `push-notification-webhook`, choose table `public.notifications`, and select **INSERT only**. Under **HTTP Headers**, choose **Add secret key** and select the project's **default** secret key. This authenticates Supabase's request to the Edge Function; the function then uses the separate `PUSH_DISPATCH_SECRET` to authenticate with the Skillmate server. Save the webhook. The function accepts only valid booking/message notification inserts.
+6. In Supabase, open **Database → Webhooks → Create a new webhook** and choose **Supabase Edge Functions**. Select `push-notification-webhook`, choose table `public.notifications`, and select **INSERT only**. Under **HTTP Headers**, choose **Add secret key** and select the project's **default** secret key. This authenticates Supabase's request to the Edge Function; the function then uses the separate `PUSH_DISPATCH_SECRET` to authenticate with the Skill Flex server. Save the webhook. The function accepts only valid booking/message notification inserts.
 7. Sign in on a supported browser, open **Profile & Settings → Notifications**, and choose **Enable on this device**. Allow notifications in the browser prompt. Test by creating a booking request or sending a message from another account. Repeat on each device/browser that should receive alerts.
 
 The app stores only the push endpoint and encryption keys needed to deliver notifications. Account closure explicitly removes the user's subscriptions; stale browser subscriptions are also removed when a push provider reports them expired. The Edge Function checks its webhook secret and forwards only valid booking/message notification inserts; the server checks a separate relay secret before delivery.
@@ -262,8 +262,8 @@ The app supports email/password and Google. Configure Google in Supabase; provid
 1. In Google Cloud Console, create or select a project and configure the Google Auth consent screen.
 2. Create an OAuth client ID with application type **Web application**.
 3. In **Authorized JavaScript origins**, add `http://localhost:3000` and your production origin, for example `https://skillmate-six.vercel.app`.
-4. In **Authorized redirect URIs**, add the exact callback URL shown on the Supabase Google provider setup page. For the standard Supabase domain it is `https://<project-ref>.supabase.co/auth/v1/callback`. This is Supabase's callback, not the Skillmate URL.
-5. In Supabase **Authentication → Sign In / Providers → Google**, enable Google and paste the Google OAuth client ID and client secret. Skillmate asks Google to show an account chooser on each Google sign-in attempt.
+4. In **Authorized redirect URIs**, add the exact callback URL shown on the Supabase Google provider setup page. For the standard Supabase domain it is `https://<project-ref>.supabase.co/auth/v1/callback`. This is Supabase's callback, not the Skill Flex URL.
+5. In Supabase **Authentication → Sign In / Providers → Google**, enable Google and paste the Google OAuth client ID and client secret. Skill Flex asks Google to show an account chooser on each Google sign-in attempt.
 
 In Supabase Authentication > URL Configuration, allow the exact local and production callback URLs for index.html and admin.html. The protected admin route still checks the account role after sign-in.
 

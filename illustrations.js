@@ -69,7 +69,7 @@
     @media(prefers-reduced-motion:reduce) { .gentle { animation:none!important; } }
   `;
 
-  class SkillmateIllustration extends HTMLElement {
+  class SkillflexIllustration extends HTMLElement {
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
@@ -164,14 +164,14 @@
       if (this.hasAttribute("data-ready") && !this.finishTimer) this.finishTimer = setTimeout(() => this.settle(), 4500);
     }
   }
-  customElements.define("skillmate-illustration", SkillmateIllustration);
+  customElements.define("skillflex-illustration", SkillflexIllustration);
   reducedMotion.addEventListener("change", () => mounted.forEach(element => element.syncMotion()));
   document.addEventListener("visibilitychange", () => mounted.forEach(element => element.syncMotion()));
   window.addEventListener("online", () => mounted.forEach(element => element.retry()));
 
   function mount(target, name, fallback) {
-    if (!target || !assets[name] || target.querySelector("skillmate-illustration")) return;
-    const illustration = document.createElement("skillmate-illustration");
+    if (!target || !assets[name] || target.querySelector("skillflex-illustration")) return;
+    const illustration = document.createElement("skillflex-illustration");
     illustration.setAttribute("name", name);
     if (fallback) illustration.append(fallback);
     target.prepend(illustration);
@@ -191,5 +191,5 @@
     panel.hidden = false;
     panel.querySelector("[data-dismiss-booking-success]").onclick = hideBookingSuccess;
   }
-  window.skillmateIllustrations = { mount, showBookingSuccess, hideBookingSuccess };
+  window.skillflexIllustrations = { mount, showBookingSuccess, hideBookingSuccess };
 })();

@@ -6,7 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { app } = require("../server");
-const output = fs.mkdtempSync(path.join(os.tmpdir(), "skillmate-landing-"));
+const output = fs.mkdtempSync(path.join(os.tmpdir(), "skillflex-landing-"));
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 let server, chrome, socket;
 

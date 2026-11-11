@@ -22,7 +22,7 @@
 
   async function requestAuth(url, options) {
     try {
-      return await root.skillmateApi.request(url, options);
+      return await root.skillflexApi.request(url, options);
     } catch (error) {
       if (error?.name === "TimeoutError") {
         throw new Error("That request took too long. Check your connection, then try again.", { cause: error });
@@ -33,5 +33,5 @@
 
   const api = { maskEmail, getResendRetryDelay, requestAuth };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  else root.skillmateAuthUtils = api;
+  else root.skillflexAuthUtils = api;
 })(globalThis);

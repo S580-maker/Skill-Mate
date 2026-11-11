@@ -52,7 +52,7 @@ const baseline = process.argv.includes("--baseline");
       document.querySelector('#booking-note').dispatchEvent(new Event('input',{bubbles:true}));window.__finishBooking({error:null});`);
     await h.waitFor('!bookingSubmissionPending');
     await check("a confirmed request preserves a newer draft for the same service", async () => {
-      assert.equal(await h.evaluate('skillmateJourney.bookingDraft("p1","s1")?.note'), "A new request after the first");
+      assert.equal(await h.evaluate('skillflexJourney.bookingDraft("p1","s1")?.note'), "A new request after the first");
     });
 
     await ready();

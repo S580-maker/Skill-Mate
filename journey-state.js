@@ -9,7 +9,7 @@
   const recorded = new Set();
   const memoryAttempts = new Map();
   const memoryState = new Map();
-  const key = suffix => `skillmate-journey-v1:${appUser?.id || "demo"}:${suffix}`;
+  const key = suffix => `skillflex-journey-v1:${appUser?.id || "demo"}:${suffix}`;
   function read(suffix) {
     try {
       const item = memoryState.get(key(suffix)) || JSON.parse(sessionStorage.getItem(key(suffix)) || "null");
@@ -87,7 +87,7 @@
     store("booking-attempts", [...memoryAttempts]);
     return id;
   }
-  document.addEventListener("skillmate:booking-save", event => {
+  document.addEventListener("skillflex:booking-save", event => {
     if (event.detail.state === "saved") {
       const suffix = draftKey(event.detail.providerId, event.detail.serviceId, event.detail.agreementId);
       // A student may already be preparing another request while this write finishes.
@@ -122,12 +122,12 @@
       filters.querySelector("input,select").focus({ preventScroll: true });
     } else { search.scrollIntoView({ block: "center", behavior: "auto" }); search.focus({ preventScroll: true }); }
   });
-  document.addEventListener("skillmate:workspace-ready", () => {
+  document.addEventListener("skillflex:workspace-ready", () => {
     ready = true;
     const saved = read("discovery");
     if (saved && typeof saved.query === "string") {
       search.value = saved.query.slice(0, 200);
-      if (["All", ...serviceCategories, ...window.skillmateMarketplace.popularCategories].includes(saved.category)) selectedCategory = saved.category;
+      if (["All", ...serviceCategories, ...window.skillflexMarketplace.popularCategories].includes(saved.category)) selectedCategory = saved.category;
       for (const field of filters.elements) {
         if (!field.name || saved.filters?.[field.name] == null) continue;
         if (field.type === "checkbox") field.checked = saved.filters[field.name] === true;
@@ -145,5 +145,5 @@
   }, { once: true });
   window.addEventListener("online", () => { if (document.querySelector("#booking-modal").open) status("You are back online. Review your details before sending the request."); });
   window.addEventListener("offline", () => { captureBooking(); if (document.querySelector("#booking-modal").open) status("You are offline. Your draft is kept here; reconnect before sending.", true); });
-  window.skillmateJourney = { bookingDraft, bookingOpened, record, requestId };
+  window.skillflexJourney = { bookingDraft, bookingOpened, record, requestId };
 })();

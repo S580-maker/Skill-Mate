@@ -1,4 +1,4 @@
-const onboardingClient = window.skillmateSupabase;
+const onboardingClient = window.skillflexSupabase;
 const onboardingForm = document.querySelector("#onboarding-form");
 const onboardingMessage = document.querySelector("#onboarding-message");
 const onboardingSubmit = document.querySelector("#onboarding-submit");
@@ -91,7 +91,7 @@ onboardingPhoto.addEventListener("change", () => {
 });
 
 async function loadOnboarding() {
-  if (!onboardingClient) throw new Error(window.skillmateSupabaseError || "Supabase is not connected.");
+  if (!onboardingClient) throw new Error(window.skillflexSupabaseError || "Supabase is not connected.");
   let timeoutId;
   const sessionResult = await Promise.race([
     onboardingClient.auth.getSession(),
@@ -133,7 +133,7 @@ async function loadOnboarding() {
     selectedSkills.set(key, skill);
   });
   renderSkillChips();
-  const directory = window.SKILLMATE_UNIVERSITY_DIRECTORY;
+  const directory = window.SKILLFLEX_UNIVERSITY_DIRECTORY;
   document.querySelector("#onboarding-university-options").replaceChildren(...directory.fallback.map((university) => {
     const option = document.createElement("option");
     option.value = university;
@@ -175,7 +175,7 @@ async function saveOnboarding(skip = false) {
     let avatarUrl = existingAvatarUrl;
     const file = skip ? null : onboardingPhoto.files[0];
     if (file) {
-      const compressedPhoto = await window.skillmateServiceUtils.compressImageFile(file, {
+      const compressedPhoto = await window.skillflexServiceUtils.compressImageFile(file, {
         maxDimension: 1200, quality: 0.82,
       });
       const imagePath = `${currentUser.id}/avatars/${crypto.randomUUID()}.webp`;
@@ -198,10 +198,10 @@ async function saveOnboarding(skip = false) {
     if (error) throw error;
     const { data: sessionData, error: sessionError } = await onboardingClient.auth.getSession();
     if (sessionError) throw sessionError;
-    await window.syncSkillmateServerSession(sessionData.session);
+    await window.syncSkillflexServerSession(sessionData.session);
     window.location.replace("index.html");
   } catch (error) {
-    console.error("Could not save the Skillmate onboarding profile.", error);
+    console.error("Could not save the Skill Flex onboarding profile.", error);
     setOnboardingError("We couldn’t save your details right now. Please check your connection and try again.");
   } finally {
     onboardingSubmit.disabled = false;
@@ -220,7 +220,7 @@ onboardingForm.addEventListener("submit", (event) => {
 document.querySelector("#onboarding-skip").addEventListener("click", () => saveOnboarding(true));
 document.querySelector("#onboarding-skip-mobile").addEventListener("click", () => saveOnboarding(true));
 loadOnboarding().catch((error) => {
-  console.error("Could not load the Skillmate onboarding profile.", error);
+  console.error("Could not load the Skill Flex onboarding profile.", error);
   if (error?.message === "Checking your session timed out. Sign in again.") {
     window.location.replace("login.html");
     return;

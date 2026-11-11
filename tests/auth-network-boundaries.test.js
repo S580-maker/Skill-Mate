@@ -14,7 +14,7 @@ function fixture(transport) {
       any: AbortSignal.any.bind(AbortSignal),
       timeout(ms) { deadlines.push(ms); return AbortSignal.timeout(10); },
     },
-    SKILLMATE_SUPABASE_CONFIG: { url: "https://network-fixture.supabase.invalid", anonKey: "fixture-public" },
+    SKILLFLEX_SUPABASE_CONFIG: { url: "https://network-fixture.supabase.invalid", anonKey: "fixture-public" },
     supabase: { createClient(_url, _key, options) {
       sdkOptions = options;
       return { auth: { onAuthStateChange() {} } };
@@ -69,10 +69,10 @@ test("auth timeouts use actionable feedback and preserve HTTP failures for calle
       calls++;
       return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
     });
-    await assert.rejects(context.skillmateAuthUtils.requestAuth("/api/auth/sign-in", { method: "POST" }), /took too long.*try again/);
+    await assert.rejects(context.skillflexAuthUtils.requestAuth("/api/auth/sign-in", { method: "POST" }), /took too long.*try again/);
     assert.equal(calls, 1);
     const errorResponse = new Response('{"error":"Too many requests"}', { status: 429 });
     const failed = fixture(async () => errorResponse);
-    assert.equal(await failed.context.skillmateAuthUtils.requestAuth("/api/auth/sign-in", { method: "POST" }), errorResponse);
+    assert.equal(await failed.context.skillflexAuthUtils.requestAuth("/api/auth/sign-in", { method: "POST" }), errorResponse);
   } finally { clearTimeout(timer); }
 });

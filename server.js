@@ -14,7 +14,7 @@ const { requestMetrics } = require("./api/_lib/http-metrics");
 
 const app = express();
 const projectRoot = existsSync(path.join(__dirname, "public")) ? path.join(__dirname, "public") : __dirname;
-const sessionCookieName = "skillmate_session";
+const sessionCookieName = "skillflex_session";
 const sessionCookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
@@ -42,7 +42,7 @@ app.get("/supabase-config.js", (_request, response, next) => {
     response
       .type("application/javascript")
       .set("Cache-Control", "no-store")
-      .send(`window.SKILLMATE_SUPABASE_CONFIG = ${JSON.stringify(config)};`);
+      .send(`window.SKILLFLEX_SUPABASE_CONFIG = ${JSON.stringify(config)};`);
   } catch (error) {
     next(error);
   }
@@ -162,7 +162,7 @@ app.use((error, request, response, _next) => {
   const message = status === 400 ? "Send a valid JSON request."
     : status === 413 ? "That request is too large."
       : `Sorry, we couldn't complete that request. Please try again. If it keeps happening, contact support with reference ${errorId}.`;
-  console.error("Skillmate request failed.", {
+  console.error("Skill Flex request failed.", {
     errorId,
     method: request.method,
     path: request.path,
@@ -173,7 +173,7 @@ app.use((error, request, response, _next) => {
     error: { name: error?.name || "Error", type: error?.type || "internal" },
   });
   if (response.headersSent) return;
-  response.set("X-Skillmate-Error-Id", errorId).status(status);
+  response.set("X-Skillflex-Error-Id", errorId).status(status);
   if (request.path.startsWith("/api/")) return response.json({ error: message, reference: errorId });
   return response.send(message);
 });
@@ -183,10 +183,10 @@ if (require.main === module) {
     getSupabaseConfig();
     const port = Number(process.env.PORT) || 3000;
     app.listen(port, () => {
-      console.log(`Skillmate is running at http://localhost:${port}`);
+      console.log(`Skill Flex is running at http://localhost:${port}`);
     });
   } catch (error) {
-    console.error(`Skillmate could not start: ${error.message}`);
+    console.error(`Skill Flex could not start: ${error.message}`);
     process.exitCode = 1;
   }
 }

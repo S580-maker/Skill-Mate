@@ -1,4 +1,4 @@
-# Skill-Mate State Management Analysis
+# Skill Flex State Management Analysis
 
 **Date:** November 11, 2026  
 **Status:** Website state management is **inconsistent and partially implemented**
@@ -7,13 +7,13 @@
 
 ## Executive Summary
 
-Skill-Mate uses **vanilla JavaScript without a centralized state-management framework**. State management varies significantly across pages:
+Skill Flex uses **vanilla JavaScript without a centralized state-management framework**. State management varies significantly across pages:
 
 - **Student Dashboard** (`index.html`): Has a comprehensive `state` object with localStorage/Supabase persistence
 - **Admin Console** (`admin.html`): Uses local script variables with DOM-based state
 - **Auth Pages** (`login.html`, `onboarding.html`): Manage state through Supabase sessions and form inputs
 - **Landing Page** (`landing.html`): Minimal state—mostly static with transient UI interactions
-- **Theme**: Centralized localStorage persistence (`skillmate-theme`)
+- **Theme**: Centralized localStorage persistence (`skillflex-theme`)
 - **Auth Session**: Managed globally via Supabase client
 
 **Result:** State management exists everywhere but **is not consistent or cohesive**.
@@ -28,7 +28,7 @@ Skill-Mate uses **vanilla JavaScript without a centralized state-management fram
 
 #### State Structure
 ```javascript
-const storageKey = "skillmate-student-demo-v1";
+const storageKey = "skillflex-student-demo-v1";
 let state = loadState();
 
 const defaultState = {
@@ -49,7 +49,7 @@ const defaultState = {
 
 #### State Persistence Layers
 1. **localStorage** (demo mode): Persists entire state JSON
-   - Key: `skillmate-student-demo-v1`
+   - Key: `skillflex-student-demo-v1`
    - Loaded at startup: `loadState()` (line 465)
    - Saved on changes: `saveState()` (line 476)
 
@@ -59,8 +59,8 @@ const defaultState = {
    - Uses RPC calls and direct table queries
 
 3. **sessionStorage** (transient): OTP and temporary auth states
-   - `skillmate-google-otp-pending`
-   - `skillmate-google-otp-active`
+   - `skillflex-google-otp-pending`
+   - `skillflex-google-otp-active`
 
 4. **In-Memory Maps**: Drafts, pending messages, negotiations
    - `chatDrafts` (Map)
@@ -154,12 +154,12 @@ let otpCountdownTimer = null;
 
 **Persistence:**
 - **sessionStorage**: OTP flags
-  - `skillmate-google-otp-pending`
-  - `skillmate-google-otp-active`
+  - `skillflex-google-otp-pending`
+  - `skillflex-google-otp-active`
 - **Form inputs**: Email, password (no persistence between page reloads)
 - **Supabase Session**: Managed globally by supabase-client.js
   - Stored in browser's IndexedDB by Supabase SDK
-  - Accessible via `window.skillmateSession`
+  - Accessible via `window.skillflexSession`
 
 **Temporary State:**
 - Countdown timers: `otpCountdownTimer`
@@ -193,7 +193,7 @@ let previewUrl = "";
 
 #### State Structure
 ```javascript
-const storageKey = "skillmate-theme";
+const storageKey = "skillflex-theme";
 let savedTheme = null;
 try {
   const storedTheme = localStorage.getItem(storageKey);
@@ -202,7 +202,7 @@ try {
 ```
 
 #### Persistence
-- **localStorage**: `skillmate-theme` = `"dark"` or `"light"`
+- **localStorage**: `skillflex-theme` = `"dark"` or `"light"`
 - **System Preference Fallback**: Uses `prefers-color-scheme` media query
 - **DOM Attribute**: `document.documentElement.dataset.theme = "dark" | "light"`
 
@@ -222,10 +222,10 @@ try {
 
 #### Global State
 ```javascript
-window.skillmateSupabase = createClient(projectUrl.origin, anonKey, {
+window.skillflexSupabase = createClient(projectUrl.origin, anonKey, {
   auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
 });
-window.skillmateSession = null;
+window.skillflexSession = null;
 ```
 
 #### State Persistence
@@ -238,19 +238,19 @@ window.skillmateSession = null;
 
 #### Global Events
 ```javascript
-window.skillmateSupabase.auth.onAuthStateChange((event, session) => {
-  window.skillmateSession = session;
-  window.dispatchEvent(new CustomEvent("skillmate:auth-state-change", {
+window.skillflexSupabase.auth.onAuthStateChange((event, session) => {
+  window.skillflexSession = session;
+  window.dispatchEvent(new CustomEvent("skillflex:auth-state-change", {
     detail: { event, session }
   }));
 });
 ```
 
 #### Global Functions
-- `window.skillmateRestoreSession()` — Get stored session
-- `window.skillmateSignOut()` — Clear session
-- `window.syncSkillmateServerSession(session)` — Server-side sync
-- `window.clearExpiredSkillmateSession()` — Logout on expired token
+- `window.skillflexRestoreSession()` — Get stored session
+- `window.skillflexSignOut()` — Clear session
+- `window.syncSkillflexServerSession(session)` — Server-side sync
+- `window.clearExpiredSkillflexSession()` — Logout on expired token
 
 **State Management Pattern:** Global singleton; Supabase SDK handles persistence; custom events for state changes.
 
@@ -300,7 +300,7 @@ const conversationMessageRefreshTimes = new Map();    // Last refresh timestamp
 
 #### Persistence Layers
 1. **localStorage**: Chat message cache
-   - Key: `skillmate-chat-messages:${userId}`
+   - Key: `skillflex-chat-messages:${userId}`
    - Synced via `cacheConversationMessages()` (line 182)
    - Loaded via `loadCachedConversationMessages()` (line 169)
 
@@ -410,7 +410,7 @@ const data = JSON.parse(localStorage.getItem(demoKey) || "{}");
 - No "logout" hook to clear user-specific data
 
 ### ✗ **No State Versioning**
-- localStorage keys are hardcoded (`"skillmate-student-demo-v1"`)
+- localStorage keys are hardcoded (`"skillflex-student-demo-v1"`)
 - No migration strategy if schema changes
 - Old cached data could break new features
 
@@ -461,9 +461,9 @@ class StateManager {
   persist(path, value) {
     // Route to localStorage, sessionStorage, or Supabase
     if (path.startsWith('auth.')) {
-      sessionStorage.setItem(`skillmate-${path}`, JSON.stringify(value));
+      sessionStorage.setItem(`skillflex-${path}`, JSON.stringify(value));
     } else if (path.startsWith('user.')) {
-      localStorage.setItem(`skillmate-${path}`, JSON.stringify(value));
+      localStorage.setItem(`skillflex-${path}`, JSON.stringify(value));
     } else if (path.startsWith('supabase.')) {
       this.syncToSupabase(path, value);
     }
@@ -478,18 +478,18 @@ class StateManager {
 ### 3. **Implement Global State Bus**
 ```javascript
 // All pages subscribe to auth changes
-window.addEventListener('skillmate:auth-change', (e) => {
+window.addEventListener('skillflex:auth-change', (e) => {
   // Clear user-specific state
   // Refresh page data
   // Reset draft state
 });
 
 // All pages sync on logout
-window.skillmateSignOut = async () => {
+window.skillflexSignOut = async () => {
   // Clear state
   await clearAllLocalStorage();
   await clearAllInMemoryState();
-  window.dispatchEvent(new CustomEvent('skillmate:signed-out'));
+  window.dispatchEvent(new CustomEvent('skillflex:signed-out'));
 };
 ```
 
@@ -537,7 +537,7 @@ function showPage(page) {
 
 ## Conclusion
 
-**Skill-Mate's state management exists but is NOT consistent "everywhere."** Instead:
+**Skill Flex's state management exists but is NOT consistent "everywhere."** Instead:
 
 1. **Different pages use different patterns** (centralized, DOM-centric, form-driven)
 2. **Persistence is ad-hoc** (localStorage, sessionStorage, IndexedDB, Supabase, in-memory)

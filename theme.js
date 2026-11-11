@@ -1,5 +1,5 @@
-(function initializeSkillmateTheme() {
-  const storageKey = "skillmate-theme";
+(function initializeSkillflexTheme() {
+  const storageKey = "skillflex-theme";
   const colorScheme = window.matchMedia?.("(prefers-color-scheme: dark)");
   let validationSequence = 0;
   let themeTransitionTimer;
@@ -8,7 +8,7 @@
     const storedTheme = localStorage.getItem(storageKey);
     if (storedTheme === "dark" || storedTheme === "light") savedTheme = storedTheme;
   } catch (error) {
-    console.warn("Could not load the saved Skillmate theme preference.", error);
+    console.warn("Could not load the saved Skill Flex theme preference.", error);
   }
   document.documentElement.dataset.theme = savedTheme || (colorScheme?.matches ? "dark" : "light");
 
@@ -43,7 +43,7 @@
         try {
           localStorage.setItem(storageKey, nextTheme);
         } catch (error) {
-          console.warn("Could not save the Skillmate theme preference.", error);
+          console.warn("Could not save the Skill Flex theme preference.", error);
         }
         updateThemeButtons();
       });
@@ -62,7 +62,7 @@
       if (!error) {
         error = document.createElement("small");
         error.className = "field-error";
-        error.id = `${field.id || `skillmate-field-${++validationSequence}`}-error`;
+        error.id = `${field.id || `skillflex-field-${++validationSequence}`}-error`;
         error.setAttribute("role", "alert");
         label.append(error);
       }

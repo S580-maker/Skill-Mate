@@ -7,7 +7,7 @@ const path = require("node:path");
 const http = require("node:http");
 const { spawn } = require("node:child_process");
 const root = path.resolve(__dirname, "..");
-const output = fs.mkdtempSync(path.join(os.tmpdir(), "skillmate-mobile-"));
+const output = fs.mkdtempSync(path.join(os.tmpdir(), "skillflex-mobile-"));
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const authFixture = `<script>
 window.__authCalls=[];
@@ -18,8 +18,8 @@ window.__googleOtpCalls=[];
 window.__googleSignOutCalls=0;
 window.__serverSessionSyncCalls=0;
 window.__setSessionCalls=0;
-window.skillmateRestoreSession=async()=>null;
-window.syncSkillmateServerSession=async()=>{window.__serverSessionSyncCalls++;};
+window.skillflexRestoreSession=async()=>null;
+window.syncSkillflexServerSession=async()=>{window.__serverSessionSyncCalls++;};
 const originalAuthFetch=window.fetch.bind(window);
 window.fetch=async(url,options)=>{
   if(url==="/api/auth/google-2fa"){
@@ -32,7 +32,7 @@ window.fetch=async(url,options)=>{
   }
   if(url==="/api/auth/verify"){
     await new Promise(resolve=>setTimeout(resolve,500));
-    if(window.sessionStorage.getItem("skillmate-google-otp-active")==="1"){
+    if(window.sessionStorage.getItem("skillflex-google-otp-active")==="1"){
       window.__verifyCalls.push(JSON.parse(options.body));
       return new Response(JSON.stringify({provider:"google",session:{access_token:"verified-google-access",refresh_token:"verified-google-refresh"}}),{status:200,headers:{"content-type":"application/json"}});
     }
@@ -46,7 +46,7 @@ window.fetch=async(url,options)=>{
   }
   return originalAuthFetch(url,options);
 };
-window.skillmateSupabase={auth:{onAuthStateChange(){},signUp:async(args)=>{window.__authCalls.push(args);return {data:{session:null}};},getSession:async()=>window.__googleSessionMissing?({data:{session:null},error:{message:"Auth session missing!"}}):({data:{session:{access_token:"google-access",refresh_token:"google-refresh",user:{id:"fixture",email:"student@example.test"}}},error:null}),setSession:async()=>{window.__setSessionCalls++;return {data:{session:{access_token:"verified-google-access",refresh_token:"verified-google-refresh",user:{id:"fixture",email:"student@example.test"}}},error:null};},signOut:async()=>{window.__googleSignOutCalls++;return {error:null};},signInWithOAuth:async(args)=>{window.__authCalls.push(args);return {};}}};
+window.skillflexSupabase={auth:{onAuthStateChange(){},signUp:async(args)=>{window.__authCalls.push(args);return {data:{session:null}};},getSession:async()=>window.__googleSessionMissing?({data:{session:null},error:{message:"Auth session missing!"}}):({data:{session:{access_token:"google-access",refresh_token:"google-refresh",user:{id:"fixture",email:"student@example.test"}}},error:null}),setSession:async()=>{window.__setSessionCalls++;return {data:{session:{access_token:"verified-google-access",refresh_token:"verified-google-refresh",user:{id:"fixture",email:"student@example.test"}}},error:null};},signOut:async()=>{window.__googleSignOutCalls++;return {error:null};},signInWithOAuth:async(args)=>{window.__authCalls.push(args);return {};}}};
 </script>`;
 const recoveryFixture = `<script>
 window.__recoveringPassword=true;
@@ -72,8 +72,8 @@ window.fetch=async(url,options={})=>{
 };
 </script>`;
 const onboardingFixture = `<script>
-window.syncSkillmateServerSession=async()=>{};
-window.skillmateSupabase={auth:{getSession:async()=>({data:{session:{user:{id:"fixture",email:"student@example.test",app_metadata:{provider:"google"},user_metadata:{full_name:"Test Student"}}}}})},
+window.syncSkillflexServerSession=async()=>{};
+window.skillflexSupabase={auth:{getSession:async()=>({data:{session:{user:{id:"fixture",email:"student@example.test",app_metadata:{provider:"google"},user_metadata:{full_name:"Test Student"}}}}})},
 from(){return {select(){return this;},eq(){return this;},single:async()=>({data:{full_name:"Test Student",university:"",skills:[],avatar_url:"",onboarding_completed:false}}),update(data){sessionStorage.setItem("onboarding-fixture",JSON.stringify(data));return this;}};}};
 </script>`;
 const server = http.createServer((req, res) => {
@@ -108,7 +108,7 @@ const server = http.createServer((req, res) => {
     if (name === "onboarding.html") content = content.replace('<script src="ghana-universities.js">', `${onboardingFixture}<script src="ghana-universities.js">`);
   }
   if (name === "user.js") {
-    content = content.replace("const appSupabase = window.skillmateSupabase;", "let appSupabase = window.skillmateSupabase;");
+    content = content.replace("const appSupabase = window.skillflexSupabase;", "let appSupabase = window.skillflexSupabase;");
     content = content.replace("function syncMessageChannels() {", "function syncMessageChannels() { if (window.__testDisableRealtime) return;");
     content = content.replace("bootstrapStudentApp().then(() => window.clearTimeout(startupStuckTimer), (error) => {", `Promise.resolve().then(() => {
     state.profile.university = "University of Ghana";
@@ -179,7 +179,7 @@ async function main() {
   };
   const checkWidth = async label => {
     assert.equal(await evaluate('document.querySelectorAll(".brand-logo").length'), 0, `${label}: brand logos are removed`);
-    assert.equal(await evaluate('document.querySelector(".brand-name")?.textContent'), "Skillmate", `${label}: text brand remains visible`);
+    assert.equal(await evaluate('document.querySelector(".brand-name")?.textContent'), "Skill Flex", `${label}: text brand remains visible`);
     const dimensions = await evaluate(`({viewport:innerWidth, document:document.documentElement.scrollWidth, body:document.body.scrollWidth})`);
     assert.ok(dimensions.document <= dimensions.viewport + 1 && dimensions.body <= dimensions.viewport + 1, `${label}: horizontal overflow ${JSON.stringify(dimensions)}`);
     const duplicates = await evaluate(`Array.from(document.querySelectorAll('[id]')).map(e=>e.id).filter((id,i,all)=>all.indexOf(id)!==i)`);
@@ -257,7 +257,7 @@ async function main() {
     await evaluate('document.querySelector("#auth-consent").checked=true;document.querySelector("#google-signin").click()');
     assert.equal(await evaluate('window.__authCalls[0].provider'), "google");
     assert.equal(await evaluate('new URL(window.__authCalls[0].options.redirectTo).pathname.endsWith("/login.html")'), true);
-    assert.equal(await evaluate('new URL(window.__authCalls[0].options.redirectTo).searchParams.get("skillmate-google-otp")'), "1", "OAuth callback preserves the Google verification flow");
+    assert.equal(await evaluate('new URL(window.__authCalls[0].options.redirectTo).searchParams.get("skillflex-google-otp")'), "1", "OAuth callback preserves the Google verification flow");
     await evaluate('redirectForSession({access_token:"google-access",refresh_token:"google-refresh",expires_in:3600})');
     await wait(100);
     assert.equal(await evaluate('window.__googleOtpCalls.length'), 1);
@@ -271,7 +271,7 @@ async function main() {
     assert.equal(await evaluate('window.__serverSessionSyncCalls'), 1, "Successful OTP reuses and syncs the preserved Google session");
     assert.equal(await evaluate('window.__setSessionCalls'), 1, "Missing local auth state is restored from the server-verified session");
     assert.equal(await evaluate('window.__googleSignOutCalls'), 0, "Google session is not cleared before the OTP is verified");
-    assert.equal(await evaluate('sessionStorage.getItem("skillmate-google-otp-active")'), null);
+    assert.equal(await evaluate('sessionStorage.getItem("skillflex-google-otp-active")'), null);
     await wait(600);
     assert.equal(await evaluate('location.pathname.endsWith("/index.html")'), true, "Verified Google user enters the app");
     await call("Emulation.setEmulatedMedia", { features: [] });
@@ -279,7 +279,7 @@ async function main() {
   const verifyGrowthFlow = async () => {
     await navigate("index.html");
     await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
-    assert.equal(await evaluate('!!window.skillmateGrowth'), true);
+    assert.equal(await evaluate('!!window.skillflexGrowth'), true);
     assert.equal(await evaluate('document.querySelector("#marketplace-filters").hidden'), true, "Marketplace filters start collapsed");
     const categoryControls = await evaluate(`(()=>{const row=document.querySelector(".marketplace-category-controls");const button=document.querySelector("#marketplace-filter-trigger");const box=button.getBoundingClientRect();return{first:row.firstElementChild===button,next:button.nextElementSibling.id,width:box.width,height:box.height,text:button.textContent.trim(),label:button.getAttribute("aria-label")};})()`);
     assert.equal(categoryControls.first, true, "Icon-only filter control is first in the service category row");
@@ -371,7 +371,7 @@ async function main() {
     assert.equal(await evaluate('document.querySelector("#request-post-modal").open'), true, "A failed save keeps the form open");
     assert.equal(await evaluate('document.querySelector("#request-title").value'), "Need a poster for Friday", "A failed save preserves the task");
     assert.ok(await evaluate('document.querySelector("#request-post-feedback").textContent.includes("retry")'));
-    await evaluate('window.__failRequest=false;window.skillmateGrowth.refreshBoard();document.querySelector("#request-post-form").requestSubmit();document.querySelector("#request-post-form").requestSubmit()');
+    await evaluate('window.__failRequest=false;window.skillflexGrowth.refreshBoard();document.querySelector("#request-post-form").requestSubmit();document.querySelector("#request-post-form").requestSubmit()');
     await wait(650);
     assert.equal(await evaluate('window.__requestWrites.length'), 2, "Retry sends one write, even with a double submission");
     assert.equal(await evaluate('window.__requestWrites[1].name'), "post_campus_request");
@@ -385,11 +385,11 @@ async function main() {
     console.log("PASS connected posting: banner opens form, failed save preserves inputs, retry saves once and displays the new post");
   };
   const verifyMissingGoogleSessionFeedback = async () => {
-    await navigate("login.html?skillmate-google-otp=1");
+    await navigate("login.html?skillflex-google-otp=1");
     await wait(50);
     assert.equal(await evaluate('document.querySelector("#auth-message").textContent'), "Google sign-in returned without an authenticated session. Please try again.");
-    assert.equal(await evaluate('sessionStorage.getItem("skillmate-google-otp-pending")'), null);
-    assert.equal(await evaluate('new URL(location.href).searchParams.has("skillmate-google-otp")'), false);
+    assert.equal(await evaluate('sessionStorage.getItem("skillflex-google-otp-pending")'), null);
+    assert.equal(await evaluate('new URL(location.href).searchParams.has("skillflex-google-otp")'), false);
   };
   await call("Page.enable"); await call("Runtime.enable"); await call("Network.enable");
   await call("Page.bringToFront");
@@ -660,12 +660,12 @@ async function main() {
   assert.ok(savedDiscoverScroll > 0, "The discovery page can be scrolled before navigating away");
   await evaluate('document.querySelector("#menu-toggle").click();document.querySelector(".side-nav [data-page=bookings]").click()');
   assert.equal(await evaluate("location.hash"), "#bookings", "Selecting a mobile navigation item updates the route");
-  assert.equal(await evaluate("document.title"), "My bookings | Skillmate", "The page title follows the selected section");
+  assert.equal(await evaluate("document.title"), "My bookings | Skill Flex", "The page title follows the selected section");
   await evaluate("window.history.back()");
   await wait(400);
   assert.equal(await evaluate("location.hash"), "#home", "Browser Back returns to the previous section");
   assert.ok(Math.abs(await evaluate("window.scrollY") - savedDiscoverScroll) <= 3, "Browser Back restores the previous section's scroll position");
-  assert.equal(await evaluate("document.title"), "Discover | Skillmate", "Restored sections retain a matching page title");
+  assert.equal(await evaluate("document.title"), "Discover | Skill Flex", "Restored sections retain a matching page title");
   await evaluate('showPage("profile-settings")');
   await evaluate('showPage("home");renderAll()');
   assert.equal(await evaluate('document.querySelector("#verification-cta").hidden'), false, "Unverified students see the campus verification prompt");
@@ -721,7 +721,7 @@ async function main() {
   assert.ok(await evaluate('Array.from(document.querySelectorAll("#group-grid .group-card h3")).every(e=>e.textContent.includes("Braids"))'));
   await evaluate('showPage("messages")');
   assert.equal(await evaluate('document.querySelectorAll("dialog[open]").length'), 0, "Changing pages closes stacked group dialogs");
-  await evaluate('showPage("home");globalSearch.value="";selectedCategory="All";window.__originalProviderServices=providerServices;window.__testServices=[{id:"audit-tech",providerId:"daniel",title:"Audit laptop repair",category:"Tech help",description:"Laptop repair",price:50,active:true,negotiationMode:"fixed",deliveryMethod:"in_person"},{id:"audit-math",providerId:"daniel",title:"Audit calculus tutoring",category:"Tutoring",description:"Calculus help",price:40,active:true,negotiationMode:"hybrid",deliveryMethod:"both"}];providerServices=id=>id==="daniel"?window.__testServices:window.__originalProviderServices(id);renderMarketplace("marketplace-grid",window.skillmateMarketplace.expandListings([seedProviders[0]],window.__testServices))');
+  await evaluate('showPage("home");globalSearch.value="";selectedCategory="All";window.__originalProviderServices=providerServices;window.__testServices=[{id:"audit-tech",providerId:"daniel",title:"Audit laptop repair",category:"Tech help",description:"Laptop repair",price:50,active:true,negotiationMode:"fixed",deliveryMethod:"in_person"},{id:"audit-math",providerId:"daniel",title:"Audit calculus tutoring",category:"Tutoring",description:"Calculus help",price:40,active:true,negotiationMode:"hybrid",deliveryMethod:"both"}];providerServices=id=>id==="daniel"?window.__testServices:window.__originalProviderServices(id);renderMarketplace("marketplace-grid",window.skillflexMarketplace.expandListings([seedProviders[0]],window.__testServices))');
   assert.equal(await evaluate('document.querySelectorAll("#marketplace-grid .provider-card").length'), 2);
   await evaluate('document.querySelector("#marketplace-grid [data-book=daniel][data-service=audit-math]").click()');
   assert.equal(await evaluate('document.querySelector("#booking-service").value'), "audit-math", "Book the selected service rather than the provider's first service");

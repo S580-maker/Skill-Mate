@@ -54,7 +54,7 @@ test("Upstash store increments with TTL and supports decrement and reset", async
     ["EVAL", calls[1].body[1], "1"],
     ["EVAL", "return redis.call('DEL',KEYS[1])", "1"],
   ]);
-  assert.ok(calls.every(call => call.body[3] === "skillmate:rate-limit:v1:auth:127.0.0.1"));
+  assert.ok(calls.every(call => call.body[3] === "skillflex:rate-limit:v1:auth:127.0.0.1"));
 });
 
 test("rate-limit factory accepts configured shared storage", () => {
@@ -126,5 +126,5 @@ test("raw Vercel requests use platform client IPs and local requests ignore forw
   delete process.env.VERCEL;
   await runRateLimited({ headers: { "x-forwarded-for": "192.0.2.99" }, socket: { remoteAddress: "127.0.0.1" } },
     rateLimitResponse(), limiter, () => {});
-  assert.deepEqual(keys, ["192.0.2.1", "192.0.2.2", "127.0.0.1"].map(ip => `skillmate:rate-limit:v1:client-ip-regression:${ip}`));
+  assert.deepEqual(keys, ["192.0.2.1", "192.0.2.2", "127.0.0.1"].map(ip => `skillflex:rate-limit:v1:client-ip-regression:${ip}`));
 });

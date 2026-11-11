@@ -15,4 +15,4 @@ Run `node --test tests/*.test.js` for behavioral regression tests. The mocked 40
 
 Dashboard refresh now executes the shared conversation-directory query once, and overlapping refresh callers share one in-flight load. Other dashboard queries remain in place because their data feeds existing views and counters.
 
-For real-account timing, inspect browser Performance entries named `skillmate:dashboard-refresh` and `skillmate:message-load`, alongside the Network panel. Compare equivalent accounts and network conditions before and after deploying the migration. Request-count tests establish reduced round trips; they do not establish production latency gains.
+For real-account timing, inspect browser Performance entries named `skillflex:dashboard-refresh` and `skillflex:message-load`, alongside the Network panel. Compare equivalent accounts and network conditions before and after deploying the migration. Request-count tests establish reduced round trips; they do not establish production latency gains.

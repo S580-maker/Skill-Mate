@@ -86,7 +86,7 @@ function otpFixture(fetchHandler = async () => ({ ok: false, json: async () => (
       setInterval(callback, delay) { intervals.push({ callback, delay }); return intervals.length; },
       setTimeout(callback) { callback(); return 1; },
       sessionStorage: { getItem() { return null; }, removeItem() {} },
-      syncSkillmateServerSession: async () => {},
+      syncSkillflexServerSession: async () => {},
       location: { assign(url) { navigations.push(url); } },
     },
     console: { error() {} },
@@ -229,7 +229,7 @@ test("restored sessions without OTP proof start email verification instead of re
   });
   context.window = {
     sessionStorage: { getItem: () => null },
-    syncSkillmateServerSession: async () => {
+    syncSkillflexServerSession: async () => {
       const error = new Error("Verify your email.");
       error.code = "OTP_VERIFICATION_REQUIRED";
       throw error;
@@ -292,7 +292,7 @@ test("Ghana university suggestions load from the built-in directory without a ne
   const options = get("#ghana-university-options");
   const status = get("#university-directory-status");
   options.replaceChildren = (...items) => { options.children = items; };
-  context.window = { SKILLMATE_UNIVERSITY_DIRECTORY: { fallback: universities } };
+  context.window = { SKILLFLEX_UNIVERSITY_DIRECTORY: { fallback: universities } };
   context.document.createElement = () => ({ value: "" });
   vm.runInContext(source.slice(
     source.indexOf("function loadGhanaianUniversities()"),
@@ -317,7 +317,7 @@ test("duplicate password sign-in submissions share the in-flight operation", asy
     context.challengeEmail = email;
     context.document.body.dataset.authMode = "verification";
   };
-  context.window = { syncSkillmateServerSession: async () => {}, location: { assign() {} }, clearInterval() {}, setInterval() { return 1; } };
+  context.window = { syncSkillflexServerSession: async () => {}, location: { assign() {} }, clearInterval() {}, setInterval() { return 1; } };
   context.document.querySelectorAll = () => [];
   context.document.querySelector("#otp-form").addEventListener = () => {};
   context.document.querySelector("#auth-social-section").hidden = false;

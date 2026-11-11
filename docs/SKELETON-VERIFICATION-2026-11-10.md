@@ -1,4 +1,4 @@
-# Skillmate loading system — implementation and verification
+# Skill Flex loading system — implementation and verification
 
 ## Audit before editing
 

@@ -51,7 +51,7 @@ test("Recently Added shows only the two newest listings", () => {
 
   assert.deepEqual(context.latestMarketplaceListings(listings).map(listing => listing.id), ["newest", "second-newest"]);
   assert.equal(listings.length, 3, "limiting Recently Added must not mutate the marketplace listings");
-  assert.match(source.slice(renderStart, renderEnd), /let visible = window\.skillmateMarketplace\.sortByCampus/);
+  assert.match(source.slice(renderStart, renderEnd), /let visible = window\.skillflexMarketplace\.sortByCampus/);
 });
 
 test("every active service is discoverable while retaining the provider identity and its own booking ID", () => {
@@ -120,7 +120,7 @@ test("uploaded image URLs reject executable schemes and accept supported photo s
 
 test("connected accounts never initialize from demo bookings or saved local demo data", () => {
   const context = {
-    window: { skillmateSupabase: {} }, structuredClone,
+    window: { skillflexSupabase: {} }, structuredClone,
     defaultState: { profile: { name: "Demo" }, bookings: [{ id: "demo" }], services: [{ id: "demo" }] },
     localStorage: { getItem() { throw new Error("Demo storage must not be consulted"); } },
   };

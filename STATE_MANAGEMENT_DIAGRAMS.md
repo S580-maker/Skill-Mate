@@ -4,7 +4,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        SKILLMATE STATE LAYERS                     │
+│                        SKILL FLEX STATE LAYERS                  │
 └─────────────────────────────────────────────────────────────────┘
 
 LAYER 1: USER INTERACTION
@@ -28,16 +28,16 @@ LAYER 1: USER INTERACTION
    └─ NO JavaScript state object
 
 LAYER 2: STORAGE MECHANISMS
-├─ localStorage ("skillmate-*" keys)
-│  ├─ skillmate-student-demo-v1 (dashboard state)
-│  ├─ skillmate-theme (light/dark)
-│  ├─ skillmate-chat-messages:${userId} (message cache)
-│  └─ skillmate-dashboard-load-estimate-ms-v1
+├─ localStorage ("skillflex-*" keys)
+│  ├─ skillflex-student-demo-v1 (dashboard state)
+│  ├─ skillflex-theme (light/dark)
+│  ├─ skillflex-chat-messages:${userId} (message cache)
+│  └─ skillflex-dashboard-load-estimate-ms-v1
 │
-├─ sessionStorage ("skillmate-*" flags)
-│  ├─ skillmate-google-otp-pending
-│  ├─ skillmate-google-otp-active
-│  └─ skillmate-theme-transition
+├─ sessionStorage ("skillflex-*" flags)
+│  ├─ skillflex-google-otp-pending
+│  ├─ skillflex-google-otp-active
+│  └─ skillflex-theme-transition
 │
 ├─ IndexedDB (Supabase SDK managed)
 │  ├─ Session tokens
@@ -145,7 +145,7 @@ PAGE A (Dashboard)              PAGE B (Admin)              PAGE C (Landing)
   └─ In-memory Maps
          ↓
 [Auth Change Event]
-  └─ window:skillmate:auth-state-change
+  └─ window:skillflex:auth-state-change
          ↓
 All pages listen (if subscribed)
          ↓
@@ -230,14 +230,14 @@ State Management Files:
 │  └─ In-memory Maps (chat, drafts, etc.)
 │
 ├─ supabase-client.js (Global auth state)
-│  ├─ window.skillmateSupabase (Supabase client)
-│  ├─ window.skillmateSession (Current session)
+│  ├─ window.skillflexSupabase (Supabase client)
+│  ├─ window.skillflexSession (Current session)
 │  ├─ onAuthStateChange() (Auth listener)
-│  ├─ window.syncSkillmateServerSession() (Sync to backend)
-│  └─ window.skillmateSignOut() (Logout)
+│  ├─ window.syncSkillflexServerSession() (Sync to backend)
+│  └─ window.skillflexSignOut() (Logout)
 │
 ├─ theme.js (Theme state)
-│  ├─ localStorage.skillmate-theme
+│  ├─ localStorage.skillflex-theme
 │  ├─ document.documentElement.dataset.theme
 │  └─ System preference fallback
 │
@@ -274,14 +274,14 @@ To verify state consistency:
 ```javascript
 // Test 1: Check localStorage contents
 Object.keys(localStorage).forEach(key => {
-  if (key.startsWith('skillmate-')) {
+  if (key.startsWith('skillflex-')) {
     console.log(`${key}:`, localStorage.getItem(key));
   }
 });
 
 // Test 2: Check sessionStorage
 Object.keys(sessionStorage).forEach(key => {
-  if (key.startsWith('skillmate-')) {
+  if (key.startsWith('skillflex-')) {
     console.log(`${key}:`, sessionStorage.getItem(key));
   }
 });
@@ -292,7 +292,7 @@ console.log('Chat drafts:', chatDrafts);
 console.log('Booking drafts:', bookingDrafts);
 
 // Test 4: Check Supabase session
-console.log('Auth session:', window.skillmateSession);
+console.log('Auth session:', window.skillflexSession);
 
 // Test 5: Verify cross-page sync
 // Navigate to different page, then back

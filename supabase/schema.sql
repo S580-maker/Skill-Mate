@@ -1,4 +1,4 @@
--- Skillmate initial schema for Supabase.
+-- Skill Flex initial schema for Supabase.
 -- Apply this file in the Supabase SQL editor, then assign admin role only from
 -- a trusted SQL editor or server-side service-role environment.
 
@@ -362,7 +362,7 @@ set search_path = ''
 as $$
 begin
   insert into public.notifications (user_id, kind, title, body, target_path, conversation_id)
-  select member.user_id, 'message', 'New message', 'Open Skillmate to read your new message.',
+  select member.user_id, 'message', 'New message', 'Open Skill Flex to read your new message.',
     'messages', new.conversation_id
   from public.conversation_members member
   join public.profiles recipient on recipient.id = member.user_id and recipient.notify_messages
@@ -693,7 +693,7 @@ as $$
   select exists (
     select 1
     from public.conversation_members member
-    where split_part(realtime.topic(), ':', 1) = 'skillmate-chat'
+    where split_part(realtime.topic(), ':', 1) = 'skillflex-chat'
       and member.conversation_id::text = split_part(realtime.topic(), ':', 2)
       and member.user_id = (select auth.uid())
       and not public.is_conversation_blocked(member.conversation_id)
@@ -1756,7 +1756,7 @@ set search_path = ''
 as $$
 begin
   if auth.role() = 'authenticated' and not public.is_verified_session() then
-    raise exception 'Verify your email before accessing Skillmate.';
+    raise exception 'Verify your email before accessing Skill Flex.';
   end if;
   if tg_op = 'DELETE' then
     return old;
@@ -1913,7 +1913,7 @@ as $$
   select public.is_verified_session() and exists (
     select 1
     from public.conversation_members member
-    where split_part(realtime.topic(), ':', 1) = 'skillmate-chat'
+    where split_part(realtime.topic(), ':', 1) = 'skillflex-chat'
       and member.conversation_id::text = split_part(realtime.topic(), ':', 2)
       and member.user_id = (select auth.uid())
       and not public.is_conversation_blocked(member.conversation_id)

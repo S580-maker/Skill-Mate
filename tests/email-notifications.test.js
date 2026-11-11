@@ -47,7 +47,7 @@ function configureEnvironment() {
     SMTP_PORT: "587",
     SMTP_USER: "mailer@example.test",
     SMTP_PASS: "test-password",
-    SMTP_FROM: "Skillmate <mailer@example.test>",
+    SMTP_FROM: "Skill Flex <mailer@example.test>",
   });
 }
 

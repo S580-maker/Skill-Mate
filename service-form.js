@@ -1,5 +1,5 @@
 (() => {
-  const utils = window.skillmateServiceUtils;
+  const utils = window.skillflexServiceUtils;
   const byId = id => document.getElementById(`service-${id}`);
   const form = byId("form");
   const modal = byId("modal");
@@ -252,7 +252,7 @@
         });
     }
   }
-  window.skillmateServiceEditor = { prepare };
+  window.skillflexServiceEditor = { prepare };
 
   form.addEventListener("input", event => {
     if (event.target.id.startsWith("service-")) setError(event.target.id.slice(8));
@@ -396,7 +396,7 @@
       }
       state.services = [saved, ...state.services.filter(service => service.id !== saved.id)];
       try {
-        window.skillmateOnServicePublished?.(saved);
+        window.skillflexOnServicePublished?.(saved);
       } catch (error) {
         console.error("Your service was saved, but Discover could not be updated immediately.", error);
         showToast("Your service was saved, but Discover could not refresh. Reload to see the latest listings.", "error");

@@ -1,4 +1,4 @@
-const { maskEmail, getResendRetryDelay, requestAuth } = globalThis.skillmateAuthUtils;
+const { maskEmail, getResendRetryDelay, requestAuth } = globalThis.skillflexAuthUtils;
 const recoveryForm = document.querySelector("#forgot-password-form");
 const recoveryEmail = document.querySelector("#recovery-email");
 const recoveryMessage = document.querySelector("#recovery-message");
@@ -103,7 +103,7 @@ recoveryForm.addEventListener("submit", async (event) => {
     startCountdown();
     codeInputs[0]?.focus();
   } catch (error) {
-    console.error("Could not start Skillmate password recovery.", error);
+    console.error("Could not start Skill Flex password recovery.", error);
     recoveryMessage.textContent = error.message || "Could not start password recovery. Please try again.";
   } finally {
     recoverySubmit.disabled = false;
@@ -190,7 +190,7 @@ codeForm.addEventListener("submit", async (event) => {
     document.querySelector("#recovery-intro").textContent = "Your email is verified. Choose a new password for your account.";
     newPassword.focus();
   } catch (error) {
-    console.error("Could not verify the Skillmate password recovery code.", error);
+    console.error("Could not verify the Skill Flex password recovery code.", error);
     recoveryOtp.classList.remove("is-success", "is-error");
     void recoveryOtp.offsetWidth;
     recoveryOtp.classList.add("is-error");
@@ -298,7 +298,7 @@ newPasswordForm.addEventListener("submit", async (event) => {
     newPasswordForm.querySelectorAll("input, button").forEach((control) => { control.disabled = true; });
     window.setTimeout(() => window.location.assign("login.html"), 900);
   } catch (error) {
-    console.error("Could not update the Skillmate password.", error);
+    console.error("Could not update the Skill Flex password.", error);
     newPasswordMessage.textContent = error.message || "Could not update your password. Please try again.";
     newPasswordSubmit.disabled = false;
   } finally {

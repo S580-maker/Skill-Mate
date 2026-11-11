@@ -26,20 +26,20 @@ function runCallback(href) {
 
 test("Google OAuth hash callback is handed to login with verification enabled", () => {
   const callbackHash = "#access_token=oauth-token&refresh_token=refresh-token";
-  const redirect = new URL(runCallback(`https://skillmate.example/landing.html${callbackHash}`));
+  const redirect = new URL(runCallback(`https://skillflex.example/landing.html${callbackHash}`));
 
   assert.equal(redirect.pathname, "/login.html");
-  assert.equal(redirect.searchParams.get("skillmate-google-otp"), "1");
+  assert.equal(redirect.searchParams.get(  "skillflex-google-otp"), "1");
   assert.equal(redirect.hash, callbackHash);
 });
 
 test("OAuth code callback parameters are preserved for login", () => {
   const redirect = new URL(runCallback(
-    "https://skillmate.example/landing.html?code=oauth-code&state=state-value&next=admin",
+    "https://skillflex.example/landing.html?code=oauth-code&state=state-value&next=admin",
   ));
 
   assert.equal(redirect.pathname, "/login.html");
-  assert.equal(redirect.searchParams.get("skillmate-google-otp"), "1");
+  assert.equal(redirect.searchParams.get(  "skillflex-google-otp"), "1");
   assert.equal(redirect.searchParams.get("code"), "oauth-code");
   assert.equal(redirect.searchParams.get("state"), "state-value");
   assert.equal(redirect.searchParams.get("next"), "admin");
@@ -47,5 +47,5 @@ test("OAuth code callback parameters are preserved for login", () => {
 });
 
 test("regular landing page visits stay on the landing page", () => {
-  assert.equal(runCallback("https://skillmate.example/landing.html#home"), null);
+  assert.equal(runCallback("https://skillflex.example/landing.html#home"), null);
 });

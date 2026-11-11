@@ -193,10 +193,10 @@ function getAccessTokenExpiry(token) {
 function getSessionCookie(request) {
   const cookieHeader = request.headers?.cookie || "";
   const cookie = cookieHeader.split(";").map((part) => part.trim())
-    .find((part) => part.startsWith("skillmate_session="));
+    .find((part) => part.startsWith("skillflex_session="));
   if (!cookie) return "";
   try {
-    return decodeURIComponent(cookie.slice("skillmate_session=".length));
+    return decodeURIComponent(cookie.slice("skillflex_session=".length));
   } catch {
     return "";
   }
@@ -207,7 +207,7 @@ function setSessionCookie(response, token) {
   const secure = process.env.NODE_ENV === "production" || response.req?.protocol !== "http";
   response.setHeader(
     "Set-Cookie",
-    `skillmate_session=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
+    `skillflex_session=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
   );
 }
 
@@ -215,7 +215,7 @@ function clearSessionCookie(response) {
   const secure = process.env.NODE_ENV === "production" || response.req?.protocol !== "http";
   response.setHeader(
     "Set-Cookie",
-    `skillmate_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
+    `skillflex_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
   );
 }
 

@@ -1,6 +1,6 @@
 # State Management Documentation Index
 
-Welcome to the comprehensive Skill-Mate state management analysis. This documentation was generated November 11, 2026, after inspecting the codebase and running the website locally.
+Welcome to the comprehensive Skill Flex state management analysis. This documentation was generated November 11, 2026, after inspecting the codebase and running the website locally.
 
 ---
 
@@ -252,7 +252,7 @@ Welcome to the comprehensive Skill-Mate state management analysis. This document
 
 ## 📞 Questions Answered
 
-**Q: Does Skill-Mate have state management everywhere?**
+**Q: Does Skill Flex have state management everywhere?**
 A: No. State management exists on 5 of 6 pages with inconsistent patterns and no cross-page sync.
 
 **Q: Where is state managed best?**

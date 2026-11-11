@@ -204,8 +204,8 @@ function profileSaveFixture({
     crypto: { randomUUID: () => "new-avatar-id" },
     URL: { revokeObjectURL() {} },
     window: {
-      SKILLMATE_SUPABASE_CONFIG: { url: "https://supabase.test" },
-      skillmateServiceUtils: {
+      SKILLFLEX_SUPABASE_CONFIG: { url: "https://supabase.test" },
+      skillflexServiceUtils: {
         async compressImageFile(_file, options) {
           compressionOptions.push(options);
           return { type: "image/webp", size: 50_000 };

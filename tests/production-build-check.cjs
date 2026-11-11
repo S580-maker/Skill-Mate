@@ -8,7 +8,7 @@ const dist = path.resolve(__dirname, '../dist');
 process.env.SUPABASE_URL = 'https://build.supabase.invalid';
 process.env.SUPABASE_ANON_KEY = 'fixture-public';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'fixture-service';
-process.env.SKILLMATE_TEST_ROOT = path.join(dist, 'public');
+process.env.SKILLFLEX_TEST_ROOT = path.join(dist, 'public');
 const { app } = require('../dist/server');
 const { start } = require('./support/loading-harness.cjs');
 (async () => {
@@ -60,7 +60,7 @@ const { start } = require('./support/loading-harness.cjs');
     await new Promise(resolve=>vercelServer.once('listening',resolve));
     try {
       const route = `http://127.0.0.1:${vercelServer.address().port}/admin.html`;
-      const options = {redirect:'manual',headers:{cookie:`skillmate_session=${accessToken}`,'x-vercel-forwarded-for':'127.0.0.1'}};
+      const options = {redirect:'manual',headers:{cookie:`skillflex_session=${accessToken}`,'x-vercel-forwarded-for':'127.0.0.1'}};
       const adminResponse = await realFetch(route,options);
       assert.equal(adminResponse.status,200);
       assert.ok((await adminResponse.text()).includes(report.pages.find(page=>page.file==='api/_lib/admin.html').bundle));

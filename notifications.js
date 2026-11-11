@@ -11,19 +11,19 @@
     reset = reset || retryReset;
     const requestOffset = reset ? 0 : offset;
     loading = true;
-    const finishLoading = typeof window !== "undefined" && window.skillmateLoading
-      ? window.skillmateLoading.show(list, { count: 3, variant: "notifications", label: "Loading notifications", delay: 150, preserve: reset && list.children.length > 0 })
+    const finishLoading = typeof window !== "undefined" && window.skillflexLoading
+      ? window.skillflexLoading.show(list, { count: 3, variant: "notifications", label: "Loading notifications", delay: 150, preserve: reset && list.children.length > 0 })
       : () => {};
     more.disabled = true;
     status.textContent = "Loading notifications…";
     try {
       let result = appSupabase
-        ? await window.skillmateLoading.withTimeout(appSupabase.from("notifications").select("id, title, body, read_at, created_at, conversation_id, booking_id, target_path")
+        ? await window.skillflexLoading.withTimeout(appSupabase.from("notifications").select("id, title, body, read_at, created_at, conversation_id, booking_id, target_path")
           .order("created_at", { ascending: false }).order("id", { ascending: false }).range(requestOffset, requestOffset + 9))
         : { data: [], error: null };
       if (result.error && ["42703", "PGRST204"].includes(result.error.code)) {
         console.warn("Booking-linked notifications are unavailable until the booking workflow migration is applied.", result.error);
-        result = await window.skillmateLoading.withTimeout(appSupabase.from("notifications").select("id, title, body, read_at, created_at")
+        result = await window.skillflexLoading.withTimeout(appSupabase.from("notifications").select("id, title, body, read_at, created_at")
           .order("created_at", { ascending: false }).order("id", { ascending: false }).range(requestOffset, requestOffset + 9));
       }
       const { data, error } = result;
@@ -53,7 +53,7 @@
           open.textContent = "Open booking";
           open.addEventListener("click", () => {
             dialog.close();
-            document.dispatchEvent(new CustomEvent("skillmate:open-booking", {
+            document.dispatchEvent(new CustomEvent("skillflex:open-booking", {
               detail: { bookingId: item.booking_id },
             }));
           });
@@ -66,7 +66,7 @@
           open.textContent = "Open conversation";
           open.addEventListener("click", () => {
             dialog.close();
-            document.dispatchEvent(new CustomEvent("skillmate:open-conversation", {
+            document.dispatchEvent(new CustomEvent("skillflex:open-conversation", {
               detail: { conversationId: item.conversation_id },
             }));
           });
@@ -92,7 +92,7 @@
                 if (error) throw error;
                 status.textContent = "Notification marked as read.";
               } catch (error) {
-                console.error("Could not mark the Skillmate notification as read.", error);
+                console.error("Could not mark the Skill Flex notification as read.", error);
                 item.read_at = previousReadAt;
                 readLabel.replaceWith(button);
                 status.textContent = "Could not mark this notification as read. Please try again.";
