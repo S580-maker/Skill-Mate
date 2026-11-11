@@ -6,6 +6,8 @@ This is an incremental modernization of the existing marketplace. Express, Supab
 
 Before implementation, the working tree contained the earlier journey improvements. They were preserved in local Git checkpoint `aaf405ba2659d145ab0fd6b08e2216eaed743202`, branch `checkpoint/skillmate-before-modernization-20261111`, without changing HEAD or the user's index. The baseline had 208 passing unit tests plus passing journey, protected-admin/CSP, loading-regression and isolated database suites.
 
+While this work was running, commits `0d3cb79`, `0703e61` and `6867b9b` recorded the implementation, renamed the app to **Skill Flex**, and retained the existing live Supabase Vault/cron names. Those changes are preserved. Final screenshots show Skill Flex; baseline screenshots retain the earlier branding. The rename also introduced a separate realtime migration, covered under deployment dependencies below.
+
 The audit covered the public/auth entry points, student route/render/state orchestration, service discovery, bookings, messaging/outbox, provider/profile forms, admin bootstrap, Express and Vercel handlers, shared authentication/session/rate-limit helpers, Supabase schema/migration contracts, loading/illustration components and existing test infrastructure. This is an application review with fixtures, not an external penetration test or a production-data audit.
 
 ## Prioritized findings
@@ -19,6 +21,7 @@ The audit covered the public/auth entry points, student route/render/state orche
 | P2 | Express's duplicate session handler did not renew verified OTP sessions like Vercel. | Reuse the shared handler and Supabase helpers; verify renewal failure clears the cookie. |
 | P2 | Browser auth and SDK requests could remain pending indefinitely. | Shared deadlines, caller cancellation, actionable auth timeout feedback, retained inputs. No automatic write retries. Uploads receive a longer deadline. |
 | P2 | First messages bypassed the existing UUID/outbox path; ambiguous failure could create a second message. | Initial messages and quote messages now use the same persisted retry queue as the composer. Duplicate reconciliation checks sender, conversation and body. |
+| P2 | The separately committed rename changed browser storage keys, stranding existing chat/booking drafts and pending request IDs. | Restore account-scoped legacy data when the new key is absent, retain retry IDs, and prevent cleared drafts from returning. Preserve the earlier theme preference until a new choice is saved. |
 | P2 | An older booking failure could reopen/label another provider's form; an older success could delete a newer draft. | Scope responses to the submitted modal generation and draft snapshot. Browser tests cover both races. |
 | P2 | Floating-point equality rejected valid prices such as 19.99. | Validate decimal input syntax before sending the numeric amount. |
 | P2 | User-authored spreadsheet formulas remained executable in earnings and admin booking CSVs. | Share one encoder across both entry points: prefix formula-like cells as text, then escape CSV quotes. |
@@ -56,6 +59,7 @@ These stack choices are engineering judgments based on this repository and the m
 | Authentication/security boundaries | 2 | First fix strict inputs, own-property routing and shared sessions; then protect parser logs and bound browser transports. Root integration review added static-file isolation as part of the build batch. HTTP, VM, browser and authorization regressions pass. |
 | Booking, messaging and navigation | 2 | First fix the five reproduced journey failures. Review found synchronous realtime-subscribe initialization, activity-filter state, destination focus and duplicate object key. Quote text, retry identity, new-draft preservation and rendered filtering are verified. |
 | Shared export safety | 1 | Final audit extended the formula guard to admin booking exports and extracted one common CSV encoder. Unicode/quotes/newlines, formula prefixes and both actual export paths are verified. |
+| Rename compatibility | 1 | Final review of the preserved rename found stranded drafts/outbox entries and missing execution of its database migration in the isolated suite. Add browser-storage compatibility and database authorization/notification regressions; document coordinated rollout and rollback. |
 | Loading and artwork | 2 | Region pulses and recovery first; review caught a reduced-motion/late-animation race. Corrected stale fixture assumptions without weakening geometry or interaction assertions. See the [loading report](MODERNIZATION-LOADING-2026-11-11.md). |
 | Shared interface | 3 | Establish tokens/focus/settings order; screenshot review caught placeholder contrast and onboarding borders; final correction fixed the higher-specificity auth input rule. Final captures are inspected in both themes at three widths. |
 | Build, types and performance | 3 | First add scoped type checks and compilation. Compiler caught a duplicate object key. Then separate public/runtime files and connect the compiled protected template to Vercel. Adversarial path review reproduced an encoded-separator bypass; normalize before checking the allowlist and verify forward/backslash cases. Artifact tests check hashes, SDK integrity, private paths, actual handlers and browser journeys. |
@@ -78,19 +82,19 @@ See [raw benchmark samples](modernization/performance.json) and the generated `d
 | --- | ---: | ---: |
 | Student stylesheet requests | 11 | 1 |
 | Decoded stylesheet bytes | 234,878 | 201,456 |
-| Decoded script bytes (fixture transport) | 460,827 | 380,530 |
-| Median workspace-ready time (ms) | 4307 | 3896 |
-| Median observed LCP (ms) | 2212 | 1596 |
+| Decoded script bytes (fixture transport) | 463,256 | 382,032 |
+| Median workspace-ready time (ms) | 4635 | 4101 |
+| Median observed LCP (ms) | 1716 | 1568 |
 | Median observed CLS | 0 | 0 |
 
-Three alternating cold runs per mode, 375 ? 900 viewport, 4? CPU throttle, 60 ms latency, 300,000 bytes/s download. Final benchmark ran without concurrent automated test suites. Results are local samples; run-to-run timing varied, so no fixed speedup guarantee is implied.
+Three alternating cold runs per mode, 375 by 900 viewport, 4x CPU throttle, 60 ms latency, 300,000 bytes/s download. Final benchmark ran without concurrent automated test suites. Results are local samples; run-to-run timing varied, so no fixed speedup guarantee is implied.
 
 The font and locally pinned Supabase SDK remain unchanged; the fixture replaces SDK/client behavior during the comparative page measurement. No Lighthouse score, field Core Web Vitals rating or INP claim is made. The animation reduction is a count of active animations, not a measured CPU/battery percentage.
 
 ## Validation and remaining failures
 
 - Baseline: 208 unit tests passed.
-- Final: 223 unit tests passed on Node 24.22.2; the installed Node 26 runtime also passed the combined release suite.
+- Final: 232 unit tests passed on Node 24.22.2; the installed Node 26 runtime also passed the combined release suite and the nine new rename-compatibility tests.
 - `npm run test:release`: type checking, production build, unit tests, original/new journeys, auth timeouts, loaders, protected admin/CSP, isolated Postgres lifecycle tests and artifact tests.
 - Additional browser gates: mobile interactions, public landing, full loading states and the 114-capture visual matrix.
 - `git diff --check` passes. Build rejects compiler warnings rather than silently shipping them.
@@ -98,13 +102,17 @@ The font and locally pinned Supabase SDK remain unchanged; the fixture replaces 
 
 No known blocking regression remains in the implemented, tested scope. Production registration, real OAuth callbacks, live email delivery, two-device realtime, third-party uploads and load behavior still require a staging/production environment with explicit authorization. Tests used safe fixtures and isolated PGlite databases.
 
+When the browser fully blocks storage, draft edits and retry state can survive only while the page remains open. The compatibility changes handle full storage when an existing legacy slot is still writable; they cannot promise durable saves when all writes are denied.
+
 ## Outstanding work and migration approval
 
 The large `user.js` orchestrator and historical CSS overrides remain technical debt. The next useful batch is extracting and typing the conversation/outbox and booking repositories behind their existing behavior tests. Whole-app TypeScript, React/Next migration, RLS redesign, new infrastructure and speculative feature additions were not undertaken.
 
 The existing Privacy Policy and Terms pages explicitly contain placeholders and are marked draft. Their layout was checked, but the business-approved policy text and contact details remain a launch requirement; this engineering pass did not invent those commitments.
 
-This pass adds **no database migration**. The pre-existing local `supabase/migrations/20261111100000_marketplace_journey.sql` from the earlier journey batch still requires explicit approval before being applied to a real database. Admin journey statistics gracefully report an unavailable migration. Existing migration status in production was not inspected or changed.
+The modernization implementation adds **no database migration**. Two preserved changes need deployment review: the earlier `supabase/migrations/20261111100000_marketplace_journey.sql` adds optional journey reporting, and the separate rename commit adds `supabase/migrations/20261201000000_rename_skillflex_realtime_topic.sql`. Both require explicit approval before application to a real database. Admin journey statistics gracefully report an unavailable analytics migration.
+
+The renamed client uses `skillflex-chat`, while the previous database authorization helper accepts `skillmate-chat`. The rename migration changes that helper to accept the new prefix only, updates notification copy, and requires a coordinated client/database rollout. Deploying only one side can interrupt private realtime channels; existing open clients must refresh. The isolated PostgreSQL suite now executes this migration and verifies member/OTP/blocking authorization, legacy-prefix rejection, notification updates and repeat application. Production migration status was not inspected or changed.
 
 ## Deployment and rollback
 
@@ -113,12 +121,14 @@ Deployment requires separate approval; nothing has been deployed.
 1. Use Node 24, run `npm ci`, then the release and additional browser gates listed above. Review the gallery and keep the generated artifact/checkpoint.
 2. For Express, copy the complete `dist` artifact to a release directory, install runtime dependencies with `npm ci --omit=dev`, supply environment configuration securely, set `NODE_ENV=production`, and start `node server.js` **from that release directory**. It serves only `public`; the protected admin template stays in `api/_lib`.
 3. For Vercel, deploy the repository root after approval. `vercel.json` runs the build, publishes only `dist/public`, and includes `dist/api/_lib/admin.html` in the admin function. Do not deploy `dist` as a standalone Vercel project. Verify an approved preview before promotion. [Vercel build/output configuration](https://vercel.com/docs/builds/configure-a-build).
-4. Verify actual sign-in/OTP, one booking lifecycle, messaging, uploads and admin authorization in the approved staging environment. Apply the optional analytics migration only with separate approval and an appropriate database backup.
-5. Roll back a deployed release by restoring the previous artifact or deployment. This pass has no schema rollback. To inspect the original local state without overwriting current edits, create a separate worktree from `checkpoint/skillmate-before-modernization-20261111`; do not use a destructive reset in the working tree.
+4. Verify actual sign-in/OTP, one booking lifecycle, messaging, uploads and admin authorization in the approved staging environment. Review and approve a coordinated rollout of the renamed client and realtime-topic migration before promotion; include open-client refresh and a database backup. Apply the optional analytics migration only with separate approval.
+5. For a rollback within the same realtime-topic version, restore the previous artifact or deployment. Rolling back across the rename also requires restoring the matching topic authorization helper under an approved database rollback plan; restoring only the old frontend is insufficient. The modernization itself adds no schema change. To inspect the original local state without overwriting current edits, create a separate worktree from `checkpoint/skillmate-before-modernization-20261111`; do not use a destructive reset in the working tree.
 
 The Git checkpoint preserves pre-existing work. The final local checkpoint is `checkpoint/skillmate-modernization-20261111`; it preserves this implementation and review evidence without changing HEAD or the user's index. Neither checkpoint pushes or merges anything.
 
 ## File inventory
+
+The implementation files are listed below. The [complete changed-file inventory](modernization/changed-files.json) also includes screenshots and the separately committed rename/infrastructure changes preserved since the baseline checkpoint.
 
 - `.github/workflows/verify.yml`
 - `.gitignore`
@@ -162,6 +172,7 @@ The Git checkpoint preserves pre-existing work. The final local checkpoint is `c
 - `skeleton.css`
 - `supabase-client.js`
 - `terms.html`
+- `theme.js`
 - `tests/auth-access.test.js`
 - `tests/auth-input-validation.test.js`
 - `tests/auth-network-boundaries.test.js`
@@ -173,12 +184,14 @@ The Git checkpoint preserves pre-existing work. The final local checkpoint is `c
 - `tests/illustrations-browser-checks.cjs`
 - `tests/loading-geometry.cjs`
 - `tests/loading-modernization-browser.cjs`
+- `tests/marketplace-growth-db.cjs`
 - `tests/modernization-journey-check.cjs`
 - `tests/modernization-visual-check.cjs`
 - `tests/navigation-focus-check.cjs`
 - `tests/price-range.test.js`
 - `tests/production-build-check.cjs`
 - `tests/review-fixes.test.js`
+- `tests/rename-storage-compatibility.test.js`
 - `tests/server-auth-boundaries.test.js`
 - `tests/support/loading-harness.cjs`
 - `tests/vercel-api-routing.test.js`

@@ -5,7 +5,7 @@
   let themeTransitionTimer;
   let savedTheme = null;
   try {
-    const storedTheme = localStorage.getItem(storageKey);
+    const storedTheme = localStorage.getItem(storageKey) ?? localStorage.getItem("skillmate-theme");
     if (storedTheme === "dark" || storedTheme === "light") savedTheme = storedTheme;
   } catch (error) {
     console.warn("Could not load the saved Skill Flex theme preference.", error);

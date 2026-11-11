@@ -10,22 +10,41 @@
   const memoryAttempts = new Map();
   const memoryState = new Map();
   const key = suffix => `skillflex-journey-v1:${appUser?.id || "demo"}:${suffix}`;
+  const legacyKey = suffix => `skillmate-journey-v1:${appUser?.id || "demo"}:${suffix}`;
   function read(suffix) {
     try {
-      const item = memoryState.get(key(suffix)) || JSON.parse(sessionStorage.getItem(key(suffix)) || "null");
+      let item = memoryState.get(key(suffix));
+      if (!memoryState.has(key(suffix))) {
+        const current = sessionStorage.getItem(key(suffix));
+        item = JSON.parse((current === null ? sessionStorage.getItem(legacyKey(suffix)) : current) || "null");
+        if (item && current === null) persist(suffix, item);
+      }
       return item && Date.now() - item.savedAt < maxAge ? item.value : null;
     } catch { return null; }
   }
-  function store(suffix, value) {
-    const item = { savedAt: Date.now(), value };
+  function persist(suffix, item) {
     memoryState.set(key(suffix), item);
-    try { sessionStorage.setItem(key(suffix), JSON.stringify(item)); return true; }
-    catch { return false; }
+    const serialized = JSON.stringify(item);
+    try { sessionStorage.setItem(key(suffix), serialized); }
+    catch {
+      // Reuse a legacy slot when quota prevents temporarily storing two copies.
+      try {
+        if (sessionStorage.getItem(key(suffix)) === null && sessionStorage.getItem(legacyKey(suffix)) !== null) {
+          sessionStorage.setItem(legacyKey(suffix), serialized);
+          return true;
+        }
+      } catch { /* The in-page value remains available when storage is blocked. */ }
+      return false;
+    }
+    try { sessionStorage.removeItem(legacyKey(suffix)); } catch { /* Current data wins. */ }
+    return true;
+  }
+  function store(suffix, value) {
+    return persist(suffix, { savedAt: Date.now(), value });
   }
   function remove(suffix) {
-    // A tombstone also hides stale persisted data if storage access is revoked.
-    memoryState.set(key(suffix), { savedAt: Date.now(), value: null });
-    try { sessionStorage.removeItem(key(suffix)); } catch { /* keep the tombstone */ }
+    // Persist the tombstone so a cleared draft cannot fall back to legacy data.
+    store(suffix, null);
   }
   function record(event) {
     if (!ready || recorded.has(event) || navigator.doNotTrack === "1" || navigator.globalPrivacyControl) return;

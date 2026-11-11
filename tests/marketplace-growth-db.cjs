@@ -32,7 +32,7 @@ async function main() {
     create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text,owner uuid,metadata jsonb default '{}');
     create function storage.foldername(text) returns text[] language sql immutable as $$ select string_to_array($1,'/') $$;
     create table realtime.messages(id uuid,topic text);
-    create function realtime.topic() returns text language sql stable as $$ select ''::text $$;
+    create function realtime.topic() returns text language sql stable as $$ select coalesce(current_setting('request.realtime.topic',true),'') $$;
     grant usage on schema auth,storage,realtime,public to authenticated,anon,service_role;
     grant execute on all functions in schema auth to authenticated,anon,service_role;
   `);
@@ -46,7 +46,9 @@ async function main() {
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261107120000_client_completion_verification.sql"), "utf8"));
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261108100000_service_price_ranges_and_custom_quotes.sql"), "utf8"));
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261111100000_marketplace_journey.sql"), "utf8"));
-  console.log("PASS all database migrations compile against PostgreSQL");
+  const renameMigration = fs.readFileSync(path.join(root, "supabase/migrations/20261201000000_rename_skillflex_realtime_topic.sql"), "utf8");
+  await db.exec(renameMigration);
+  console.log("PASS schema and post-snapshot migrations compile against PostgreSQL");
   for (const [name, id] of Object.entries(users)) {
     await db.query("insert into auth.users(id,email,raw_user_meta_data) values($1,$2,$3)", [id, `${name}@example.test`, JSON.stringify({ full_name: name, university: name === "outsider" ? "Other University" : "University of Ghana" })]);
     await db.query("insert into public.verified_auth_sessions(session_id,user_id) values($1,$2)", [sessions[name], id]);
@@ -143,11 +145,36 @@ async function main() {
   const messageConversation = (await rows("insert into public.conversations default values returning id"))[0].id;
   await db.query("insert into public.conversation_members(conversation_id,user_id) values($1,$2),($1,$3)", [messageConversation, users.customer, users.provider]);
   await asUser("customer");
+  const canAccessTopic = async (prefix = "skillflex-chat") => {
+    await db.query("select set_config('request.realtime.topic',$1,false)", [`${prefix}:${messageConversation}`]);
+    return (await rows("select public.can_access_chat_realtime_topic() as allowed"))[0].allowed;
+  };
+  assert.equal(await canAccessTopic(), true, "verified members may join the renamed private topic");
+  assert.equal(await canAccessTopic("skillmate-chat"), false, "legacy clients require coordinated rollout or rollback");
+  await asUser("outsider");
+  assert.equal(await canAccessTopic(), false, "a verified non-member cannot join");
+  await asUser("customer", false);
+  assert.equal(await canAccessTopic(), false, "membership does not bypass session verification");
+  await asUser("customer");
+  await db.query("insert into public.user_blocks(blocker_id,blocked_id) values(auth.uid(),$1)", [users.provider]);
+  assert.equal(await canAccessTopic(), false, "blocking a participant revokes topic access");
+  await asUser("provider");
+  assert.equal(await canAccessTopic(), false, "the blocked participant also loses topic access");
+  await asUser("customer");
+  await db.query("delete from public.user_blocks where blocker_id=auth.uid() and blocked_id=$1", [users.provider]);
+  assert.equal(await canAccessTopic(), true, "unblocking restores verified member access");
   const messageId = (await rows(
     "insert into public.messages(conversation_id,sender_id,body) values($1,auth.uid(),'Hello from a database test') returning id",
     [messageConversation],
   ))[0].id;
   await db.exec("reset role");
+  const notification = (await rows("select id,body from public.notifications where kind='message' and conversation_id=$1 and user_id=$2", [messageConversation, users.provider]))[0];
+  assert.equal(notification.body, "Open Skill Flex to read your new message.", "new message notifications use the renamed copy");
+  await db.query("update public.notifications set body='Open Skillmate to read your new message.' where id=$1", [notification.id]);
+  await db.exec(renameMigration);
+  await db.exec(renameMigration);
+  assert.deepEqual(await rows("select id,body from public.notifications where kind='message' and conversation_id=$1 and user_id=$2", [messageConversation, users.provider]), [{ id: notification.id, body: "Open Skill Flex to read your new message." }], "reapplying the rename updates existing notification copy without duplicating rows");
+  console.log("PASS rename migration preserves verified private-topic authorization and updates notification copy idempotently");
   assert.equal((await rows(
     "select count(*)::integer as count from public.marketplace_email_outbox where message_id=$1 and recipient_id=$2 and available_at > now()+interval '9 minutes'",
     [messageId, users.provider],

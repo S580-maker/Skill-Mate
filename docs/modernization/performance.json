@@ -2,29 +2,29 @@
   "conditions": "Chromium,375x900,4x CPU throttle,60ms latency,300000 bytes/s download,cold browser/cache,local fake Supabase,3 alternating runs per mode. Source and built use identical current functionality. No HTTP compression; fixture replaces Supabase SDK/client. Not field CWV; no INP claim.",
   "summary": {
     "source": {
-      "readyMs": 4306.70000000298,
-      "lcpMs": 2212,
+      "readyMs": 4634.60000000149,
+      "lcpMs": 1716,
       "cls": 0,
       "cssRequests": 11,
       "cssBytes": 234878,
-      "jsBytes": 460827
+      "jsBytes": 463256
     },
     "built": {
-      "readyMs": 3896.2999999970198,
-      "lcpMs": 1596,
+      "readyMs": 4101.19999999553,
+      "lcpMs": 1568,
       "cls": 0,
       "cssRequests": 1,
       "cssBytes": 201456,
-      "jsBytes": 380530
+      "jsBytes": 382032
     }
   },
   "samples": [
     {
       "mode": "source",
       "round": 0,
-      "lcp": 2212,
+      "lcp": 1628,
       "cls": 0,
-      "ready": 4209.800000000745,
+      "ready": 4561.70000000298,
       "css": [
         {
           "file": "/landing-fonts.css",
@@ -71,28 +71,28 @@
           "bytes": 2290
         }
       ],
-      "js": 460827
+      "js": 463256
     },
     {
       "mode": "built",
       "round": 0,
-      "lcp": 1560,
+      "lcp": 1568,
       "cls": 0,
-      "ready": 3896.2999999970198,
+      "ready": 4093.5,
       "css": [
         {
-          "file": "/styles-1f99d13dbd9c.css",
+          "file": "/styles-5aaeaf23335a.css",
           "bytes": 201456
         }
       ],
-      "js": 380530
+      "js": 382032
     },
     {
       "mode": "source",
       "round": 1,
-      "lcp": 1584,
+      "lcp": 1716,
       "cls": 0,
-      "ready": 4342.800000000745,
+      "ready": 4939.29999999702,
       "css": [
         {
           "file": "/landing-fonts.css",
@@ -139,28 +139,28 @@
           "bytes": 2290
         }
       ],
-      "js": 460827
+      "js": 463256
     },
     {
       "mode": "built",
       "round": 1,
-      "lcp": 1596,
+      "lcp": 1624,
       "cls": 0,
-      "ready": 3865.800000000745,
+      "ready": 4201.10000000149,
       "css": [
         {
-          "file": "/styles-1f99d13dbd9c.css",
+          "file": "/styles-5aaeaf23335a.css",
           "bytes": 201456
         }
       ],
-      "js": 380530
+      "js": 382032
     },
     {
       "mode": "source",
       "round": 2,
-      "lcp": 2248,
+      "lcp": 1728,
       "cls": 0,
-      "ready": 4306.70000000298,
+      "ready": 4634.60000000149,
       "css": [
         {
           "file": "/landing-fonts.css",
@@ -207,21 +207,21 @@
           "bytes": 2290
         }
       ],
-      "js": 460827
+      "js": 463256
     },
     {
       "mode": "built",
       "round": 2,
-      "lcp": 2032,
+      "lcp": 1564,
       "cls": 0,
-      "ready": 4558.89999999851,
+      "ready": 4101.19999999553,
       "css": [
         {
-          "file": "/styles-1f99d13dbd9c.css",
+          "file": "/styles-5aaeaf23335a.css",
           "bytes": 201456
         }
       ],
-      "js": 380530
+      "js": 382032
     }
   ]
 }

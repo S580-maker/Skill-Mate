@@ -284,10 +284,41 @@ function setActiveConversation(conversationId) {
 function pendingMessageStorageKey() {
   return `skillflex-pending-messages:${appUser?.id || "demo"}`;
 }
+const chatStorageMemory = new Map();
+function writeChatStorage(key, value) {
+  chatStorageMemory.set(key, value);
+  const legacyKey = key.replace(/^skillflex-/, "skillmate-");
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    // A full store may fit an update to the old slot, but not a second copy.
+    try {
+      if (localStorage.getItem(key) === null && localStorage.getItem(legacyKey) !== null) {
+        localStorage.setItem(legacyKey, value);
+        return;
+      }
+    } catch { /* Keep the in-page value and report the original write failure. */ }
+    throw error;
+  }
+  try { localStorage.removeItem(legacyKey); } catch { /* The current key is authoritative. */ }
+}
+function readChatStorage(key) {
+  if (chatStorageMemory.has(key)) return chatStorageMemory.get(key);
+  let value = localStorage.getItem(key);
+  if (value === null) {
+    value = localStorage.getItem(key.replace(/^skillflex-/, "skillmate-"));
+    if (value !== null) {
+      // Never discard the old slot before the replacement has been saved.
+      try { writeChatStorage(key, value); } catch { /* Restore in memory if storage is full. */ }
+    }
+  }
+  if (value !== null) chatStorageMemory.set(key, value);
+  return value;
+}
 function loadChatDrafts() {
   chatDrafts.clear();
   try {
-    const saved = JSON.parse(localStorage.getItem(chatDraftStorageKey()) || "{}");
+    const saved = JSON.parse(readChatStorage(chatDraftStorageKey()) || "{}");
     if (saved && typeof saved === "object" && !Array.isArray(saved)) {
       Object.entries(saved).forEach(([conversationId, text]) => {
         if (typeof text === "string" && text) chatDrafts.set(conversationId, text);
@@ -302,7 +333,7 @@ function saveChatDraft(conversationId, text) {
   if (text) chatDrafts.set(conversationId, text);
   else chatDrafts.delete(conversationId);
   try {
-    localStorage.setItem(chatDraftStorageKey(), JSON.stringify(Object.fromEntries(chatDrafts)));
+    writeChatStorage(chatDraftStorageKey(), JSON.stringify(Object.fromEntries(chatDrafts)));
   } catch (error) {
     console.error("Could not save the chat draft.", error);
     showToast("This draft could not be saved on this device.");
@@ -310,7 +341,7 @@ function saveChatDraft(conversationId, text) {
 }
 function persistPendingMessages() {
   try {
-    localStorage.setItem(pendingMessageStorageKey(), JSON.stringify([...pendingOutgoingMessages.values()]));
+    writeChatStorage(pendingMessageStorageKey(), JSON.stringify([...pendingOutgoingMessages.values()]));
   } catch (error) {
     console.error("Could not save pending chat messages.", error);
     showToast("A failed message could not be saved for retry on this device.");
@@ -319,7 +350,7 @@ function persistPendingMessages() {
 function loadPendingMessages() {
   pendingOutgoingMessages.clear();
   try {
-    const saved = JSON.parse(localStorage.getItem(pendingMessageStorageKey()) || "[]");
+    const saved = JSON.parse(readChatStorage(pendingMessageStorageKey()) || "[]");
     if (!Array.isArray(saved)) throw new TypeError("Pending messages must be stored as a list.");
     for (const message of saved) {
       if (typeof message?.id !== "string" || typeof message.conversationId !== "string"
