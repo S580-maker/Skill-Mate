@@ -133,13 +133,6 @@
   filters.addEventListener("reset", () => setTimeout(captureSearch, 0));
   document.addEventListener("click", event => {
     if (event.target.closest("[data-category], [data-clear-search], #marketplace-filter-trigger, #recent-view-all")) setTimeout(captureSearch, 0);
-    const action = event.target.closest("[data-discovery-focus]");
-    if (!action) return;
-    if (action.dataset.discoveryFocus === "filters") {
-      if (filters.hidden) document.querySelector("#marketplace-filter-trigger").click();
-      filters.scrollIntoView({ block: "center", behavior: "auto" });
-      filters.querySelector("input,select").focus({ preventScroll: true });
-    } else { search.scrollIntoView({ block: "center", behavior: "auto" }); search.focus({ preventScroll: true }); }
   });
   document.addEventListener("skillflex:workspace-ready", () => {
     ready = true;

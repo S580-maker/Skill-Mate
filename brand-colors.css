@@ -74,7 +74,11 @@ main { scroll-margin-top:90px; }
 input[aria-invalid="true"],select[aria-invalid="true"],textarea[aria-invalid="true"] { border-width:2px; border-color:var(--danger,#B42318); }
 :root[data-theme="dark"] input[aria-invalid="true"],:root[data-theme="dark"] select[aria-invalid="true"],:root[data-theme="dark"] textarea[aria-invalid="true"] { border-color:#FCA5A5; }
 @media(max-width:768px) {
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),select,textarea { font-size:16px; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),select,textarea,
+  #onboarding-form > label > input,.skill-entry input,
+  .auth-access #auth-form input:not([type="checkbox"]),
+  #forgot-password-form input,#new-password-form input,#reset-form input,
+  #booking-modal .booking-date-time input,.marketplace-tools select { font-size:16px; }
 }
 /* Gold is reserved for focus and selected states, rather than every card border. */
 .marketplace-header .nav-link.active, .category-strip .category-chip.selected {
