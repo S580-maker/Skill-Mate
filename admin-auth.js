@@ -49,6 +49,213 @@ function showAdminToast(message) {
   window.setTimeout(() => toast.classList.remove("visible"), 3000);
 }
 
+function updateAdminNavCount(viewId, count) {
+  const badge = document.querySelector(`.side-nav .nav-link[href="#${viewId}"] .nav-count`);
+  if (!badge) return;
+
+  const total = Number(count);
+  if (!Number.isFinite(total) || total < 1) {
+    badge.hidden = true;
+    badge.textContent = "";
+    badge.removeAttribute("aria-label");
+    return;
+  }
+
+  badge.hidden = false;
+  badge.textContent = total > 99 ? "99+" : String(total);
+  badge.setAttribute("aria-label", `${total} ${total === 1 ? "item" : "items"} need attention`);
+}
+
+function updateAdminNotificationBadge(count) {
+  const badge = document.querySelector(".notification-dot");
+  const button = document.querySelector(".notification-button");
+  if (!badge || !button) return;
+  const total = Number(count);
+  const unread = Number.isFinite(total) && total > 0 ? total : 0;
+  badge.hidden = unread === 0;
+  button.setAttribute("aria-label", unread ? `Notifications, ${unread} unread` : "Notifications");
+}
+
+function buildAdminDemandGapRows(requests, services) {
+  const categories = new Map();
+  const getCategory = (value) => {
+    if (typeof value !== "string" || !value.trim()) return null;
+    const label = value.trim();
+    const key = label.toLocaleLowerCase();
+    if (!categories.has(key)) {
+      categories.set(key, { category: label, buyers: new Set(), requestCount: 0, providers: new Set() });
+    }
+    return categories.get(key);
+  };
+
+  for (const request of requests) {
+    const category = getCategory(request.category);
+    if (!category) continue;
+    category.requestCount += 1;
+    if (request.requester_id) category.buyers.add(request.requester_id);
+  }
+  for (const service of services) {
+    const category = getCategory(service.category);
+    if (category && service.provider_id) category.providers.add(service.provider_id);
+  }
+
+  return [...categories.values()].map(({ category, buyers, requestCount, providers }) => {
+    const buyerCount = buyers.size;
+    const providerCount = providers.size;
+    const gap = Math.max(0, buyerCount - providerCount);
+    return {
+      category,
+      buyerCount,
+      requestCount,
+      providerCount,
+      gap,
+      priority: gap > 0 && buyerCount >= 3 ? "Recruit now" : gap > 0 ? "Build supply" : buyerCount ? "Supply ahead" : "No open demand",
+    };
+  }).sort((left, right) => (
+    Number(right.priority === "Recruit now") - Number(left.priority === "Recruit now")
+    || Number(right.gap > 0) - Number(left.gap > 0)
+    || right.buyerCount - left.buyerCount
+    || right.gap - left.gap
+    || left.category.localeCompare(right.category)
+  ));
+}
+
+async function fetchAllAdminRows(query) {
+  const pageSize = 1000;
+  const rows = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await query.range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
+function renderAdminDemandGaps(rows) {
+  const list = document.querySelector("#demand-gap-rows");
+  list.replaceChildren();
+  const recruitmentCount = rows.filter((row) => row.gap > 0).length;
+  const openRequestCount = rows.reduce((total, row) => total + row.requestCount, 0);
+  document.querySelector("#demand-gap-focus-count").textContent = recruitmentCount.toLocaleString();
+  document.querySelector("#demand-gap-request-count").textContent = openRequestCount.toLocaleString();
+  document.querySelector("#demand-gap-category-count").textContent = rows.length.toLocaleString();
+  document.querySelector("#demand-gap-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  document.querySelector("#demand-gap-status").textContent = recruitmentCount
+    ? `${recruitmentCount} ${recruitmentCount === 1 ? "category needs" : "categories need"} more providers. Highest buyer interest appears first.`
+    : "No category currently has more interested buyers than active providers.";
+
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "demand-gap-empty";
+    empty.textContent = "No buyer requests or active service listings yet. New activity will appear here.";
+    list.append(empty);
+    return;
+  }
+
+  for (const row of rows) {
+    const item = document.createElement("article");
+    item.className = "demand-gap-row";
+    item.dataset.priority = row.gap > 0 ? (row.buyerCount >= 3 ? "high" : "recruit") : "covered";
+    item.setAttribute("role", "row");
+
+    const categoryCell = document.createElement("div");
+    categoryCell.className = "demand-gap-category";
+    categoryCell.setAttribute("role", "cell");
+    const category = document.createElement("strong");
+    category.textContent = row.category;
+    const requestCount = document.createElement("small");
+    requestCount.textContent = `${row.requestCount.toLocaleString()} open ${row.requestCount === 1 ? "request" : "requests"}`;
+    categoryCell.append(category, requestCount);
+
+    const buyerCell = document.createElement("div");
+    buyerCell.className = "demand-gap-number";
+    buyerCell.setAttribute("role", "cell");
+    buyerCell.dataset.label = "Interested buyers";
+    const buyerCount = document.createElement("strong");
+    buyerCount.textContent = row.buyerCount.toLocaleString();
+    buyerCell.append(buyerCount);
+
+    const providerCell = document.createElement("div");
+    providerCell.className = "demand-gap-number";
+    providerCell.setAttribute("role", "cell");
+    providerCell.dataset.label = "Active providers";
+    const providerCount = document.createElement("strong");
+    providerCount.textContent = row.providerCount.toLocaleString();
+    providerCell.append(providerCount);
+
+    const actionCell = document.createElement("div");
+    actionCell.className = "demand-gap-action";
+    actionCell.setAttribute("role", "cell");
+    const priority = document.createElement("span");
+    priority.className = "demand-gap-priority";
+    priority.textContent = row.priority;
+    const recommendation = document.createElement("p");
+    if (row.gap) {
+      recommendation.textContent = `Short by ${row.gap} ${row.gap === 1 ? "provider" : "providers"} based on current buyer interest.`;
+    } else if (row.buyerCount) {
+      recommendation.textContent = "No recruitment needed right now.";
+    } else {
+      recommendation.textContent = "Wait for buyer requests before recruiting.";
+    }
+    actionCell.append(priority, recommendation);
+    item.append(categoryCell, buyerCell, providerCell, actionCell);
+    list.append(item);
+  }
+}
+
+async function refreshAdminDemandGaps() {
+  const button = document.querySelector("#demand-gap-refresh");
+  const status = document.querySelector("#demand-gap-status");
+  const notice = document.querySelector("#demand-gap-error");
+  button.disabled = true;
+  notice.hidden = true;
+  status.textContent = "Loading live buyer requests and active providers…";
+  try {
+    const [requests, services] = await Promise.all([
+      fetchAllAdminRows(adminClient.from("campus_requests")
+        .select("id, category, requester_id")
+        .eq("status", "open")
+        .gt("expires_at", new Date().toISOString())
+        .order("id", { ascending: true })),
+      fetchAllAdminRows(adminClient.from("services")
+        .select("id, category, provider_id")
+        .eq("is_active", true)
+        .order("id", { ascending: true })),
+    ]);
+    const rows = buildAdminDemandGapRows(requests, services);
+    renderAdminDemandGaps(rows);
+  } catch (error) {
+    console.error("Could not load live marketplace demand gaps.", error);
+    document.querySelector("#demand-gap-rows").replaceChildren();
+    document.querySelector("#demand-gap-focus-count").textContent = "—";
+    document.querySelector("#demand-gap-request-count").textContent = "—";
+    document.querySelector("#demand-gap-category-count").textContent = "—";
+    document.querySelector("#demand-gap-updated").textContent = "Live marketplace data could not be refreshed.";
+    status.textContent = "Demand-gap data is unavailable.";
+    notice.hidden = false;
+    notice.textContent = ["42P01", "PGRST205", "PGRST200"].includes(error.code)
+      ? "The buyer-request table is unavailable. Apply supabase/migrations/20261106100000_marketplace_growth.sql, then refresh."
+      : "Could not load live buyer requests and active providers. Check administrator access and your Supabase connection, then refresh.";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function refreshAdminNotificationBadge() {
+  const userId = window.adminProfile?.id;
+  if (!userId) return;
+  const { count, error } = await adminClient.from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .is("read_at", null);
+  if (error) {
+    console.error("Could not load the administrator notification count.", error);
+    return;
+  }
+  updateAdminNotificationBadge(count || 0);
+}
+
 async function refreshAdminSystemStatus() {
   const status = document.querySelector("#system-status");
   const label = status.querySelector("span");
@@ -222,11 +429,13 @@ async function fetchSupportTickets() {
   const status = document.querySelector("#support-queue-status");
   const rows = document.querySelector("#support-ticket-rows");
   status.textContent = "Loading support tickets…";
+  updateAdminNavCount("support-tickets", null);
   try {
-    const { data, error } = await adminClient.from("support_tickets")
-      .select("id, user_id, category, message, status, screenshot_url, created_at")
+    const { data, error, count } = await adminClient.from("support_tickets")
+      .select("id, user_id, category, message, status, screenshot_url, created_at", { count: "exact" })
       .in("status", ["open", "reviewing"]).order("created_at", { ascending: true }).limit(50);
     if (error) throw error;
+    updateAdminNavCount("support-tickets", count);
     rows.replaceChildren();
     for (const ticket of data || []) {
       const article = document.createElement("article");
@@ -287,10 +496,65 @@ async function fetchSupportTickets() {
     status.textContent = data?.length ? `${data.length} oldest active tickets (up to 50 shown).` : "No active support tickets.";
   } catch (error) {
     rows.replaceChildren();
+    updateAdminNavCount("support-tickets", null);
     console.error("Could not load support tickets.", error);
     status.textContent = ["PGRST205", "42P01"].includes(error.code)
       ? "Support tickets require the settings and support database migration."
       : "Could not load support tickets. Refresh to try again.";
+  }
+}
+
+async function fetchModerationHistory() {
+  const status = document.querySelector("#moderation-history-status");
+  const list = document.querySelector("#moderation-history");
+  status.textContent = "Loading moderation history…";
+  list.replaceChildren();
+  try {
+    const { data, error } = await adminClient.from("moderation_actions")
+      .select("id, action_type, reason, message, moderation_until, auth_ban_applied, created_at, reported_user_id, report_id, reported:profiles!moderation_actions_reported_user_id_fkey(full_name, moderation_status), administrator:profiles!moderation_actions_admin_id_fkey(full_name)")
+      .order("created_at", { ascending: false }).limit(25);
+    if (error) throw error;
+
+    for (const action of data || []) {
+      const row = document.createElement("article");
+      row.className = "moderation-history-row";
+      const summary = document.createElement("div");
+      const heading = document.createElement("strong");
+      const target = action.reported?.full_name || "Student account";
+      heading.textContent = `${action.action_type[0].toUpperCase()}${action.action_type.slice(1)} · ${target}`;
+      const details = document.createElement("small");
+      details.textContent = `${formatAdminDate(action.created_at)} · ${action.administrator?.full_name || "Administrator"}${action.moderation_until ? ` · until ${new Date(action.moderation_until).toLocaleString()}` : ""}`;
+      const reason = document.createElement("p");
+      reason.textContent = action.reason;
+      const message = document.createElement("p");
+      message.textContent = `Message sent: ${action.message}`;
+      summary.append(heading, details, reason, message);
+      row.append(summary);
+
+      if (["suspended", "banned"].includes(action.reported?.moderation_status)
+        || (action.action_type === "restore" && action.auth_ban_applied === false)) {
+        const restore = document.createElement("button");
+        restore.type = "button";
+        restore.className = "review-button";
+        restore.textContent = action.action_type === "restore" ? "Retry restore" : "Restore account";
+        restore.dataset.restoreUserId = action.reported_user_id;
+        restore.dataset.restoreUserName = target;
+        row.append(restore);
+      } else if (action.auth_ban_applied === false
+        && ["suspension", "ban"].includes(action.action_type)) {
+        const warning = document.createElement("small");
+        warning.className = "moderation-history-warning";
+        warning.textContent = "Skillmate access is restricted, but the Supabase sign-in block was not confirmed.";
+        row.append(warning);
+      }
+      list.append(row);
+    }
+    status.textContent = data?.length ? `${data.length} most recent moderation actions.` : "No moderation actions yet.";
+  } catch (error) {
+    console.error("Could not load moderation history.", error);
+    status.textContent = ["42P01", "PGRST205", "PGRST200", "PGRST202"].includes(error.code)
+      ? "Moderation history requires supabase/migrations/20261108180000_admin_moderation.sql. Apply it, then refresh."
+      : "Could not load moderation history. Refresh to try again.";
   }
 }
 
@@ -328,13 +592,38 @@ async function fetchAdminDashboard() {
     if (result.error) throw result.error;
   }
 
+  let awaitingVerificationCount = 0;
+  let completionVerificationAvailable = true;
+  const completionNotice = document.querySelector("#booking-completion-migration-notice");
+  completionNotice.hidden = true;
+  try {
+    const result = await adminClient.from("bookings").select("id", { count: "exact" })
+      .eq("status", "confirmed").not("provider_completed_at", "is", null).limit(1);
+    if (result.error) throw result.error;
+    awaitingVerificationCount = result.count || 0;
+  } catch (error) {
+    completionVerificationAvailable = false;
+    const missingMigration = ["42703", "PGRST204"].includes(error.code)
+      && String(error.message || "").includes("provider_completed_at");
+    console.error("Could not load bookings awaiting client verification.", error);
+    completionNotice.hidden = false;
+    completionNotice.textContent = missingMigration
+      ? "Client-confirmation counts are unavailable because the database is missing provider_completed_at. Apply supabase/migrations/20261107120000_client_completion_verification.sql, then reload this dashboard."
+      : "Could not load the number of bookings awaiting client confirmation. The related attention badges are hidden until the count is available.";
+  }
+
   const statValues = document.querySelectorAll(".stats-grid .stat-value");
   [students.count, new Set((services.data || []).map((row) => row.provider_id)).size, bookingsCount.count, groups.count]
     .forEach((value, index) => { statValues[index].textContent = Number(value || 0).toLocaleString(); });
-  document.querySelector(".nav-count").textContent = Number(bookingsCount.count || 0).toLocaleString();
-  const needsAttention = Boolean(reports.count || verifications.data?.length);
-  document.querySelector(".nav-dot").hidden = !needsAttention;
-  document.querySelector(".nav-dot").style.display = needsAttention ? "" : "none";
+  const verificationCount = verifications.data?.length || 0;
+  const openReportCount = reports.count || 0;
+  const pendingBookingCount = pendingBookings.count || 0;
+  updateAdminNavCount("bookings", completionVerificationAvailable ? pendingBookingCount + awaitingVerificationCount : null);
+  updateAdminNavCount("students", completionVerificationAvailable
+    ? verificationCount + openReportCount + pendingBookingCount + awaitingVerificationCount
+    : null);
+  updateAdminNavCount("verification", verificationCount);
+  updateAdminNavCount("safety", openReportCount);
   document.querySelector(".welcome-row .demo-pill").textContent = "LIVE DATA";
   document.querySelector("#admin-date").firstChild.textContent = new Date().toLocaleDateString("en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
@@ -349,12 +638,13 @@ async function fetchAdminDashboard() {
     const service = booking.service?.title || "Service";
     const status = booking.status || "pending";
     const statusClass = ["confirmed", "pending", "completed", "declined", "cancelled"].includes(status) ? status : "pending";
-    const search = [customer, provider, service, status].join(" ").toLowerCase();
+    const type = booking.group_booking_id ? "group booking group" : "individual booking";
+    const search = [customer, provider, service, status, type, booking.scheduled_at].join(" ").toLocaleLowerCase();
     return `<tr data-search="${escapeAdminText(search)}"><td><span class="person"><span class="person-avatar avatar-blue">${escapeAdminText(initials(customer))}</span><span><strong>${escapeAdminText(customer)}</strong><small>Booking customer</small></span></span></td><td><span class="service-cell"><strong>${escapeAdminText(service)}</strong><small>${escapeAdminText(provider)}</small></span></td><td><span class="date-cell">${escapeAdminText(formatAdminDate(booking.scheduled_at))}<small>${booking.group_booking_id ? "Group booking" : "Individual"}</small></span></td><td><span class="booking-type">${booking.group_booking_id ? "Group" : "Individual"}</span></td><td><span class="status status-${statusClass}"><i></i>${escapeAdminText(status[0].toUpperCase() + status.slice(1))}</span></td></tr>`;
   }).join("") : "";
   document.querySelector("#empty-state").hidden = rows.length > 0;
-  document.querySelector("#empty-state").textContent = "No bookings match your search.";
   document.querySelector(".bookings-panel .panel-heading p").textContent = `${rows.length} most recent bookings`;
+  window.applyAdminBookingSearch?.();
 
   const categories = new Map();
   for (const service of services.data || []) categories.set(service.category, (categories.get(service.category) || 0) + 1);
@@ -378,17 +668,29 @@ async function fetchAdminDashboard() {
   });
   const attention = document.querySelectorAll(".attention-item .attention-copy small");
   if (attention[0]) attention[0].textContent = `${requests.length} profiles waiting for review`;
-  if (attention[1]) attention[1].textContent = `${reports.count || 0} open community reports`;
-  if (attention[2]) attention[2].textContent = `${pendingBookings.count || 0} pending booking requests`;
-  document.querySelector(".attention-total").textContent = String(requests.length + (reports.count || 0) + (pendingBookings.count || 0));
+  if (attention[1]) attention[1].textContent = `${openReportCount} open community reports`;
+  if (attention[2]) {
+    const bookingTasks = [];
+    if (pendingBookingCount) bookingTasks.push(`${pendingBookingCount} pending booking requests`);
+    if (completionVerificationAvailable && awaitingVerificationCount) {
+      bookingTasks.push(`${awaitingVerificationCount} awaiting client verification`);
+    }
+    attention[2].textContent = !completionVerificationAvailable
+      ? "Client-confirmation count unavailable; check the notice in Bookings"
+      : bookingTasks.length ? bookingTasks.join(" · ") : "No booking requests need review";
+  }
+  document.querySelector(".attention-total").textContent = completionVerificationAvailable
+    ? String(verificationCount + openReportCount + pendingBookingCount + awaitingVerificationCount)
+    : "—";
   const verifiedRate = students.count ? Math.round((verifiedStudents.count || 0) / students.count * 100) : 0;
   document.querySelector("#verified-rate").textContent = String(verifiedRate);
   document.querySelector("#verified-progress").style.width = `${verifiedRate}%`;
-  document.querySelector("#open-reports").textContent = String(reports.count || 0);
+  document.querySelector("#open-reports").textContent = String(openReportCount);
   const reportList = document.querySelector("#report-rows");
   reportList.innerHTML = reportRows.data?.length ? reportRows.data.map((report) =>
-    `<article class="admin-report-row"><div><strong>${escapeAdminText(report.reason)}</strong><small>${escapeAdminText(report.reporter?.full_name || "Student")} reported ${escapeAdminText(report.reported?.full_name || "a student")} · ${escapeAdminText(formatAdminDate(report.created_at))}</small><p>${escapeAdminText(report.details)}</p></div><span class="report-actions">${report.campus_request_id ? `<button class="review-button" type="button" data-remove-campus-request="${escapeAdminText(report.campus_request_id)}">Remove request</button>` : ""}<button class="review-button" type="button" data-report-action="resolved" data-report-id="${escapeAdminText(report.id)}">Resolve</button><button class="review-button" type="button" data-report-action="dismissed" data-report-id="${escapeAdminText(report.id)}">Dismiss</button></span></article>`).join("")
+    `<article class="admin-report-row"><div><strong>${escapeAdminText(report.reason)}</strong><small>${escapeAdminText(report.reporter?.full_name || "Student")} reported ${escapeAdminText(report.reported?.full_name || "a student")} · ${escapeAdminText(formatAdminDate(report.created_at))}</small><p>${escapeAdminText(report.details)}</p></div><span class="report-actions">${report.campus_request_id ? `<button class="review-button" type="button" data-remove-campus-request="${escapeAdminText(report.campus_request_id)}">Remove request</button>` : ""}<button class="review-button" type="button" data-open-moderation data-report-id="${escapeAdminText(report.id)}" data-reported-user-id="${escapeAdminText(report.reported_user_id)}" data-reported-user-name="${escapeAdminText(report.reported?.full_name || "Student")}">Take action</button><button class="review-button" type="button" data-report-action="resolved" data-report-id="${escapeAdminText(report.id)}">Resolve</button><button class="review-button" type="button" data-report-action="dismissed" data-report-id="${escapeAdminText(report.id)}">Dismiss</button></span></article>`).join("")
     : '<p class="empty-state">No open safety reports.</p>';
+  await fetchModerationHistory();
   window.adminActivity = {
     bookings: activityBookings.data || [],
     students: activityStudents.data || [],
@@ -499,6 +801,9 @@ async function protectAdminDashboard() {
     document.body.classList.remove("admin-locked");
     document.body.classList.add("admin-ready");
     adminStatus.hidden = true;
+    refreshAdminNotificationBadge();
+    document.querySelector("#demand-gap-refresh").addEventListener("click", refreshAdminDemandGaps);
+    refreshAdminDemandGaps();
     refreshAdminSystemStatus();
     window.setInterval(refreshAdminSystemStatus, 60000);
     refreshAdminOperations();
@@ -532,25 +837,70 @@ async function protectAdminDashboard() {
       }
     });
     document.querySelector(".sidebar-bottom").prepend(studentDashboardLink, signout);
+    const notificationsDialog = document.querySelector("#admin-notifications-dialog");
+    const notificationsList = document.querySelector("#admin-notifications-list");
+    const notificationsStatus = document.querySelector("#admin-notifications-status");
     document.querySelector(".notification-button").addEventListener("click", async () => {
+      notificationsDialog.showModal();
+      notificationsList.replaceChildren();
+      notificationsStatus.textContent = "Loading notifications…";
       const { data, error } = await adminClient.from("notifications")
-        .select("id, title, body, read_at").order("created_at", { ascending: false }).limit(10);
+        .select("id, title, body, read_at, created_at")
+        .eq("user_id", window.adminProfile.id)
+        .order("created_at", { ascending: false }).limit(10);
       if (error) {
         console.error("Could not load administrator notifications.", error);
-        showAdminToast(error.message || "Could not load notifications.");
+        notificationsStatus.textContent = "Could not load notifications. Please try again.";
         return;
       }
-      const unread = (data || []).filter((notification) => !notification.read_at);
-      if (unread.length) {
-        const { error: updateError } = await adminClient.from("notifications")
-          .update({ read_at: new Date().toISOString() }).in("id", unread.map((item) => item.id));
-        if (updateError) {
-          console.error("Could not mark notifications as read.", updateError);
-          showAdminToast(updateError.message || "Could not mark notifications as read.");
-          return;
-        }
+      if (!data?.length) {
+        notificationsStatus.textContent = "No notifications yet.";
+        updateAdminNotificationBadge(0);
+        return;
       }
-      showAdminToast(unread[0] ? `${unread[0].title}${unread[0].body ? `: ${unread[0].body}` : ""}` : "You’re all caught up.");
+      notificationsStatus.textContent = "Your 10 most recent notifications.";
+      let unreadCount = 0;
+      for (const notification of data) {
+        const item = document.createElement("li");
+        item.className = "admin-notification-item";
+        const title = document.createElement("strong");
+        title.textContent = notification.title;
+        const body = document.createElement("p");
+        body.textContent = notification.body || "";
+        const time = document.createElement("time");
+        time.dateTime = notification.created_at;
+        time.textContent = new Date(notification.created_at).toLocaleString();
+        item.append(title, body, time);
+        if (!notification.read_at) {
+          unreadCount += 1;
+          const markRead = document.createElement("button");
+          markRead.type = "button";
+          markRead.className = "button button-outline button-small";
+          markRead.textContent = "Mark as read";
+          markRead.addEventListener("click", async () => {
+            markRead.disabled = true;
+            const readAt = new Date().toISOString();
+            const { data: updatedRows, error: updateError } = await adminClient.from("notifications")
+              .update({ read_at: readAt }).eq("id", notification.id).eq("user_id", window.adminProfile.id).select("id");
+            if (updateError || !updatedRows?.length) {
+              console.error("Could not mark the administrator notification as read.", updateError || new Error("No notification row was updated."));
+              showAdminToast("Could not mark notification as read. Refresh and try again.");
+              markRead.disabled = false;
+              return;
+            }
+            notification.read_at = readAt;
+            markRead.remove();
+            unreadCount -= 1;
+            updateAdminNotificationBadge(unreadCount);
+          });
+          item.append(markRead);
+        }
+        notificationsList.append(item);
+      }
+      updateAdminNotificationBadge(unreadCount);
+    });
+    document.querySelector("[data-close-admin-notifications]").addEventListener("click", () => {
+      notificationsDialog.close();
     });
     const verificationDialog = document.querySelector("#verification-review-dialog");
     const verificationImage = document.querySelector("#verification-review-image");
@@ -643,7 +993,45 @@ async function protectAdminDashboard() {
         showAdminToast(refreshError.message || "The request was saved, but the dashboard could not refresh.");
       }
     });
+    const moderationDialog = document.querySelector("#moderation-dialog");
+    const moderationForm = document.querySelector("#moderation-form");
+    const moderationAction = document.querySelector("#moderation-action");
+    const moderationReason = document.querySelector("#moderation-reason");
+    const moderationMessage = document.querySelector("#moderation-message");
+    const moderationStatus = document.querySelector("#moderation-status");
+    const moderationSubmit = document.querySelector("#moderation-submit");
+    function openModerationDialog({ reportId = "", userId, userName, restore = false }) {
+      moderationDialog.dataset.reportId = reportId;
+      moderationDialog.dataset.reportedUserId = userId;
+      moderationDialog.dataset.restore = String(restore);
+      document.querySelector("#moderation-subtitle").textContent = restore
+        ? `Restore Skillmate access for ${userName}?`
+        : `Report against ${userName}. Review the details before taking action.`;
+      document.querySelector('label[for="moderation-action"]').hidden = restore;
+      moderationAction.hidden = restore;
+      moderationAction.value = "warning";
+      moderationAction.disabled = restore;
+      moderationReason.value = restore ? "Account access restored after administrator review." : "";
+      moderationMessage.value = restore
+        ? "Your Skillmate account access has been restored. Thank you for your patience."
+        : "Please review Skillmate's community guidelines. If you believe this action was a mistake, contact support.";
+      moderationStatus.textContent = "";
+      moderationSubmit.disabled = false;
+      moderationDialog.showModal();
+    }
+    moderationDialog.querySelectorAll("[data-close-moderation]").forEach((button) => {
+      button.addEventListener("click", () => moderationDialog.close());
+    });
     document.querySelector("#report-rows").addEventListener("click", async (event) => {
+      const review = event.target.closest("[data-open-moderation]");
+      if (review) {
+        openModerationDialog({
+          reportId: review.dataset.reportId,
+          userId: review.dataset.reportedUserId,
+          userName: review.dataset.reportedUserName,
+        });
+        return;
+      }
       const remove = event.target.closest("[data-remove-campus-request]");
       if (remove) {
         remove.disabled = true;
@@ -655,14 +1043,14 @@ async function protectAdminDashboard() {
       const button = event.target.closest("[data-report-action]");
       if (!button) return;
       button.disabled = true;
-      const { error } = await adminClient.from("reports").update({
+      const { data: updatedRows, error } = await adminClient.from("reports").update({
         status: button.dataset.reportAction,
         resolved_by: window.adminProfile.id,
         resolved_at: new Date().toISOString(),
-      }).eq("id", button.dataset.reportId);
-      if (error) {
-        console.error("Could not update the safety report.", error);
-        showAdminToast(error.message || "Could not update the safety report.");
+      }).eq("id", button.dataset.reportId).select("id");
+      if (error || !updatedRows?.length) {
+        console.error("Could not update the safety report.", error || new Error("No safety report row was updated."));
+        showAdminToast("Could not update the safety report. Refresh and try again.");
         button.disabled = false;
         return;
       }
@@ -674,8 +1062,65 @@ async function protectAdminDashboard() {
         showAdminToast(refreshError.message || "The report was updated, but the dashboard could not refresh.");
       }
     });
+    document.querySelector("#moderation-history").addEventListener("click", (event) => {
+      const restore = event.target.closest("[data-restore-user-id]");
+      if (!restore) return;
+      openModerationDialog({
+        userId: restore.dataset.restoreUserId,
+        userName: restore.dataset.restoreUserName,
+        restore: true,
+      });
+    });
+    moderationForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const action = moderationDialog.dataset.restore === "true" ? "restore" : moderationAction.value;
+      if (action === "ban" && !window.confirm("Ban this account? The person will be notified, and only an administrator can restore access.")) {
+        return;
+      }
+      moderationSubmit.disabled = true;
+      moderationStatus.textContent = "Recording the official Skillmate Trust & Safety action…";
+      try {
+        const response = await fetch("/api/admin-moderation", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            reportId: moderationDialog.dataset.reportId || null,
+            action,
+            reportedUserId: moderationDialog.dataset.reportedUserId,
+            reason: moderationReason.value.trim(),
+            message: moderationMessage.value.trim(),
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          if (!result.actionApplied) {
+            moderationStatus.textContent = result.error || "Could not apply this action. Review the report and try again.";
+            moderationSubmit.disabled = false;
+            return;
+          }
+          showAdminToast(result.error || "The in-app restriction is active, but the sign-in restriction needs administrator attention.");
+        } else {
+          showAdminToast(action === "restore"
+            ? "Account restored and the person has been notified."
+            : "Action recorded and the person has been notified by Skillmate.");
+        }
+        moderationDialog.close();
+        moderationForm.reset();
+        await fetchAdminDashboard();
+      } catch (error) {
+        console.error("Could not submit the moderation action.", error);
+        moderationStatus.textContent = "Could not reach Skillmate. The action was not confirmed; check the report before retrying.";
+        moderationSubmit.disabled = false;
+      }
+    });
   } catch (error) {
     console.error("Administrator access check failed.", error);
+    if (error.status === 401) {
+      await window.clearExpiredSkillmateSession();
+      window.location.replace("login.html?next=admin");
+      return;
+    }
     showAdminGate(
       `Could not verify administrator access. ${error.message || "Check your Supabase connection, then try again."}`,
       false,

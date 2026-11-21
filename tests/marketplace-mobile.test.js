@@ -111,6 +111,78 @@ test("upcoming excludes overdue appointments; status filters retain the selected
   assert.deepEqual(filterBookings(bookings, { ...options, filter: "upcoming" }).map(item => item.id), ["next", "later"]);
   assert.deepEqual(filterBookings(bookings, { ...options, filter: "requests", direction: "received" }).map(item => item.id), ["incoming"]);
   assert.deepEqual(filterBookings(bookings, { ...options, filter: "completed" }).map(item => item.id), ["done"]);
+  assert.deepEqual(filterBookings([
+    { id: "cancelled", providerId: "other", status: "Cancelled" },
+    { id: "declined", providerId: "other", status: "Declined" },
+    { id: "unrelated", providerId: "other", status: "Completed" },
+  ], { ...options, filter: "requests" }).map(item => item.id), ["cancelled", "declined"]);
+  assert.deepEqual(filterBookings([
+    { id: "cancelled-incoming", providerId: "me", status: "Cancelled" },
+  ], { ...options, direction: "received", filter: "requests" }).map(item => item.id), ["cancelled-incoming"]);
+});
+test("accepted bookings show as confirmed and leave the unaccepted requests filter", () => {
+  const items = [
+    { id: "waiting", providerId: "me", status: "Pending", scheduledAt: "2026-10-29T12:00:00Z" },
+    { id: "accepted", providerId: "me", status: "Pending", providerAcceptedAt: "2026-10-28T13:00:00Z", paymentStatus: "awaiting_payment", scheduledAt: "2026-10-30T12:00:00Z" },
+  ];
+  assert.deepEqual(filterBookings(items, { ...options, direction: "received", filter: "requests" }).map(item => item.id), ["waiting"]);
+  assert.deepEqual(filterBookings(items, { ...options, direction: "received", filter: "upcoming" }).map(item => item.id), ["waiting", "accepted"]);
+});
+test("received-booking direction shows only pending incoming requests in its new-request badge", () => {
+  const allCount = { textContent: "" };
+  const requestCount = {
+    textContent: "",
+    hidden: true,
+    attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+  };
+  const context = {
+    state: {
+      bookings: [
+        { id: "new", providerId: "me", status: "Pending" },
+        { id: "accepted", providerId: "me", status: "Confirmed" },
+        { id: "outgoing", providerId: "other", status: "Pending" },
+      ],
+    },
+    bookingDirection: "made",
+    activeBookingFilter: "all",
+    ownProviderId: () => "me",
+    isOwnBooking: booking => booking.providerId === "me",
+    window: { skillmateMarketplace: { filterBookings: () => [] } },
+    document: {
+      querySelector(selector) {
+        return selector === "#all-booking-count" ? allCount : requestCount;
+      },
+    },
+  };
+  vm.createContext(context);
+  const start = source.indexOf("function bookingsForActiveFilter()");
+  const end = source.indexOf("\nfunction renderBookingActivity()", start);
+  vm.runInContext(source.slice(start, end), context);
+
+  context.bookingsForActiveFilter();
+  assert.equal(requestCount.textContent, "1");
+  assert.equal(requestCount.attributes["aria-label"], "1 new request");
+  assert.equal(requestCount.hidden, false);
+
+  context.state.bookings[0].status = "Confirmed";
+  context.bookingsForActiveFilter();
+  assert.equal(requestCount.textContent, "0");
+  assert.equal(requestCount.attributes["aria-label"], "0 new requests");
+  assert.equal(requestCount.hidden, true);
+});
+test("accepted bookings await payment and can only be cancelled through the safe unpaid flow", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "user.js"), "utf8");
+  const bookingRenderer = source.slice(source.indexOf("function renderBookingList"), source.indexOf("function resizeChatInput"));
+  assert.match(bookingRenderer, /providerCanCancelUnpaid = acceptedAwaitingPayment[\s\S]*\["awaiting_payment", "failed"\]\.includes\(booking\.paymentStatus\)[\s\S]*latestPaymentStatus !== "pending"/);
+  assert.match(bookingRenderer, /customerCanCancelUnpaid = Boolean\(appSupabase\)[\s\S]*\["awaiting_payment", "failed", "processing"\]\.includes\(booking\.paymentStatus\)/);
+  assert.match(bookingRenderer, /customerCanCancel = !booking\.groupId && !booking\.providerAcceptedAt/);
+  assert.doesNotMatch(bookingRenderer, /Continue payment/);
+  assert.match(bookingRenderer, /data-check-payment-booking-id/);
+  assert.match(bookingRenderer, /data-cancel-customer-unpaid-booking/);
+  assert.match(bookingRenderer, /"Confirmed · Awaiting payment"/);
+  assert.match(bookingRenderer, /"Confirmed · Payment processing"/);
+  assert.match(bookingRenderer, /data-decision="In progress" data-booking-id/);
 });
 test("uploaded image URLs reject executable schemes and accept supported photo sources", () => {
   for (const url of ["javascript:alert(1)", "data:image/svg+xml,<svg/>", "file:///private", "http://unknown.test/a.jpg", "bad"]) assert.equal(safeImageUrl(url), "");

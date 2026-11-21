@@ -10,7 +10,7 @@
     <title>Skillmate | Admin dashboard</title>
     <link rel="preload" href="/assets/fonts/plus-jakarta-sans-latin-variable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/landing-fonts.css?v=3" />
-    <link rel="stylesheet" href="styles.css?v=12" />
+    <link rel="stylesheet" href="styles.css?v=18" />
 <link rel="stylesheet" href="admin-gold.css?v=2" />
     <link rel="stylesheet" href="/brand-colors.css?v=1" />
     <link rel="stylesheet" href="/typography.css?v=2" />
@@ -47,28 +47,35 @@
           <a class="nav-link" href="#bookings">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M7.5 3.5v3M16.5 3.5v3M3.5 10h17M8 14h3M8 17h6" /></svg>
             <span>Bookings</span>
-            <span class="nav-count">8</span>
+            <span class="nav-count" hidden></span>
           </a>
           <a class="nav-link" href="#students">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 20v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V20M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM16 4.2a4 4 0 0 1 0 7.6M17 14.6a4 4 0 0 1 4 3.9V20" /></svg>
             <span>Needs attention</span>
+            <span class="nav-count" hidden></span>
           </a>
           <a class="nav-link" href="#verification">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v13H4zM8 9h8M8 13h5" /></svg>
             <span>Verification queue</span>
+            <span class="nav-count" hidden></span>
           </a>
           <a class="nav-link" href="#support-tickets">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 9 9 0 0 1-4-.9L3 20l1.8-4A7.2 7.2 0 0 1 4 12c0-4.1 3.6-7.5 8-7.5s8 3.1 8 7Z" /><path d="M8 12h.01M12 12h.01M16 12h.01" /></svg>
             <span>Support tickets</span>
+            <span class="nav-count" hidden></span>
           </a>
           <a class="nav-link" href="#services">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 5.2 5.7.8-4.1 4 .9 5.7-5-2.7-5 2.7.9-5.7-4.1-4 5.7-.8L12 3Z" /></svg>
             <span>Services</span>
           </a>
+          <a class="nav-link" href="#demand-gaps">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m8 10V4m8 15v-7" /><path d="M2 20h20" /></svg>
+            <span>Provider demand</span>
+          </a>
           <a class="nav-link" href="#safety">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5.5c0 4.6-3.3 7.8-8 9.5-4.7-1.7-8-4.9-8-9.5V6l8-3Z" /><path d="m8.5 12 2.2 2.2 4.8-4.8" /></svg>
             <span>Trust &amp; safety</span>
-            <span class="nav-dot" aria-label="Needs attention"></span>
+            <span class="nav-count" hidden></span>
           </a>
 
           <span class="nav-caption nav-caption-spaced">INSIGHTS</span>
@@ -106,14 +113,16 @@
           </button>
           <div class="breadcrumbs"><span>Pages</span><span class="crumb-slash">/</span><strong id="admin-page-title">Overview</strong></div>
           <div class="topbar-actions">
-            <label class="search-box">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
+            <div class="search-box" id="booking-search">
+              <button class="search-toggle" id="search-toggle" type="button" aria-label="Search bookings" aria-expanded="false" aria-controls="global-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
+              </button>
               <input id="global-search" type="search" placeholder="Search bookings..." aria-label="Search bookings" />
-              <kbd>⌘ K</kbd>
-            </label>
-            <button class="icon-button notification-button" type="button" aria-label="Notifications">
+              <kbd aria-hidden="true">Ctrl/⌘ K</kbd>
+            </div>
+            <button class="icon-button notification-button" type="button" aria-label="Notifications" aria-haspopup="dialog" aria-controls="admin-notifications-dialog">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></svg>
-              <span class="notification-dot"></span>
+              <span class="notification-dot" hidden></span>
             </button>
             <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to dark mode"><span data-theme-icon aria-hidden="true">☾</span></button>
             <a class="student-profile-link" href="#overview" aria-label="Go to overview">EN</a>
@@ -243,6 +252,7 @@
                 <div><h2>Recent bookings</h2><p>Keep track of what’s happening</p></div>
                 <a class="text-link" href="#bookings">View all <span aria-hidden="true">→</span></a>
               </div>
+              <p class="attention-migration-notice" id="booking-completion-migration-notice" role="status" hidden></p>
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>STUDENT</th><th>SERVICE &amp; PROVIDER</th><th>DATE</th><th>TYPE</th><th>STATUS</th></tr></thead>
@@ -266,6 +276,33 @@
               </div>
               <div class="service-list" id="service-category-rows"></div>
               <a class="text-link services-link" href="#services">Explore services <span aria-hidden="true">→</span></a>
+            </article>
+          </section>
+
+          <section class="admin-view" id="demand-gaps" aria-labelledby="demand-gaps-title" hidden>
+            <div class="admin-page-heading"><p class="eyebrow">MARKETPLACE</p><h1 id="demand-gaps-title">Provider demand</h1><p>See where buyers are waiting and where recruiting providers can help.</p></div>
+            <article class="panel demand-gap-panel" id="demand-gap-panel">
+              <div class="panel-heading">
+                <div><h2>Recruitment overview</h2><p id="demand-gap-updated">Loading live marketplace data…</p></div>
+                <button class="review-button" id="demand-gap-refresh" type="button">Refresh</button>
+              </div>
+              <div class="demand-gap-summary" aria-label="Demand overview">
+                <div class="demand-gap-summary-card demand-gap-summary-focus"><span>Categories to recruit</span><strong id="demand-gap-focus-count">—</strong><small>More buyers than providers</small></div>
+                <div class="demand-gap-summary-card"><span>Open buyer requests</span><strong id="demand-gap-request-count">—</strong><small>Currently accepting responses</small></div>
+                <div class="demand-gap-summary-card"><span>Categories tracked</span><strong id="demand-gap-category-count">—</strong><small>With requests or active listings</small></div>
+              </div>
+              <p class="demand-gap-status" id="demand-gap-status" role="status" aria-live="polite">Demand data loads with the dashboard.</p>
+              <p class="attention-migration-notice" id="demand-gap-error" role="alert" hidden></p>
+              <p class="demand-gap-key">Counts show people, not provider availability. “Recruit now” means 3+ buyers and fewer providers; “Build supply” means a smaller shortfall.</p>
+              <div class="demand-gap-table" role="table" aria-label="Buyer demand and provider supply by category">
+                <div class="demand-gap-columns" role="row">
+                  <span role="columnheader">Category</span>
+                  <span role="columnheader">Interested buyers</span>
+                  <span role="columnheader">Active providers</span>
+                  <span role="columnheader">Recommended next step</span>
+                </div>
+                <div class="demand-gap-list" id="demand-gap-rows" role="rowgroup" aria-live="polite"></div>
+              </div>
             </article>
           </section>
 
@@ -293,6 +330,11 @@
               <div class="trust-foot"><span><i></i>Open reports</span><strong id="open-reports">—</strong></div>
               <div class="safety-report-list" id="report-rows"></div>
               <a class="text-link trust-link" href="#safety">View safety center <span aria-hidden="true">→</span></a>
+            </article>
+            <article class="panel moderation-history-panel">
+              <div class="panel-heading"><div><h2>Moderation history</h2><p>Warnings and account restrictions issued by administrators</p></div></div>
+              <p id="moderation-history-status" role="status" aria-live="polite">Loading moderation history…</p>
+              <div class="moderation-history-list" id="moderation-history"></div>
             </article>
           </section>
 
@@ -375,11 +417,42 @@
         </div>
       </form>
     </dialog>
+    <dialog class="admin-dialog moderation-dialog" id="moderation-dialog" aria-labelledby="moderation-title">
+      <form id="moderation-form">
+        <button class="modal-close" type="button" data-close-moderation aria-label="Close">×</button>
+        <p class="eyebrow">TRUST &amp; SAFETY</p>
+        <h2 id="moderation-title">Review community report</h2>
+        <p class="moderation-subtitle" id="moderation-subtitle"></p>
+        <label for="moderation-action">Action</label>
+        <select id="moderation-action" required>
+          <option value="warning">Send official warning</option>
+          <option value="suspension">Suspend account for 7 days</option>
+          <option value="ban">Ban account</option>
+        </select>
+        <label for="moderation-reason">Reason for the action</label>
+        <textarea id="moderation-reason" required minlength="5" maxlength="1000" rows="3"></textarea>
+        <label for="moderation-message">Message to the person</label>
+        <textarea id="moderation-message" required minlength="5" maxlength="500" rows="4"></textarea>
+        <p class="moderation-notice">This is an official Skillmate Trust &amp; Safety message. The action and reason will be recorded for administrators.</p>
+        <p id="moderation-status" role="status" aria-live="polite"></p>
+        <div class="verification-review-actions">
+          <button class="review-button" type="button" data-close-moderation>Cancel</button>
+          <button class="button button-primary" type="submit" id="moderation-submit">Send notice and apply action</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog class="moderation-dialog admin-notifications-dialog" id="admin-notifications-dialog" aria-labelledby="admin-notifications-title">
+      <button class="modal-close" type="button" data-close-admin-notifications aria-label="Close notifications">&times;</button>
+      <p class="eyebrow">ADMINISTRATION</p>
+      <h2 id="admin-notifications-title">Notifications</h2>
+      <p id="admin-notifications-status" role="status" aria-live="polite">Your latest updates will appear here.</p>
+      <ul class="admin-notifications-list" id="admin-notifications-list"></ul>
+    </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="script.js?v=2"></script>
+    <script src="script.js?v=4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
     <script src="supabase-client.js?v=4"></script>
-    <script src="admin-auth.js?v=3-2"></script>
+    <script src="admin-auth.js?v=3-8"></script>
   </body>
 </html>

@@ -109,6 +109,7 @@ window.syncSkillmateServerSession = async function syncSkillmateServerSession(se
     const result = await response.json().catch(() => ({}));
     const error = new Error(result.error || "Could not establish a secure Skillmate session.");
     error.code = result.code || "";
+    error.status = response.status;
     throw error;
   }
 };

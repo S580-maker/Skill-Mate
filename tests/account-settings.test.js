@@ -115,7 +115,7 @@ test("closure requires a session and explicit confirmation", async () => {
 });
 
 const userSource = fs.readFileSync(path.join(project, "user.js"), "utf8");
-const profileHelper = userSource.slice(userSource.indexOf("const accountProfileColumns ="), userSource.indexOf("async function refreshSupabaseState()"));
+const profileHelper = userSource.slice(userSource.indexOf("const accountProfileColumns ="), userSource.indexOf("async function refreshSupabaseState"));
 function profileFixture(results) {
   const selections = [];
   const context = vm.createContext({ appSupabase: { from(table) {
@@ -175,7 +175,7 @@ test("profile authorization errors are preserved", async () => {
 
 function profileSaveFixture({
   campus = "Original campus", settingsReady = false, rpcReady = false,
-  photo = null, avatarUrl = "", failAvatarRemoval = false,
+  photo = null, avatarUrl = "", failAvatarRemoval = false, zeroRowProfileUpdate = false,
 } = {}) {
   const elements = {
     "#settings-full-name": { value: "Updated name" },
@@ -240,7 +240,23 @@ function profileSaveFixture({
       },
       from(table) {
         if (table === "profiles") {
-          return { update(value) { writes.push(value); return { eq: async () => ({ error: null }) }; } };
+          return {
+            update(value) {
+              writes.push(value);
+              return {
+                eq() {
+                  const result = {
+                    data: zeroRowProfileUpdate ? [] : [{ id: "test-user" }],
+                    error: null,
+                  };
+                  return {
+                    select: async () => result,
+                    then(resolve, reject) { return Promise.resolve(result).then(resolve, reject); },
+                  };
+                },
+              };
+            },
+          };
         }
         throw new Error(`Unexpected table: ${table}`);
       },
@@ -275,6 +291,13 @@ test("basic profile edits save on the legacy schema without writing missing sett
   assert(!Object.hasOwn(writes[0], "phone_number"));
   assert(!Object.hasOwn(writes[0], "university"));
   assert.equal(state.profile.name, "Updated name");
+});
+
+test("legacy profile fallback does not report success when the update affects no rows", async () => {
+  const { save, state, feedback } = profileSaveFixture({ zeroRowProfileUpdate: true });
+  await assert.rejects(save(), /Your profile could not be saved/);
+  assert.equal(state.profile.name, undefined);
+  assert.notEqual(feedback.textContent, "Your profile has been saved.");
 });
 
 test("campus changes cannot bypass identity synchronization when the RPC is missing", async () => {

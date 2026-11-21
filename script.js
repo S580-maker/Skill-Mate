@@ -3,25 +3,82 @@ const menuToggle = document.querySelector("#menu-toggle");
 const sidebarClose = document.querySelector("#sidebar-close");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
 const globalSearch = document.querySelector("#global-search");
+const bookingSearch = document.querySelector("#booking-search");
+const searchToggle = document.querySelector("#search-toggle");
 function getBookingRows() {
   return [...document.querySelectorAll("#booking-rows tr")];
 }
 const emptyState = document.querySelector("#empty-state");
+function applyAdminBookingSearch() {
+  const query = globalSearch.value.trim().toLocaleLowerCase();
+  const rows = getBookingRows();
+  let visibleRows = 0;
+
+  rows.forEach((row) => {
+    const matches = (row.dataset.search || "").includes(query);
+    row.hidden = !matches;
+    if (matches) visibleRows += 1;
+  });
+
+  if (emptyState) {
+    emptyState.hidden = visibleRows !== 0;
+    emptyState.textContent = query
+      ? `No bookings match “${globalSearch.value.trim()}”.`
+      : "No bookings to display.";
+  }
+  const bookingsSummary = document.querySelector(".bookings-panel .panel-heading p");
+  if (bookingsSummary) {
+    bookingsSummary.textContent = query
+      ? `Showing ${visibleRows} of ${rows.length} bookings`
+      : `${rows.length} most recent bookings`;
+  }
+}
 const toast = document.querySelector("#toast");
 const adminViews = [...document.querySelectorAll(".admin-view")];
 let toastTimer;
+window.applyAdminBookingSearch = applyAdminBookingSearch;
 
-function showAdminView() {
+function closeBookingSearch(clear = false, restoreFocus = false) {
+  if (clear) globalSearch.value = "";
+  bookingSearch.classList.remove("is-open");
+  searchToggle.setAttribute("aria-expanded", "false");
+  applyAdminBookingSearch();
+  if (restoreFocus) searchToggle.focus();
+}
+
+searchToggle.addEventListener("click", () => {
+  if (window.matchMedia("(max-width: 680px)").matches) {
+    if (bookingSearch.classList.contains("is-open")) {
+      closeBookingSearch(false, true);
+      return;
+    }
+    bookingSearch.classList.add("is-open");
+    searchToggle.setAttribute("aria-expanded", "true");
+  }
+  globalSearch.focus();
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (window.matchMedia("(max-width: 680px)").matches
+    && bookingSearch.classList.contains("is-open")
+    && !bookingSearch.contains(event.target)) {
+    closeBookingSearch();
+  }
+});
+
+function showAdminView(requestedView = window.location.hash.slice(1) || "overview") {
   if (!adminViews.length) return;
 
-  const hash = window.location.hash.slice(1) || "overview";
-  const target = document.getElementById(hash);
-  const view = target?.closest(".admin-view") || adminViews.find((item) => item.id === hash);
+  const target = document.getElementById(requestedView);
+  const view = target?.closest(".admin-view") || adminViews.find((item) => item.id === requestedView);
   if (!view) return;
 
   adminViews.forEach((item) => { item.hidden = item !== view; });
   document.querySelectorAll(".side-nav .nav-link").forEach((link) => {
-    link.classList.toggle("active", link.hash === `#${view.id}`);
+    const active = link.hash === `#${view.id}`;
+    link.classList.toggle("active", active);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
   });
 
   const activeLink = document.querySelector(`.side-nav .nav-link[href="#${view.id}"]`);
@@ -61,7 +118,7 @@ sidebarBackdrop.addEventListener("click", () => closeSidebar(true));
 
 document.querySelectorAll(".side-nav .nav-link").forEach((link) => {
   link.addEventListener("click", () => {
-    if (adminViews.length) showAdminView();
+    if (adminViews.length) showAdminView(link.hash.slice(1));
     else {
       document.querySelectorAll(".side-nav .nav-link").forEach((item) => item.classList.remove("active"));
       link.classList.add("active");
@@ -71,21 +128,16 @@ document.querySelectorAll(".side-nav .nav-link").forEach((link) => {
 });
 
 if (adminViews.length) {
-  window.addEventListener("hashchange", showAdminView);
+  window.addEventListener("hashchange", () => showAdminView());
   showAdminView();
 }
 
 globalSearch.addEventListener("input", () => {
-  const query = globalSearch.value.trim().toLocaleLowerCase();
-  let visibleRows = 0;
-
-  getBookingRows().forEach((row) => {
-    const matches = (row.dataset.search || "").includes(query);
-    row.hidden = !matches;
-    if (matches) visibleRows += 1;
-  });
-
-  emptyState.hidden = visibleRows !== 0;
+  if (globalSearch.value.trim() && window.location.hash !== "#bookings") {
+    window.location.hash = "bookings";
+    showAdminView("bookings");
+  }
+  applyAdminBookingSearch();
 });
 
 document.querySelector("#export-button").addEventListener("click", () => {
@@ -130,9 +182,14 @@ document.querySelector("#period-select").addEventListener("change", (event) => {
 document.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
+    if (window.matchMedia("(max-width: 680px)").matches) {
+      bookingSearch.classList.add("is-open");
+      searchToggle.setAttribute("aria-expanded", "true");
+    }
     globalSearch.focus();
   }
   if (event.key === "Escape") {
-    if (sidebar.classList.contains("open")) closeSidebar(true);
+    if (bookingSearch.classList.contains("is-open")) closeBookingSearch(true, true);
+    else if (sidebar.classList.contains("open")) closeSidebar(true);
   }
 });

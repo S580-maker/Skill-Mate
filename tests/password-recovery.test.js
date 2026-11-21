@@ -74,6 +74,37 @@ test("sign-in reports missing email verification configuration", async () => {
   }
 });
 
+test("signup reports missing email verification configuration", async () => {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secret = process.env.AUTH_OTP_SECRET;
+  const input = {
+    method: "POST",
+    body: {
+      email: "student@example.test",
+      password: "correct horse battery staple",
+      fullName: "Test Student",
+      university: "University of Ghana",
+    },
+  };
+  try {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceKeyResponse = responseStub();
+    await signUp(input, serviceKeyResponse);
+    assert.equal(serviceKeyResponse.statusCode, 503);
+    assert.equal(serviceKeyResponse.body.error, "Missing required server setting: SUPABASE_SERVICE_ROLE_KEY.");
+
+    process.env.SUPABASE_SERVICE_ROLE_KEY = serviceKey;
+    delete process.env.AUTH_OTP_SECRET;
+    const otpSecretResponse = responseStub();
+    await signUp(input, otpSecretResponse);
+    assert.equal(otpSecretResponse.statusCode, 503);
+    assert.equal(otpSecretResponse.body.error, "Missing required server setting: AUTH_OTP_SECRET.");
+  } finally {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = serviceKey;
+    process.env.AUTH_OTP_SECRET = secret;
+  }
+});
+
 test("signup stores a pending password only inside authenticated encrypted challenge data", async () => {
   const requests = [];
   const password = "correct horse battery staple";
@@ -281,7 +312,7 @@ test("password recovery sends a six-digit code, verifies it, and redeems a one-t
     const parsedUrl = new URL(url);
     requests.push({ path: `${parsedUrl.pathname}${parsedUrl.search}`, method: options.method || "GET", body: options.body ? JSON.parse(options.body) : null });
     if (parsedUrl.pathname.endsWith("/auth/v1/admin/generate_link")) {
-      return { ok: true, status: 200, json: async () => ({ user: { id: "student-user-id" } }) };
+      return { ok: true, status: 200, json: async () => ({ id: "student-user-id", email: "student@example.test" }) };
     }
     if (parsedUrl.pathname.endsWith("/rest/v1/auth_login_challenges") && !options.method) {
       return { ok: true, status: 200, json: async () => [] };
@@ -318,6 +349,7 @@ test("password recovery sends a six-digit code, verifies it, and redeems a one-t
     );
     assert.equal(startResponse.statusCode, 200);
     assert.match(startResponse.body.message, /six-digit verification code/);
+    assert.equal(startResponse.body.recoveryStarted, true);
     assert.match(emailMessage.subject, /password reset code/i);
     const code = emailMessage.text.match(/code is (\d{6})\./)?.[1];
     assert.ok(code, "Recovery email contains exactly six digits");
@@ -378,8 +410,33 @@ test("password recovery returns the same response for invalid and unknown-lookin
     response,
   );
   assert.equal(response.statusCode, 200);
-  assert.match(response.body.message, /If an account uses this email/);
+  assert.equal(response.body.recoveryStarted, false);
+  assert.match(response.body.message, /No recovery code was sent/);
   assert.equal(response.headers["set-cookie"], undefined);
+});
+
+test("password recovery does not open the OTP screen when Supabase finds no account", async () => {
+  global.fetch = async (url) => {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.pathname.endsWith("/auth/v1/admin/generate_link")) {
+      return { ok: false, status: 404, json: async () => ({ message: "User not found" }) };
+    }
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+
+  try {
+    const response = responseStub();
+    await requestPasswordRecovery(
+      { method: "POST", body: { email: "unknown@example.test" } },
+      response,
+    );
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.recoveryStarted, false);
+    assert.match(response.body.message, /No recovery code was sent/);
+    assert.equal(response.headers["set-cookie"], undefined);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test("password recovery rejects short passwords before consuming the reset grant", async () => {

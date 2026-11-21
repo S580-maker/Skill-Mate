@@ -69,7 +69,7 @@ test("existing chats expose the compact service bar and agreed booking link", ()
   assert.match(userScript, /const chatServices = \[\.\.\.serviceMap\.values\(\)\]/);
   assert.match(userScript, /actions\.className = "chat-negotiation-actions"/);
   assert.match(userScript, /propose\.dataset\.chatPricePropose = ""/);
-  assert.match(userScript, /propose\.textContent = "Propose Price"/);
+  assert.match(userScript, /propose\.textContent = canNegotiateNewOrder \? "Negotiate New Order" : "Propose Price"/);
   assert.match(userScript, /selector\.dataset\.chatServiceSelect = ""/);
   assert.match(userScript, /action === "counter" \|\| action === "proposal" \|\| action === "initial"/);
   assert.match(userScript, /function createChatPriceOfferCard/);
@@ -82,7 +82,7 @@ test("existing chats expose the compact service bar and agreed booking link", ()
   assert.match(userScript, /let conversationId = activeConversationId/);
   assert.match(userScript, /error\.userMessage = error\.message\.trim\(\)\.slice\(0, 240\)/);
   assert.match(userStyle, /@media \(max-width: 680px\) \{\s+\.chat-negotiations \{ display: grid;/);
-  assert.match(userStyle, /\.chat-proposal-card \{[^}]*line-height: 1\.3;/);
+  assert.match(userStyle, /\.chat-proposal-card \{[^}]*line-height: 1\.4;/);
 });
 
 test("chat proposal sheet includes a message without changing legacy price-only behavior", () => {

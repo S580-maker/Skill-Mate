@@ -102,6 +102,9 @@ const defaultState = {
 };
 let state = loadState();
 const appSupabase = window.skillmateSupabase;
+let payoutState = null;
+let payoutBanks = [];
+let payoutWithdrawalInFlight = false;
 let appUser = null;
 let connectedProviders = [];
 let connectedServices = [];
@@ -109,6 +112,9 @@ let selectedCategory = "All";
 let activeConversationId = null;
 let activeBookingFilter = "all";
 let bookingDirection = "made";
+let checkoutBookingId = "";
+let checkoutInitialization = null;
+let checkoutVerificationPromise = null;
 let groupProviderFilter = null;
 let priceNegotiations = [];
 let currentBookingNegotiationId = "";
@@ -147,12 +153,14 @@ const pendingProviderSaves = new Set();
 const pendingGroupActions = new Set();
 const pendingServiceToggles = new Set();
 const pendingBookingStatuses = new Map();
+const bookingPaymentNotices = new Map();
 const DASHBOARD_LOAD_ESTIMATE_KEY = "skillmate-dashboard-load-estimate-ms-v1";
 const ACTION_LOAD_ESTIMATE_MS = 15000;
 let dashboardLoadEstimateMs = ACTION_LOAD_ESTIMATE_MS;
 let dashboardLoadingStartedAt = 0;
 let dashboardLoadingProgress = 10;
 let dashboardLoadingPhase = "Checking your session…";
+let dashboardLoadingTimeout = null;
 let dashboardLoadingInterval = null;
 const ownProviderId = () => appUser?.id || "alex";
 const isOwnBooking = (booking) => booking.providerId === ownProviderId();
@@ -807,11 +815,12 @@ async function markConversationMessagesRead(chatId) {
     const updates = messageMetadataAvailable === false
       ? { read_at: readAt }
       : { delivered_at: readAt, read_at: readAt };
-    const { error } = await appSupabase.from("messages")
+    const { data: updatedMessages, error } = await appSupabase.from("messages")
       .update(updates)
-      .eq("conversation_id", chatId).neq("sender_id", appUser.id).is("read_at", null);
+      .eq("conversation_id", chatId).neq("sender_id", appUser.id).is("read_at", null)
+      .select("id");
     if (error) throw error;
-    if (chat) {
+    if (chat && updatedMessages?.length) {
       chat.messages.forEach((message) => {
         if (message.senderId && message.senderId !== appUser.id && !message.readAt) {
           message.deliveredAt = readAt;
@@ -1107,17 +1116,22 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   const newestFirst = targetId === "recent-grid" || document.querySelector('#marketplace-filters [name="sort"]')?.value === "newest";
   if (newestFirst && targetId !== "saved-grid") visible.sort((left, right) => (Date.parse(right.createdAt) || 0) - (Date.parse(left.createdAt) || 0));
   if (targetId === "recent-grid") visible = latestMarketplaceListings(visible);
+  const featuredRequests = targetId === "marketplace-grid" && !query && selectedCategory === "All" && !newestFirst
+    ? window.skillmateGrowth?.featuredRequests() || [] : [];
   if (targetId === "marketplace-grid") {
-    document.querySelector("#marketplace-result-count").textContent = `${visible.length} ${visible.length === 1 ? "service" : "services"}`;
+    const serviceCount = `${visible.length} ${visible.length === 1 ? "service" : "services"}`;
+    document.querySelector("#marketplace-result-count").textContent = featuredRequests.length
+      ? `${serviceCount} · ${featuredRequests.length} online ${featuredRequests.length === 1 ? "request" : "requests"}`
+      : serviceCount;
     document.querySelector("#marketplace-heading").textContent = query ? "Search results" : newestFirst ? "Recently Added" : selectedCategory === "All" ? "Featured Services" : selectedCategory;
-    document.querySelector("#marketplace-description").textContent = query || selectedCategory !== "All" ? "Find the right student for what you need." : newestFirst ? "Newest listings first. Services without publication dates appear last." : "Popular services from talented students on your campus.";
+    document.querySelector("#marketplace-description").textContent = query || selectedCategory !== "All" ? "Find the right student for what you need." : newestFirst ? "Newest listings first. Services without publication dates appear last." : featuredRequests.length ? "Popular services and online requests from students on your campus." : "Popular services from talented students on your campus.";
     const status = document.querySelector("#search-status");
     status.hidden = !query;
     status.textContent = query
       ? `${visible.length} ${visible.length === 1 ? "service" : "services"} found for “${query}”. Related skills and common typos are included.`
       : "";
   }
-  target.innerHTML = visible.length ? visible.map((provider) => `
+  const serviceCards = visible.map((provider) => `
     <article class="provider-card">
       <div class="provider-card-cover cover-${escapeHTML(provider.color)}"><button type="button" class="listing-cover-button" data-profile="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="View ${escapeHTML(provider.service)} details"><span class="cover-fallback"><span aria-hidden="true">${categoryOutlineIcon(provider.category)}</span><strong>${escapeHTML(provider.category)}</strong><small>Student service</small></span>${listingImage(provider) ? `<img class="service-marketplace-cover" src="${escapeHTML(listingImage(provider))}" alt="" loading="lazy" decoding="async" />` : ""}</button>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<button class="save-button ${state.saved.includes(provider.id) ? "is-saved" : ""}" type="button" data-save="${escapeHTML(provider.id)}" aria-pressed="${state.saved.includes(provider.id)}" aria-label="${state.saved.includes(provider.id) ? "Remove saved provider" : "Save provider"}">${state.saved.includes(provider.id) ? "♥" : "♡"}</button>`}</div>
       <div class="provider-card-body">
@@ -1127,7 +1141,10 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
         ${serviceDetailLabel(provider) ? `<p class="service-delivery-label">${escapeHTML(serviceDetailLabel(provider))}</p>` : ""}
         <div class="provider-card-footer"><span class="price"><small>Price</small>${escapeHTML(servicePriceLabel(provider))}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">${provider.priceType === "range" ? "Request a quote" : "Request booking"}</button></span>`}</div>
       </div>
-    </article>`).join("") : `<div class="empty-card"><span aria-hidden="true">⌕</span><strong>${targetId === "saved-grid" ? "Your shortlist starts here" : "No services found"}</strong><small>${targetId === "saved-grid" ? "Tap the heart on a service to save its provider for later." : "Try another skill or browse all categories."}</small><button class="button button-outline" type="button" ${targetId === "saved-grid" ? 'data-page-link="home"' : 'data-clear-search'}>Explore services</button></div>`;
+    </article>`).join("");
+  const requestCards = featuredRequests.map(request => window.skillmateGrowth.featuredRequestCard(request)).join("");
+  const emptyCard = `<div class="empty-card"><span aria-hidden="true">⌕</span><strong>${targetId === "saved-grid" ? "Your shortlist starts here" : "No services found"}</strong><small>${targetId === "saved-grid" ? "Tap the heart on a service to save its provider for later." : "Try another skill or browse all categories."}</small><button class="button button-outline" type="button" ${targetId === "saved-grid" ? 'data-page-link="home"' : 'data-clear-search'}>Explore services</button></div>`;
+  target.innerHTML = serviceCards || requestCards ? `${serviceCards}${requestCards}` : emptyCard;
   if (targetId === "recent-grid" && !visible.length) target.innerHTML = '<p class="recent-empty">No recently published services to show yet.</p>';
   if (targetId === "marketplace-grid") { renderMarketplace("recent-grid", providers); renderMarketplaceActivity(); }
 }
@@ -1218,15 +1235,34 @@ function renderBookingList(targetId, list, options = {}) {
     const status = booking.status;
     const providerView = options.provider || isOwnBooking(booking);
     const appointmentProposalPending = Boolean(booking.pendingAppointmentProposalId);
+    const acceptedAwaitingPayment = isBookingAwaitingPayment(booking);
+    const canPay = acceptedAwaitingPayment && ["awaiting_payment", "failed"].includes(booking.paymentStatus);
+    const canCheckPayment = acceptedAwaitingPayment && booking.paymentStatus === "processing";
+    const providerCanCancelUnpaid = acceptedAwaitingPayment
+      && ["awaiting_payment", "failed"].includes(booking.paymentStatus)
+      && booking.latestPaymentStatus !== "pending";
+    const customerCanCancelUnpaid = Boolean(appSupabase) && !providerView && !booking.groupId && acceptedAwaitingPayment
+      && ["awaiting_payment", "failed", "processing"].includes(booking.paymentStatus);
+    const customerCanCancel = !booking.groupId && !booking.providerAcceptedAt
+      && (status === "Pending" || status === "Confirmed" && ["not_due", "legacy"].includes(booking.paymentStatus));
     const actions = providerView
-      ? `${booking.status === "Pending" ? `${appointmentProposalPending ? "" : `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button>`}<button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : ["Confirmed", "In progress"].includes(booking.status) ? `${booking.status === "Confirmed" && window.skillmateGrowth?.canStartWork() ? `<button class="button button-small button-primary" data-decision="In progress" data-booking-id="${escapeHTML(booking.id)}">Start work</button>` : ""}<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : ""}${["Pending", "Confirmed"].includes(status) && !appointmentProposalPending ? `<button class="subtle-button" data-propose-appointment="${escapeHTML(booking.id)}">Suggest another time</button>` : ""}<button class="subtle-button" data-message="customer:${escapeHTML(booking.id)}">Message student</button>`
-      : `${status === "Awaiting verification" ? `<button class="button button-small button-primary" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Confirm completion</button>` : ""}${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-primary review-required-button" data-review="${escapeHTML(booking.id)}">Leave a review</button>` : ""}${appointmentProposalPending ? `<button class="button button-small button-primary" data-appointment-response="accept" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Accept suggested time</button><button class="button button-small button-outline" data-appointment-response="reject" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Keep original time</button>` : ""}${!booking.groupId && ["Pending", "Confirmed"].includes(status) ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
+      ? `${providerCanCancelUnpaid ? `<button class="button button-small button-outline" data-cancel-unpaid-booking="${escapeHTML(booking.id)}">Cancel booking</button>` : acceptedAwaitingPayment ? "" : booking.status === "Pending" ? `${appointmentProposalPending ? "" : `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button>`}<button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : ["Confirmed", "In progress"].includes(booking.status) ? `${booking.status === "Confirmed" && window.skillmateGrowth?.canStartWork() ? `<button class="button button-small button-primary" data-decision="In progress" data-booking-id="${escapeHTML(booking.id)}">Start work</button>` : ""}<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : ""}${["Pending", "Confirmed"].includes(status) && !appointmentProposalPending && !acceptedAwaitingPayment ? `<button class="subtle-button" data-propose-appointment="${escapeHTML(booking.id)}">Suggest another time</button>` : ""}<button class="subtle-button" data-booking-message="${escapeHTML(booking.id)}">Message</button>`
+      : `${canPay ? `<button class="button button-small button-primary" data-payment-booking-id="${escapeHTML(booking.id)}">${booking.paymentStatus === "failed" ? "Retry payment" : "Pay now"}</button>` : ""}${canCheckPayment ? `<button class="button button-small button-outline" data-check-payment-booking-id="${escapeHTML(booking.id)}">Check payment</button>` : ""}${status === "Awaiting verification" ? `<button class="button button-small button-primary" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Verify completion</button>` : ""}${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-primary review-required-button" data-review="${escapeHTML(booking.id)}">Leave review</button>` : ""}${appointmentProposalPending ? `<button class="button button-small button-primary" data-appointment-response="accept" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Accept suggested time</button><button class="button button-small button-outline" data-appointment-response="reject" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Keep original time</button>` : ""}${customerCanCancel ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}${customerCanCancelUnpaid ? `<button class="subtle-button" data-cancel-customer-unpaid-booking="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
     const statusLabel = status === "Awaiting verification"
       ? providerView ? "Awaiting client verification" : "Verify completion"
+      : acceptedAwaitingPayment ? booking.paymentStatus === "processing" ? "Confirmed · Payment processing"
+        : booking.paymentStatus === "failed" ? "Confirmed · Payment failed"
+          : booking.paymentStatus === "action_required" ? "Confirmed · Payment needs attention" : "Confirmed · Awaiting payment"
       : status === "Pending" ? providerView ? appointmentProposalPending ? "Time change awaiting customer" : "Needs your reply" : "Awaiting confirmation"
       : status;
+    const statusClass = acceptedAwaitingPayment
+      ? booking.paymentStatus === "processing" ? "payment-processing"
+        : booking.paymentStatus === "failed" ? "payment-failed"
+          : booking.paymentStatus === "action_required" ? "payment-needs-attention" : "awaiting-payment"
+      : status.toLowerCase().replaceAll(" ", "-");
     const repeatAction = !providerView && status === "Completed" ? `<button class="button button-small button-outline" data-rebook="${escapeHTML(booking.id)}">Book again</button>` : "";
     const progress = window.skillmateGrowth?.progress(booking, providerView) || "";
+    const paymentNotice = bookingPaymentNotices.get(booking.id);
     const priceChatAction = booking.priceNegotiationId
       ? `<button class="subtle-button" data-negotiation-chat="${escapeHTML(booking.priceNegotiationId)}">Open price chat</button>` : "";
     const location = ["Confirmed", "In progress"].includes(status) && booking.otherLocation
@@ -1241,10 +1277,17 @@ function renderBookingList(targetId, list, options = {}) {
       ? `<small class="booking-note">Arrangement: ${escapeHTML(booking.requestedLocation)}</small>` : "";
     const agreedScope = booking.scopeSnapshot
       ? `<div class="booking-location"><strong>${booking.priceAgreementId ? "Agreed service scope" : "Service details"}</strong><small>${escapeHTML(booking.scopeSnapshot)}</small></div>` : "";
-    return `<article class="booking-card${!providerView && status === "Completed" && !booking.reviewed ? " booking-awaiting-review" : ""}" data-booking-card-id="${escapeHTML(booking.id)}"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span>${booking.priceAgreementId ? '<span class="booking-type-pill">Agreed price</span>' : ""}<span class="status status-${escapeHTML(status.toLowerCase().replaceAll(" ", "-"))}">${escapeHTML(statusLabel)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${appointmentSuggestion}${listedPriceNote}${requestedArrangement}${booking.note ? `<small class="booking-note">Instructions: “${escapeHTML(booking.note)}”</small>` : ""}${agreedScope}${progress}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-actions">${actions}${repeatAction}${priceChatAction}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-message="${escapeHTML(booking.providerId)}">Message</button>` : ""}</div></article>`;
+    const paidAndVerified = status === "Completed" && booking.paymentStatus === "paid"
+      && Boolean(booking.customerCompletedAt);
+    const earningsLabel = providerView && paidAndVerified
+      ? '<small class="booking-note booking-paid-label">Paid · client verified</small>'
+      : providerView && booking.providerEarningsStatus
+        ? `<small class="booking-note">${booking.providerEarningsStatus === "pending" ? "Payment received · awaiting client verification" : booking.providerEarningsStatus === "eligible_for_payout" ? "Paid · eligible for payout" : booking.providerEarningsStatus === "reversed" ? "Earnings reversed" : ""}</small>` : "";
+    return `<article class="booking-card${paidAndVerified ? " booking-card-paid" : ""}${status === "Cancelled" ? " booking-card-cancelled" : ""}${!providerView && status === "Completed" && !booking.reviewed ? " booking-awaiting-review" : ""}" data-booking-card-id="${escapeHTML(booking.id)}"><span class="booking-service-icon">${getCategoryIcon(provider?.category || "Other")}</span><div class="booking-main"><div class="booking-title-row"><strong>${escapeHTML(booking.service)}</strong><span class="booking-type-pill">${escapeHTML(booking.type || "Individual")}</span>${booking.priceAgreementId ? '<span class="booking-type-pill">Agreed price</span>' : ""}<span class="status status-${escapeHTML(statusClass)}">${paidAndVerified ? "Paid" : escapeHTML(statusLabel)}</span></div><span>${providerView ? `Requested by ${escapeHTML(booking.customer || "Student")}` : `with ${escapeHTML(provider?.name || "Skillmate student")}`}</span><span class="booking-date">${formatDate(booking.date)} · ${escapeHTML(booking.time || "Time to be arranged")}</span>${appointmentSuggestion}${listedPriceNote}${requestedArrangement}${booking.note ? `<small class="booking-note">Instructions: “${escapeHTML(booking.note)}”</small>` : ""}${agreedScope}${earningsLabel}${paymentNotice ? `<small class="booking-note booking-payment-status-note" role="status">${escapeHTML(paymentNotice)}</small>` : ""}${location}</div><strong class="booking-price">${currency(booking.price)}</strong><div class="booking-card-progress">${progress}</div><div class="booking-actions">${actions}${repeatAction}${priceChatAction}${!providerView && status !== "Completed" ? `<button class="subtle-button" data-booking-message="${escapeHTML(booking.id)}">Message</button>` : ""}</div></article>`;
   }).join("") : '<div class="empty-card"><span>◷</span><strong>Nothing here just yet</strong><small>Your bookings and requests will appear here.</small></div>';
-  target.querySelectorAll("[data-decision], [data-propose-appointment], [data-review]").forEach(button => {
-    const id = button.dataset.bookingId || button.dataset.proposeAppointment || button.dataset.review;
+  target.querySelectorAll("[data-decision], [data-propose-appointment], [data-review], [data-cancel-unpaid-booking], [data-cancel-customer-unpaid-booking]").forEach(button => {
+    const id = button.dataset.bookingId || button.dataset.proposeAppointment
+      || button.dataset.review || button.dataset.cancelUnpaidBooking || button.dataset.cancelCustomerUnpaidBooking;
     if (pendingBookingStatuses.has(id) || id?.startsWith("pending-booking-")) {
       button.disabled = true;
       button.setAttribute("aria-busy", "true");
@@ -1450,16 +1493,27 @@ function createPriceNegotiationPanel(chat) {
     || chatServices[0];
   chatNegotiationServiceSelection.set(chat.id, selectedService.id);
   const negotiation = negotiations.find(item => item.serviceId === selectedService.id);
+  const existingBooking = negotiation?.state === "agreed"
+    ? state.bookings.find(item => item.priceNegotiationId === negotiation.id)
+    : null;
+  const canNegotiateNewOrder = selectedService.active !== false
+    && ["Cancelled", "Declined", "Completed"].includes(existingBooking?.status);
   const section = document.createElement("section");
   section.className = "chat-negotiations";
   section.setAttribute("aria-label", "Service price and negotiation status");
+  const details = [];
+  if (selectedService.description) details.push(`Service details: ${selectedService.description}`);
+  if (negotiation?.agreedScope) details.push(`Agreed scope: ${negotiation.agreedScope}`);
+  if (existingBooking) {
+    details.push(`Scheduled for ${formatDate(existingBooking.date)} ${existingBooking.time}`);
+  }
   const serviceCopy = document.createElement("div");
   serviceCopy.className = "chat-negotiation-service";
   if (chatServices.length > 1) {
     const selectorLabel = document.createElement("label");
     selectorLabel.className = "chat-service-select-label";
     selectorLabel.htmlFor = "chat-service-select";
-    selectorLabel.textContent = "Service";
+    selectorLabel.textContent = "Choose a service";
     const selector = document.createElement("select");
     selector.id = "chat-service-select";
     selector.dataset.chatServiceSelect = "";
@@ -1467,7 +1521,19 @@ function createPriceNegotiationPanel(chat) {
     for (const service of chatServices) {
       const option = document.createElement("option");
       option.value = service.id;
-      option.textContent = service.title;
+      const sameTitle = chatServices.filter(item => item.title === service.title).length > 1;
+      const serviceLabel = sameTitle
+        ? `${service.title} · ${service.category || "Service"} · ${servicePriceLabel(service)}`
+        : service.title;
+      const duplicateLabel = chatServices.filter(item => {
+        const label = item.title === service.title
+          ? `${item.title} · ${item.category || "Service"} · ${servicePriceLabel(item)}`
+          : item.title;
+        return label === serviceLabel;
+      }).length > 1;
+      option.textContent = duplicateLabel
+        ? `${serviceLabel} · #${String(service.id).slice(-4)}`
+        : serviceLabel;
       option.selected = service.id === selectedService.id;
       selector.append(option);
     }
@@ -1492,24 +1558,25 @@ function createPriceNegotiationPanel(chat) {
     listedPrice.setAttribute("aria-label", listedPrice.title);
   }
   serviceCopy.append(listedPrice);
-  if (negotiation?.agreedScope) {
-    const scope = document.createElement("small");
-    scope.className = "chat-negotiation-scope";
-    scope.textContent = `Agreed scope: ${negotiation.agreedScope}`;
-    serviceCopy.append(scope);
-  }
 
   const status = document.createElement("span");
   status.className = "chat-negotiation-state";
   const pendingOffer = negotiation?.offers.find(offer => offer.status === "pending");
   const latestOffer = negotiation?.offers[negotiation.offers.length - 1];
-  status.textContent = conversationsOpeningNegotiation.has(chat.id) ? "Opening price discussion…"
-    : selectedService.negotiationMode === "fixed" ? "Fixed Price"
-    : negotiation?.state === "agreed"
-    ? "Agreed"
-    : pendingOffer ? "Proposal pending"
-      : latestOffer ? `${latestOffer.status === "countered" ? "Counteroffer" : "Proposal"} ${latestOffer.status}`
-        : negotiation?.state === "open" ? "Negotiation open" : "No negotiation";
+  const negotiationStatus = conversationsOpeningNegotiation.has(chat.id) ? "Opening discussion…"
+    : selectedService.negotiationMode === "fixed" ? "Fixed price"
+      : negotiation?.state === "agreed" ? "Price agreed"
+        : pendingOffer ? "Offer pending"
+          : latestOffer?.status === "rejected" ? "Offer rejected"
+            : latestOffer?.status === "countered" ? "Counteroffer sent"
+              : latestOffer?.status === "accepted" ? "Offer accepted"
+                : negotiation?.state === "open" ? "Negotiation open" : "No negotiation";
+  status.textContent = negotiationStatus;
+  status.dataset.state = conversationsOpeningNegotiation.has(chat.id) ? "opening"
+    : selectedService.negotiationMode === "fixed" ? "fixed"
+      : negotiation?.state === "agreed" ? "agreed"
+        : pendingOffer ? "pending"
+          : latestOffer?.status || negotiation?.state || "empty";
   if (negotiation?.state === "agreed") {
     status.title = `Agreed price: ${currency(negotiation.agreedPrice)}`;
     status.setAttribute("aria-label", `Agreed price ${currency(negotiation.agreedPrice)}`);
@@ -1517,6 +1584,7 @@ function createPriceNegotiationPanel(chat) {
 
   const controls = document.createElement("div");
   controls.className = "chat-negotiation-controls";
+  controls.dataset.status = existingBooking?.status?.toLowerCase() || "";
   controls.append(status);
   const actions = document.createElement("div");
   actions.className = "chat-negotiation-actions";
@@ -1532,7 +1600,7 @@ function createPriceNegotiationPanel(chat) {
       actions.append(book);
     }
   } else {
-    const canPropose = negotiation?.state === "open" && !pendingOffer;
+    const canPropose = (negotiation?.state === "open" && !pendingOffer) || canNegotiateNewOrder;
     const propose = document.createElement("button");
     propose.type = "button";
     propose.className = `button button-small button-primary${canPropose ? "" : " chat-propose-inactive"}`;
@@ -1545,18 +1613,19 @@ function createPriceNegotiationPanel(chat) {
       propose.title = !negotiation
         ? "Start a price discussion for this service before sending a proposal."
         : negotiation.state === "agreed"
+          && !canNegotiateNewOrder
           ? "A final price has already been agreed for this service."
           : pendingOffer
         ? "A proposal for this service is waiting for a response."
         : "This negotiation is not open for proposals.";
       propose.setAttribute("aria-label", propose.title);
     }
-    propose.textContent = "Propose Price";
+    propose.dataset.newOrderNegotiation = String(canNegotiateNewOrder);
+    propose.textContent = canNegotiateNewOrder ? "Negotiate New Order" : "Propose Price";
     actions.append(propose);
   }
 
   if (selectedService.negotiationMode !== "fixed" && negotiation?.state === "agreed") {
-    const existingBooking = state.bookings.find(item => item.priceNegotiationId === negotiation.id);
     if (appUser?.id === negotiation.customerId && !existingBooking && selectedService.active !== false) {
       const book = document.createElement("button");
       book.type = "button";
@@ -1570,19 +1639,40 @@ function createPriceNegotiationPanel(chat) {
     } else if (existingBooking) {
       const bookingStatus = document.createElement("small");
       bookingStatus.className = "chat-booking-next-step";
-      bookingStatus.textContent = `Booking ${existingBooking.status.toLowerCase()} · ${formatDate(existingBooking.date)} ${existingBooking.time}`;
+      bookingStatus.dataset.status = existingBooking.status.toLowerCase();
+      bookingStatus.textContent = `Booking ${existingBooking.status.toLowerCase()}`;
       actions.append(bookingStatus);
     }
   }
   if (actions.childElementCount) controls.append(actions);
   section.append(serviceCopy, controls);
+  if (details.length) {
+    const disclosure = document.createElement("details");
+    disclosure.className = "chat-negotiation-details";
+    const summary = document.createElement("summary");
+    summary.textContent = "Details";
+    const content = document.createElement("div");
+    content.className = "chat-negotiation-details-content";
+    for (const text of details) {
+      const item = document.createElement("p");
+      item.textContent = text;
+      content.append(item);
+    }
+    disclosure.append(summary, content);
+    section.append(disclosure);
+  }
   return section;
 }
 function createChatPriceOfferCard(offer, negotiation, service, chat) {
   const card = document.createElement("article");
   card.className = `chat-proposal-card${offer.proposerId === appUser?.id ? " chat-proposal-outgoing" : ""}`;
   card.dataset.priceOfferId = offer.id;
-  card.setAttribute("aria-label", "Price proposal");
+  card.dataset.negotiationId = negotiation.id;
+  card.dataset.serviceId = negotiation.serviceId;
+  card.setAttribute("aria-label", `Price offer for ${service?.title || "service"}`);
+  const serviceName = document.createElement("span");
+  serviceName.className = "chat-proposal-service";
+  serviceName.textContent = service?.title || "Service price";
   const heading = document.createElement("div");
   heading.className = "chat-proposal-heading";
   const proposer = document.createElement("strong");
@@ -1593,13 +1683,11 @@ function createChatPriceOfferCard(offer, negotiation, service, chat) {
   heading.append(proposer, amount);
   const meta = document.createElement("div");
   meta.className = "chat-proposal-meta";
-  const serviceName = document.createElement("span");
-  serviceName.textContent = service?.title || "Service price";
   const offerStatus = document.createElement("span");
   offerStatus.className = `chat-proposal-status chat-proposal-status-${offer.status}`;
   offerStatus.textContent = offer.status.charAt(0).toUpperCase() + offer.status.slice(1);
-  meta.append(serviceName, offerStatus);
-  card.append(heading, meta);
+  meta.append(offerStatus);
+  card.append(serviceName, heading, meta);
   if (offer.message) {
     const note = document.createElement("p");
     note.className = "chat-proposal-message";
@@ -1888,14 +1976,234 @@ function renderPortfolio() {
 }
 function renderEarnings() {
   const completed = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Completed");
-  const total = completed.reduce((sum, booking) => sum + Number(booking.price), 0);
-  document.querySelector("#earnings-total").textContent = currency(total);
-  document.querySelector("#provider-earnings").textContent = currency(total);
+  const demoEligibleMinor = completed
+    .filter(booking => booking.paymentStatus === "paid"
+      && booking.providerEarningsStatus === "eligible_for_payout")
+    .reduce((sum, booking) => sum + Number(booking.paymentServiceAmountMinor || 0), 0);
+  const demoPendingMinor = completed
+    .filter(booking => booking.paymentStatus === "paid" && booking.providerEarningsStatus === "pending")
+    .reduce((sum, booking) => sum + Number(booking.paymentServiceAmountMinor || 0), 0);
+  const pendingMinor = Number(payoutState?.pendingMinor || 0);
+  const earnedMinor = Number(payoutState?.earnedMinor || 0);
+  document.querySelector("#earnings-total").textContent = payoutState
+    ? currency((earnedMinor + pendingMinor) / 100)
+    : appSupabase ? "Loading…" : currency((demoEligibleMinor + demoPendingMinor) / 100);
+  document.querySelector("#earnings-available").textContent = payoutState
+    ? currency(Number(payoutState.availableMinor || 0) / 100)
+    : appSupabase ? "Loading…" : currency(0);
+  document.querySelector("#earnings-available-note").textContent = payoutState
+    ? (Number(payoutState.availableMinor) < 0
+      ? "A refund or transfer reversal has created a negative wallet balance. Withdrawals are paused while this is resolved."
+      : Number(payoutState.availableMinor) > 0
+        ? "Verified funds ready for withdrawal."
+        : "Paid work waiting for verification is not available to withdraw.")
+    : appSupabase ? "Loading your verified available balance…" : "Sign in to load your server-verified wallet.";
+  document.querySelector("#earnings-pending").textContent = pendingMinor
+    ? `${currency(pendingMinor / 100)} is waiting for customer completion verification.`
+    : payoutState ? "Verified earnings from customer-approved completed work."
+      : appSupabase ? "Loading your pending earnings…" : "Demo earnings are estimates only.";
+  document.querySelector("#provider-earnings").textContent = currency(
+    payoutState ? (earnedMinor + pendingMinor) / 100
+      : (demoEligibleMinor + demoPendingMinor) / 100,
+  );
   renderBookingList("earnings-list", completed, { provider: true });
+}
+function payoutRequestOptions(method = "GET", body) {
+  return {
+    method,
+    cache: "no-store",
+    ...(body ? { headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {}),
+  };
+}
+async function payoutApiRequest(method = "GET", body) {
+  const response = await fetch("/api/payouts", payoutRequestOptions(method, body));
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw Object.assign(new Error(result.error || "Payout details are temporarily unavailable."), {
+      statusCode: response.status,
+      reference: result.reference,
+      status: result.status,
+    });
+  }
+  return result;
+}
+function payoutIntentStorageKey() {
+  return `skillmate:payout-intent:${appUser?.id || "current"}`;
+}
+function readPayoutIntent() {
+  try {
+    const value = localStorage.getItem(payoutIntentStorageKey());
+    return value ? JSON.parse(value) : null;
+  } catch (error) {
+    console.error("Could not read the saved withdrawal retry key.", error);
+    return null;
+  }
+}
+function writePayoutIntent(intent) {
+  localStorage.setItem(payoutIntentStorageKey(), JSON.stringify(intent));
+}
+function clearPayoutIntent(reference) {
+  const intent = readPayoutIntent();
+  if (intent && (!reference || intent.reference === reference)) {
+    localStorage.removeItem(payoutIntentStorageKey());
+  }
+}
+function payoutStatusLabel(status) {
+  return ({
+    pending: "Pending",
+    processing: "Processing",
+    successful: "Successful",
+    failed: "Failed",
+    reversed: "Reversed",
+  })[status] || "Unknown";
+}
+function payoutStatusMessage(status) {
+  return ({
+    pending: "Your withdrawal is pending. The amount is reserved.",
+    processing: "Paystack is processing your withdrawal. The amount remains reserved until settlement.",
+    successful: "Paystack confirmed your withdrawal.",
+    failed: "The withdrawal failed. The reserved amount has been returned to your available balance.",
+    reversed: "Paystack reversed your withdrawal. The amount has been returned to your available balance.",
+  })[status] || `Withdrawal status: ${payoutStatusLabel(status)}.`;
+}
+function payoutLedgerLabel(entryType) {
+  return ({
+    payment_deposit: "Customer payment recorded · not withdrawable",
+    pending_earning: "Earning pending verification",
+    pending_earning_settled: "Pending earnings verified",
+    pending_earning_reversed: "Pending earning reversed",
+    earning_credit: "Verified earning credited",
+    earning_reversal: "Earning reversed",
+    withdrawal_reserved: "Withdrawal reserved",
+    withdrawal_release: "Failed withdrawal returned",
+    withdrawal_reversal: "Reversed withdrawal returned",
+    balance_adjustment: "Balance adjustment",
+  })[entryType] || "Wallet transaction";
+}
+function payoutBankTypeMatches(bank, payoutType) {
+  const isMobile = bank.type === "mobile_money"
+    || /mobile|mtn|airteltigo|airtel|tigo|telecel|vodafone|momo/i.test(bank.name);
+  return payoutType === "mobile_money" ? isMobile : !isMobile;
+}
+function renderPayoutBankOptions() {
+  const select = document.querySelector("#payout-bank");
+  const payoutType = document.querySelector("#payout-type").value;
+  const options = payoutBanks.filter(bank => payoutBankTypeMatches(bank, payoutType));
+  select.innerHTML = options.length
+    ? '<option value="">Choose a destination</option>' + options.map(bank =>
+      `<option value="${escapeHTML(bank.code)}" data-name="${escapeHTML(bank.name)}">${escapeHTML(bank.name)}</option>`,
+    ).join("")
+    : '<option value="">No matching Paystack destinations are available</option>';
+  document.querySelector("#payout-account-label").firstChild.textContent = payoutType === "mobile_money"
+    ? "Mobile-money number"
+    : "Account number";
+  document.querySelector("#payout-account").placeholder = payoutType === "mobile_money"
+    ? "0241234567"
+    : "Bank account number";
+}
+function renderPayoutDashboard() {
+  if (!payoutState) return;
+  const feedback = document.querySelector("#payout-feedback");
+  const destinationList = document.querySelector("#payout-destination-list");
+  const destinationForm = document.querySelector("#payout-destination-form");
+  const withdrawalForm = document.querySelector("#payout-withdraw-form");
+  const recipientSelect = document.querySelector("#payout-recipient");
+  const availableBalance = Number(payoutState.availableMinor || 0);
+  const available = Math.max(0, availableBalance);
+  document.querySelector("#earnings-available").textContent = currency(availableBalance / 100);
+  document.querySelector("#wallet-pending").textContent = currency(Number(payoutState.pendingMinor || 0) / 100);
+  document.querySelector("#wallet-reserved").textContent = currency(Number(payoutState.reservedMinor || 0) / 100);
+  document.querySelector("#wallet-withdrawn").textContent = currency(Number(payoutState.withdrawnMinor || 0) / 100);
+  withdrawalForm.hidden = true;
+  if (payoutState.transfersEnabled && payoutState.testMode) {
+    feedback.textContent = "Paystack test mode is connected. Test transfers are simulated and do not move real money; test withdrawals do not reduce your real available balance.";
+    document.querySelector("#earnings-available-note").textContent = "Sandbox balance · no real money moves.";
+  } else if (!payoutState.transfersEnabled) {
+    feedback.textContent = "Paystack transfers are disabled. Configure PAYSTACK_TRANSFERS_ENABLED=true with a matching server-only test or live PAYSTACK_TRANSFER_SECRET_KEY, then restart this server.";
+    destinationForm.hidden = true;
+    document.querySelector("#earnings-available-note").textContent = "Withdrawal setup is required before funds can be transferred.";
+  } else {
+    feedback.textContent = availableBalance < 0
+      ? "Withdrawals are paused because a refund or reversal created a negative wallet balance. Contact Skillmate support."
+      : `${currency(available / 100)} is available to withdraw. Paystack may apply transfer fees.`;
+    destinationForm.hidden = false;
+    document.querySelector("#earnings-available-note").textContent = availableBalance < 0
+      ? "A refund or transfer reversal has created a negative wallet balance. Withdrawals are paused while this is resolved."
+      : available > 0
+        ? "Verified funds ready for withdrawal."
+        : "Paid work waiting for verification is not available to withdraw.";
+  }
+  document.querySelector("#payout-withdraw-open").disabled = available <= 0 || !payoutState.transfersEnabled;
+  destinationList.innerHTML = payoutState.recipients.length
+    ? payoutState.recipients.map(recipient => `<div class="payout-destination"><span><strong>${escapeHTML(recipient.name)}</strong><small>${recipient.recipient_type === "nuban" ? "Bank" : "Mobile money"} · ${escapeHTML(recipient.bank_name)} · ending ${escapeHTML(recipient.account_last_four)}</small></span></div>`).join("")
+    : '<p class="payout-feedback">No payout destinations saved yet.</p>';
+  recipientSelect.innerHTML = payoutState.recipients.length
+    ? payoutState.recipients.map(recipient => `<option value="${escapeHTML(recipient.id)}">${escapeHTML(recipient.bank_name)} · ending ${escapeHTML(recipient.account_last_four)}</option>`).join("")
+    : '<option value="">Add a payout destination first</option>';
+  const amountInput = document.querySelector("#payout-amount");
+  amountInput.max = (available / 100).toFixed(2);
+  amountInput.disabled = available <= 0 || !payoutState.transfersEnabled;
+  document.querySelector("#payout-withdraw-submit").disabled = payoutWithdrawalInFlight
+    || amountInput.disabled || !payoutState.recipients.length;
+  const history = document.querySelector("#payout-history-list");
+  history.className = "payout-history-list";
+  history.innerHTML = payoutState.withdrawals.length
+    ? payoutState.withdrawals.map(withdrawal => `<div class="payout-history-row"><span>${currency(Number(withdrawal.amount_minor) / 100)}<small>${new Date(withdrawal.created_at).toLocaleString()}${withdrawal.gateway_message ? ` · ${escapeHTML(withdrawal.gateway_message)}` : ""}</small></span><span><span class="payout-history-status">${payoutStatusLabel(withdrawal.status)}</span>${["pending", "processing"].includes(withdrawal.status) && payoutState.transfersEnabled ? `<button class="subtle-button" type="button" data-payout-check="${escapeHTML(withdrawal.reference)}">Check status</button>` : ""}</span></div>`).join("")
+    : '<p class="payout-feedback">No withdrawals yet.</p>';
+  const ledger = document.querySelector("#payout-ledger-list");
+  ledger.className = "payout-history-list";
+  ledger.innerHTML = payoutState.ledger?.length
+    ? payoutState.ledger.map(entry => {
+      const amountMinor = Number(entry.amount_minor);
+      const amountText = entry.entry_type === "payment_deposit"
+        ? currency(Math.abs(amountMinor) / 100)
+        : `${amountMinor >= 0 ? "+" : "-"}${currency(Math.abs(amountMinor) / 100)}`;
+      return `<div class="payout-history-row"><span>${escapeHTML(payoutLedgerLabel(entry.entry_type))}<small>${new Date(entry.created_at).toLocaleString()} · <span class="payout-ledger-reference">${escapeHTML(entry.reference)}</span></small></span><span class="payout-ledger-amount">${amountText}</span></div>`;
+    }).join("")
+    : '<p class="payout-feedback">No wallet transactions yet.</p>';
+}
+function reconcilePayoutIntent() {
+  const intent = readPayoutIntent();
+  if (!intent || !payoutState) return;
+  const withdrawal = payoutState.withdrawals.find(item => item.reference === intent.reference)
+    || payoutState.withdrawals.find(item => item.recipient_id === intent.recipientId
+      && Number(item.amount_minor) === Number(intent.amountMinor)
+      && ["pending", "processing"].includes(item.status));
+  if (!withdrawal) return;
+  if (["pending", "processing"].includes(withdrawal.status)) {
+    writePayoutIntent({ ...intent, reference: withdrawal.reference });
+  } else {
+    clearPayoutIntent(withdrawal.reference);
+  }
+}
+async function refreshPayoutState(loadBanks = true) {
+  if (!appSupabase) {
+    document.querySelector("#payout-feedback").textContent = "Sign in to view earnings and manage withdrawals.";
+    return;
+  }
+  try {
+    payoutState = await payoutApiRequest();
+    reconcilePayoutIntent();
+    renderPayoutDashboard();
+    renderEarnings();
+    if (loadBanks && payoutState.transfersEnabled) {
+      const bankResult = await payoutApiRequest("POST", { action: "banks" });
+      payoutBanks = bankResult.banks;
+      renderPayoutBankOptions();
+    }
+  } catch (error) {
+    console.error("Could not load provider payout details.", error);
+    document.querySelector("#payout-feedback").textContent = error.message || "Payout details are temporarily unavailable.";
+  }
 }
 function bookingsForActiveFilter() {
   const bookings = window.skillmateMarketplace.filterBookings(state.bookings, { direction: bookingDirection, filter: activeBookingFilter, ownId: ownProviderId() });
   document.querySelector("#all-booking-count").textContent = String(state.bookings.filter(booking => isOwnBooking(booking) === (bookingDirection === "received")).length);
+  const newRequests = state.bookings.filter(booking => isOwnBooking(booking) && booking.status === "Pending" && !booking.providerAcceptedAt).length;
+  const requestCount = document.querySelector("[data-booking-request-count]");
+  requestCount.textContent = String(newRequests);
+  requestCount.setAttribute("aria-label", `${newRequests} new ${newRequests === 1 ? "request" : "requests"}`);
+  requestCount.hidden = newRequests === 0;
   return bookings;
 }
 function renderBookingActivity() {
@@ -1912,14 +2220,16 @@ function renderBookingActivity() {
     : "";
   renderEarnings();
   const completedThisMonth = state.bookings.filter((booking) => isOwnBooking(booking)
-    && booking.status === "Completed" && booking.date?.slice(0, 7) === new Date().toISOString().slice(0, 7))
-    .reduce((sum, booking) => sum + Number(booking.price), 0);
+    && booking.status === "Completed" && booking.paymentStatus === "paid"
+    && booking.providerEarningsStatus === "eligible_for_payout"
+    && booking.date?.slice(0, 7) === new Date().toISOString().slice(0, 7))
+    .reduce((sum, booking) => sum + Number(booking.paymentServiceAmountMinor || 0) / 100, 0);
   document.querySelector("#provider-earnings").textContent = currency(completedThisMonth);
   document.querySelector("#booking-count").textContent = String(
     state.bookings.filter((booking) => !["Declined", "Cancelled", "Completed"].includes(booking.status)).length,
   );
   document.querySelector("#provider-request-count").textContent = String(
-    state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Pending").length,
+    state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Pending" && !booking.providerAcceptedAt).length,
   );
 }
 function renderMarketplaceActivity() {
@@ -1964,7 +2274,7 @@ function renderAll() {
   renderEarnings();
   const count = state.bookings.filter((booking) => !["Declined", "Cancelled", "Completed"].includes(booking.status)).length;
   document.querySelector("#booking-count").textContent = count;
-  document.querySelector("#provider-request-count").textContent = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Pending").length;
+  document.querySelector("#provider-request-count").textContent = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Pending" && !booking.providerAcceptedAt).length;
   document.querySelector("#active-listings-count").textContent = state.services.filter((service) => service.active).length;
   const verified = state.profile.verified;
   const verificationMark = document.querySelector(".verified-mark");
@@ -2018,16 +2328,51 @@ function renderAll() {
     }
   }
   const completedThisMonth = state.bookings.filter((booking) => isOwnBooking(booking)
-    && booking.status === "Completed" && booking.date?.slice(0, 7) === new Date().toISOString().slice(0, 7))
-    .reduce((sum, booking) => sum + Number(booking.price), 0);
+    && booking.status === "Completed" && booking.paymentStatus === "paid"
+    && booking.providerEarningsStatus === "eligible_for_payout"
+    && booking.date?.slice(0, 7) === new Date().toISOString().slice(0, 7))
+    .reduce((sum, booking) => sum + Number(booking.paymentServiceAmountMinor || 0) / 100, 0);
   document.querySelector("#provider-earnings").textContent = currency(completedThisMonth);
+}
+function bookingStatusFailureMessage(error) {
+  const message = String(error?.message || "");
+  if (["PGRST202", "42883"].includes(error?.code) && message.includes("update_booking_status")) {
+    return "Booking confirmation is not enabled in the database yet. Apply the Paystack booking migration, then reload.";
+  }
+  if (error?.code === "42501" || /permission denied|not allowed to execute/i.test(message)) {
+    return "Your account is not permitted to confirm this booking. Sign in again as the provider who received it.";
+  }
+  if (/already reserved/i.test(message)) {
+    return "This time conflicts with another booking. Message the student to arrange another time.";
+  }
+  if (/no longer available/i.test(message)) {
+    return "This appointment is no longer available. Refresh your bookings before trying again.";
+  }
+  if (/cannot make that booking status change/i.test(message)) {
+    return "This booking has changed and can no longer be confirmed. Refresh your bookings to see its current status.";
+  }
+  if (message) {
+    const detail = message.length > 240 ? `${message.slice(0, 237)}…` : message;
+    return `Booking update failed${error?.code ? ` (${error.code})` : ""}: ${detail}`;
+  }
+  return "Could not update this booking. Refresh and try again.";
 }
 function toLocalStatus(status) {
   return ({ pending: "Pending", confirmed: "Confirmed", declined: "Declined", completed: "Completed", cancelled: "Cancelled" })[status] || status;
 }
+function isTerminalBookingStatus(booking) {
+  return ["cancelled", "declined"].includes(String(booking?.status || "").toLowerCase());
+}
+function isBookingAwaitingPayment(booking) {
+  return booking?.status === "Pending" && !isTerminalBookingStatus(booking)
+    && Boolean(booking.providerAcceptedAt) && !["paid", "legacy"].includes(booking.paymentStatus);
+}
 function toLocalBookingStatus(booking) {
   if (booking.status === "confirmed" && booking.provider_completed_at) return "Awaiting verification";
   if (booking.status === "confirmed" && booking.work_started_at) return "In progress";
+  if (booking.status === "completed" && !booking.customer_completed_at) {
+    return booking.provider_completed_at ? "Awaiting verification" : "Confirmed";
+  }
   return toLocalStatus(booking.status);
 }
 function toDatabaseStatus(status) {
@@ -2074,7 +2419,9 @@ async function loadAccountProfile(userId) {
 }
 
 let dashboardRefreshPromise = null;
-async function refreshSupabaseState() {
+async function refreshSupabaseState(scope = "all") {
+  if (scope === "bookings") return refreshLiveBookings();
+  if (scope === "messages" || scope === "negotiations") return refreshLiveMessages();
   if (dashboardRefreshPromise) return dashboardRefreshPromise;
   const started = performance.now();
   dashboardRefreshPromise = loadSupabaseState().finally(() => {
@@ -2095,7 +2442,8 @@ async function reconcileSavedChange() {
 async function refreshPriceNegotiations() {
   if (!negotiationBackendAvailable) return;
   const { data: negotiations, error: negotiationError } = await appSupabase
-    .from("price_negotiations").select("*").order("updated_at", { ascending: false });
+    .from("price_negotiations").select("*")
+    .order("created_at", { ascending: false }).order("id", { ascending: false });
   if (negotiationError) {
     negotiationBackendAvailable = ["42P01", "42703", "PGRST205"].includes(negotiationError.code);
     priceNegotiations = [];
@@ -2141,6 +2489,44 @@ async function loadConversationPriceNegotiation(negotiationId) {
   if (offersError) throw offersError;
   const [negotiation] = mapPriceNegotiationRows([row], offers || []);
   return negotiation;
+}
+async function refreshConversationPriceNegotiation(negotiationId) {
+  const negotiation = await loadConversationPriceNegotiation(negotiationId);
+  priceNegotiations = [
+    negotiation,
+    ...priceNegotiations.filter(item => item.id !== negotiation.id),
+  ];
+  return negotiation;
+}
+function isStalePriceOfferError(error) {
+  const message = [error?.message, error?.details].filter(Boolean).join(" ");
+  return /this offer has already been answered|this price offer could not be found/i.test(message);
+}
+async function submitPriceOfferDecision({ offerId, action, negotiationId, counterAmount = null, message = "" }) {
+  const { error } = await appSupabase.rpc("decide_price_offer", {
+    p_offer_id: offerId,
+    p_action: action,
+    p_counter_amount: counterAmount,
+    p_message: message,
+  });
+  if (!error) return;
+  if (!isStalePriceOfferError(error)) throw error;
+
+  try {
+    const negotiation = await refreshConversationPriceNegotiation(negotiationId);
+    if (activeConversationId === negotiation.conversationId && state.activePage === "messages") {
+      renderConversations({ preserveChatState: true });
+    }
+  } catch (refreshError) {
+    console.error("Could not refresh the latest state of an answered Skillmate price offer.", refreshError);
+    const unavailableError = new Error("The offer state changed, but it could not be refreshed.");
+    unavailableError.userMessage = "This offer changed, but its latest status could not be loaded. Reload the conversation and try again.";
+    throw unavailableError;
+  }
+
+  const answeredError = new Error(error.message || "This offer is no longer available.");
+  answeredError.userMessage = "This offer was already answered or is no longer available. Its latest status has been refreshed.";
+  throw answeredError;
 }
 async function loadAllRows(createQuery, pageSize = DATA_PAGE_SIZE) {
   const rows = [];
@@ -2268,6 +2654,15 @@ async function loadSupabaseState() {
     return {
       id: booking.id, serviceId: booking.service_id, providerId: booking.provider_id, customerId: booking.customer_id,
       workStartedAt: booking.work_started_at || null, durationMinutes: booking.duration_minutes || 60,
+      providerAcceptedAt: booking.provider_accepted_at || null,
+      customerCompletedAt: booking.customer_completed_at || null,
+      paymentStatus: booking.payment_status || "not_due",
+      latestPaymentStatus: booking.latest_payment_status || "",
+      latestPaymentReference: booking.latest_payment_reference || "",
+      providerEarningsStatus: booking.provider_earnings_status || "",
+      paymentServiceAmountMinor: Number(booking.payment_service_amount_minor || 0),
+      paymentBookingFeeMinor: Number(booking.payment_booking_fee_minor || 0),
+      paymentTotalAmountMinor: Number(booking.payment_total_amount_minor || 0),
       customer: booking.customer_name || "Student", service: booking.service_title || "Service",
       category: booking.category || "Other", price: Number(booking.agreed_price),
       listedPrice: Number(booking.listed_price ?? booking.agreed_price), priceNegotiationId: booking.price_negotiation_id || "",
@@ -2336,22 +2731,36 @@ async function loadSupabaseState() {
     .filter((provider) => provider.id !== appUser.id)
     .map((provider) => `<option value="${escapeHTML(provider.id)}">${escapeHTML(provider.name)}</option>`).join("");
 }
+let liveBookingsRefreshPromise = null;
+let liveMessagesRefreshPromise = null;
+
 async function refreshLiveBookings() {
-  const [bookings, userLocations, ownReviews] = await Promise.all([
+  if (liveBookingsRefreshPromise) return liveBookingsRefreshPromise;
+  liveBookingsRefreshPromise = (async () => {
+    const [bookings, userLocations, ownReviews] = await Promise.all([
     loadAllRows(() => appSupabase.from("booking_directory").select("*")
       .order("scheduled_at", { ascending: true }).order("id", { ascending: true })),
     loadAllRows(() => appSupabase.from("user_locations").select("user_id, location_name").order("user_id", { ascending: true })),
     loadAllRows(() => appSupabase.from("reviews").select("booking_id").order("booking_id", { ascending: true })),
-  ]);
-  for (const result of [bookings, userLocations, ownReviews]) {
-    if (result.error) throw result.error;
-  }
-  state.bookings = (bookings.data || []).map((booking) => {
+    ]);
+    for (const result of [bookings, userLocations, ownReviews]) {
+      if (result.error) throw result.error;
+    }
+    state.bookings = (bookings.data || []).map((booking) => {
     const otherUserId = booking.customer_id === appUser.id ? booking.provider_id : booking.customer_id;
     const status = toLocalBookingStatus(booking);
     return {
       id: booking.id, serviceId: booking.service_id, providerId: booking.provider_id, customerId: booking.customer_id,
       workStartedAt: booking.work_started_at || null, durationMinutes: booking.duration_minutes || 60,
+      providerAcceptedAt: booking.provider_accepted_at || null,
+      customerCompletedAt: booking.customer_completed_at || null,
+      paymentStatus: booking.payment_status || "not_due",
+      latestPaymentStatus: booking.latest_payment_status || "",
+      latestPaymentReference: booking.latest_payment_reference || "",
+      providerEarningsStatus: booking.provider_earnings_status || "",
+      paymentServiceAmountMinor: Number(booking.payment_service_amount_minor || 0),
+      paymentBookingFeeMinor: Number(booking.payment_booking_fee_minor || 0),
+      paymentTotalAmountMinor: Number(booking.payment_total_amount_minor || 0),
       customer: booking.customer_name || "Student", service: booking.service_title || "Service",
       category: booking.category || "Other", price: Number(booking.agreed_price),
       listedPrice: Number(booking.listed_price ?? booking.agreed_price), priceNegotiationId: booking.price_negotiation_id || "",
@@ -2369,15 +2778,19 @@ async function refreshLiveBookings() {
       groupId: booking.group_booking_id, note: booking.note,
       reviewed: (ownReviews.data || []).some((review) => review.booking_id === booking.id),
     };
-  });
-  renderBookingActivity();
+    });
+    renderBookingActivity();
+  })().finally(() => { liveBookingsRefreshPromise = null; });
+  return liveBookingsRefreshPromise;
 }
 async function refreshLiveMessages() {
-  const { data: conversations } = await loadAllRows(() => appSupabase
+  if (liveMessagesRefreshPromise) return liveMessagesRefreshPromise;
+  liveMessagesRefreshPromise = (async () => {
+    const { data: conversations } = await loadAllRows(() => appSupabase
     .from("conversation_directory")
     .select("conversation_id, other_user_id, other_user_name")
     .order("conversation_id", { ascending: true }));
-  const groupedMessages = await loadConversationMessageGroups(conversations || []);
+    const groupedMessages = await loadConversationMessageGroups(conversations || []);
   const previousNegotiations = JSON.stringify(priceNegotiations);
   await refreshPriceNegotiations();
   const negotiationsChanged = previousNegotiations !== JSON.stringify(priceNegotiations);
@@ -2417,9 +2830,11 @@ async function refreshLiveMessages() {
     syncMessageChannels();
     return;
   }
-  state.messages = nextMessages;
-  cacheConversationMessages(nextMessages);
-  renderConversations({ preserveChatState: true });
+    state.messages = nextMessages;
+    cacheConversationMessages(nextMessages);
+    renderConversations({ preserveChatState: true });
+  })().finally(() => { liveMessagesRefreshPromise = null; });
+  return liveMessagesRefreshPromise;
 }
 async function refreshLiveActivity() {
   if (!appSupabase || !appUser || !dashboardDataLoaded || document.hidden || pendingActionCount || activityRefreshInProgress) return;
@@ -2444,18 +2859,28 @@ async function persistBookingStatus(bookingId, status) {
   const booking = state.bookings.find((item) => item.id === bookingId);
   const previousStatus = booking?.status;
   const previousWorkStartedAt = booking?.workStartedAt;
-  pendingBookingStatuses.set(bookingId, status);
+  const previousProviderAcceptedAt = booking?.providerAcceptedAt;
+  const previousPaymentStatus = booking?.paymentStatus;
+  const optimisticStatus = status === "Confirmed" ? "Pending"
+    : status === "Completed" && isOwnBooking(booking) ? "Awaiting verification" : status;
+  pendingBookingStatuses.set(bookingId, optimisticStatus);
   if (booking) {
-    booking.status = status === "Completed" && isOwnBooking(booking) ? "Awaiting verification" : status;
+    booking.status = optimisticStatus;
+    if (status === "Confirmed") {
+      booking.providerAcceptedAt = new Date().toISOString();
+      booking.paymentStatus = "awaiting_payment";
+    }
     if (status === "In progress") booking.workStartedAt = new Date().toISOString();
     renderAll();
   }
   try {
     const result = status === "In progress"
       ? await appSupabase.rpc("start_booking_work", { p_booking_id: bookingId })
-      : await appSupabase.rpc("update_booking_status", {
-        p_booking_id: bookingId, p_status: toDatabaseStatus(status),
-      });
+      : status === "Confirmed"
+        ? await appSupabase.rpc("accept_booking_request", { p_booking_id: bookingId })
+        : await appSupabase.rpc("update_booking_status", {
+          p_booking_id: bookingId, p_status: toDatabaseStatus(status),
+        });
     const { error } = result;
     if (error) throw error;
   } catch (error) {
@@ -2464,20 +2889,247 @@ async function persistBookingStatus(bookingId, status) {
     if (currentBooking) {
       currentBooking.status = previousStatus;
       currentBooking.workStartedAt = previousWorkStartedAt;
+      currentBooking.providerAcceptedAt = previousProviderAcceptedAt;
+      currentBooking.paymentStatus = previousPaymentStatus;
       renderAll();
     }
     throw error;
   }
+  pendingBookingStatuses.delete(bookingId);
   try {
-    await refreshSupabaseState();
+    await refreshSupabaseState("bookings");
   } catch (error) {
     console.error("Booking status was saved, but the latest account data could not be refreshed.", error);
   }
-  const currentBooking = state.bookings.find(item => item.id === bookingId);
-  if (currentBooking) currentBooking.status = status;
-  pendingBookingStatuses.delete(bookingId);
   renderAll();
 }
+
+  async function requestSkillmatePayment(path, body) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Payment service is temporarily unavailable.");
+      return result;
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error("Payment service timed out before confirming the result.");
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+  function setPaymentFeedback(message, state = "info") {
+    const feedback = document.querySelector("#payment-feedback");
+    feedback.textContent = message;
+    feedback.dataset.state = state;
+    feedback.hidden = !message;
+  }
+  function terminalBookingPaymentMessage(booking, paymentStatus = "unknown") {
+    const status = String(booking?.status || "").toLowerCase();
+    const request = status === "declined" ? "request was declined" : "booking was cancelled";
+    if (paymentStatus === "paid") {
+      return `Payment was confirmed, but this ${request}. Please contact Skillmate support.`;
+    }
+    if (paymentStatus === "failed") {
+      return `This ${request}. Payment was not completed, so no further payment is needed.`;
+    }
+    return `This ${request}. Any payment already in progress is still being verified; please do not pay again.`;
+  }
+  function closeTerminalBookingPayment(paymentStatus = "unknown") {
+    const booking = state.bookings.find(item => item.id === checkoutBookingId);
+    if (!isTerminalBookingStatus(booking)) return false;
+    checkoutInitialization = null;
+    document.querySelector("#payment-modal").close();
+    setPaymentFeedback("");
+    const confirmed = paymentStatus === "paid";
+    showToast(terminalBookingPaymentMessage(booking, paymentStatus), confirmed ? "error" : "info");
+    return true;
+  }
+  function formatPaymentMinor(amountMinor, currencyCode = "GHS") {
+    const amount = Number(amountMinor);
+    if (!Number.isSafeInteger(amount) || amount < 0) return "—";
+    return new Intl.NumberFormat("en-GH", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+    }).format(amount / 100);
+  }
+  async function openBookingPayment(bookingId) {
+    if (!appSupabase) {
+      showToast("Secure payments are available for connected bookings only.", "error");
+      return;
+    }
+    const booking = state.bookings.find((item) => item.id === bookingId);
+    if (!isBookingAwaitingPayment(booking)) return;
+    checkoutBookingId = bookingId;
+    checkoutInitialization = null;
+    document.querySelector("#payment-service-name").textContent = `${booking.service} with ${getProvider(booking.providerId)?.name || "your provider"}`;
+    document.querySelector("#payment-service-price").textContent = "Loading…";
+    document.querySelector("#payment-booking-fee").textContent = "Loading…";
+    document.querySelector("#payment-total").textContent = "Loading…";
+    document.querySelector("#payment-submit").disabled = true;
+    document.querySelector("#payment-submit").textContent = "Loading payment details…";
+    setPaymentFeedback("");
+    openModal("payment-modal");
+    try {
+      const quote = await requestSkillmatePayment("/api/payments/quote", { bookingId });
+      document.querySelector("#payment-fee-rate").textContent = `${(quote.feeBasisPoints / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+      document.querySelector("#payment-service-price").textContent = formatPaymentMinor(quote.serviceAmountMinor, quote.currency);
+      document.querySelector("#payment-booking-fee").textContent = formatPaymentMinor(quote.bookingFeeMinor, quote.currency);
+      document.querySelector("#payment-total").textContent = formatPaymentMinor(quote.totalAmountMinor, quote.currency);
+      if (!quote.paymentAvailable) {
+        setPaymentFeedback("Prices are shown, but checkout is unavailable until Paystack test keys are configured on the server.", "error");
+        document.querySelector("#payment-submit").disabled = true;
+        document.querySelector("#payment-submit").textContent = "Payment unavailable";
+        return;
+      }
+      document.querySelector("#payment-submit").disabled = false;
+      document.querySelector("#payment-submit").textContent = "Pay now";
+    } catch (error) {
+      console.error("Could not load a secure booking payment quote.", error);
+      document.querySelector("#payment-service-price").textContent = "Unavailable";
+      document.querySelector("#payment-booking-fee").textContent = "Unavailable";
+      document.querySelector("#payment-total").textContent = "Unavailable";
+      setPaymentFeedback(error.message, "error");
+      document.querySelector("#payment-submit").disabled = true;
+      document.querySelector("#payment-submit").textContent = "Payment unavailable";
+    }
+  }
+  function openPaystackInline(initialization) {
+    if (!window.PaystackPop?.setup) {
+      openModal("payment-modal");
+      setPaymentFeedback("Paystack checkout could not load. Check your connection and try again.", "error");
+      return;
+    }
+    let verifying = false;
+    const verify = (waitForWebhook) => {
+      if (verifying) return;
+      verifying = true;
+      void finishPaystackPayment(initialization.reference, waitForWebhook)
+        .finally(() => { verifying = false; });
+    };
+    try {
+      const checkout = window.PaystackPop.setup({
+        key: initialization.publicKey,
+        email: initialization.email,
+        amount: initialization.totalAmountMinor,
+        currency: initialization.currency,
+        ref: initialization.reference,
+        channels: ["card", "mobile_money"],
+        callback: () => verify(true),
+        onClose: () => verify(false),
+      });
+      checkout.openIframe();
+    } catch (error) {
+      console.error("Could not open the Paystack inline checkout.", error);
+      openModal("payment-modal");
+      setPaymentFeedback("Paystack checkout could not open. Please try again.", "error");
+    }
+  }
+  async function finishPaystackPayment(reference, waitForWebhook) {
+    if (checkoutVerificationPromise) return checkoutVerificationPromise;
+    checkoutVerificationPromise = (async () => {
+      const attempts = waitForWebhook ? 6 : 1;
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        try {
+          const result = await requestSkillmatePayment("/api/payments/verify", { reference });
+          if (result.status === "paid") {
+            try {
+              await refreshSupabaseState("bookings");
+            } catch (error) {
+              console.error("Payment was confirmed, but the latest booking details could not be refreshed.", error);
+            }
+            if (closeTerminalBookingPayment("paid")) return;
+            document.querySelector("#payment-modal").close();
+            checkoutInitialization = null;
+            showToast("Payment confirmed. Your booking is confirmed.", "success");
+            return;
+          }
+          if (["failed", "review", "refunded", "partially_refunded"].includes(result.status)) {
+            try {
+              await refreshSupabaseState("bookings");
+            } catch (error) {
+              console.error("Payment status was recorded, but the booking details could not be refreshed.", error);
+            }
+            if (closeTerminalBookingPayment(result.status)) return;
+            checkoutInitialization = null;
+            openModal("payment-modal");
+            setPaymentFeedback(result.status === "failed"
+              ? "The payment did not go through. You can try again."
+              : "Your payment needs attention. Please contact Skillmate support.", "error");
+            document.querySelector("#payment-submit").textContent = "Try payment again";
+            document.querySelector("#payment-submit").disabled = result.status !== "failed";
+            return;
+          }
+          if (attempt + 1 < attempts) {
+            setPaymentFeedback("Payment received. Waiting for Paystack’s secure confirmation…", "loading");
+            await new Promise((resolve) => window.setTimeout(resolve, 2000));
+            continue;
+          }
+          try {
+            await refreshSupabaseState("bookings");
+          } catch (error) {
+            console.error("Payment is processing, but the latest booking details could not be refreshed.", error);
+          }
+          if (closeTerminalBookingPayment(result.status)) return;
+          openModal("payment-modal");
+          setPaymentFeedback("Payment is still processing. You can check again from My bookings.", "info");
+          document.querySelector("#payment-submit").textContent = "Check payment";
+          document.querySelector("#payment-submit").disabled = false;
+          return;
+        } catch (error) {
+          console.error("Could not confirm the Paystack payment.", error);
+          if (closeTerminalBookingPayment()) return;
+          openModal("payment-modal");
+          setPaymentFeedback("We couldn’t confirm payment yet. Check My bookings before trying again.", "error");
+          document.querySelector("#payment-submit").textContent = "Check payment";
+          document.querySelector("#payment-submit").disabled = false;
+          return;
+        }
+      }
+    })().finally(() => { checkoutVerificationPromise = null; });
+    return checkoutVerificationPromise;
+  }
+  async function checkBookingPayment(booking) {
+    if (isTerminalBookingStatus(booking)) {
+      showToast(terminalBookingPaymentMessage(booking), "info");
+      return;
+    }
+    if (!isBookingAwaitingPayment(booking)) return;
+    if (!booking?.latestPaymentReference) {
+      showToast("No payment attempt is available to check yet.", "error");
+      return;
+    }
+    try {
+      const result = await requestSkillmatePayment("/api/payments/verify", {
+        reference: booking.latestPaymentReference,
+      });
+      await refreshSupabaseState("bookings");
+      const currentBooking = state.bookings.find(item => item.id === booking.id);
+      if (isTerminalBookingStatus(currentBooking)) {
+        showToast(terminalBookingPaymentMessage(currentBooking, result.status),
+          result.status === "paid" ? "error" : "info");
+        return;
+      }
+      showToast(result.status === "paid"
+        ? "Payment confirmed. Your booking is confirmed."
+        : result.status === "processing"
+          ? "Payment is processing. Check again shortly."
+          : result.status === "failed"
+            ? "Payment failed. You can retry from the booking."
+            : "Payment status updated.", result.status === "paid" ? "success" : "info");
+    } catch (error) {
+      console.error("Could not check the Skillmate booking payment.", error);
+      showToast(error.message || "Could not check this payment right now.", "error");
+    }
+  }
 function handleAppointmentActions(event) {
   const proposalButton = event.target.closest("[data-propose-appointment]");
   if (proposalButton) {
@@ -2520,7 +3172,7 @@ function handleAppointmentActions(event) {
     if (error) throw error;
     let refreshFailed = false;
     try {
-      await refreshSupabaseState();
+        await refreshSupabaseState("bookings");
     } catch (refreshError) {
       console.error("Appointment response was saved, but the latest booking data could not be refreshed.", refreshError);
       refreshFailed = true;
@@ -2581,7 +3233,7 @@ document.querySelector("#appointment-proposal-form").addEventListener("submit", 
       p_proposed_at: proposedAt.toISOString(),
     });
     if (error) throw error;
-    await refreshSupabaseState();
+    await refreshSupabaseState("bookings");
     renderAll();
     event.target.closest("dialog").close();
     showToast("Time suggestion sent. The booking will stay unconfirmed until the customer responds.");
@@ -2619,7 +3271,8 @@ function startDashboardLoading() {
   }
   document.querySelector("#app-auth-status").hidden = false;
   document.querySelector("#dashboard-loading-skeleton").hidden = false;
-  window.setTimeout(() => {
+  dashboardLoadingTimeout = window.setTimeout(() => {
+    dashboardLoadingTimeout = null;
     if (!document.body.classList.contains("app-auth-pending")) return;
     document.querySelector("#dashboard-loading-skeleton").hidden = false;
     document.querySelector("#dashboard-loading-progress").hidden = false;
@@ -2628,6 +3281,8 @@ function startDashboardLoading() {
   }, 10000);
 }
 function finishDashboardLoading() {
+  window.clearTimeout(dashboardLoadingTimeout);
+  dashboardLoadingTimeout = null;
   if (!dashboardLoadingStartedAt) return;
   const duration = performance.now() - dashboardLoadingStartedAt;
   window.clearInterval(dashboardLoadingInterval);
@@ -2647,7 +3302,9 @@ function finishDashboardLoading() {
 async function runAction(action, failureMessage, loadingMessage = "Saving your changes…", {
   inlineFeedback,
   submitButton,
+  buttonLoadingText,
   friendlyFailureMessage,
+  formatFailureMessage,
   optimistic,
   rollback,
   renderOptimistic,
@@ -2662,6 +3319,7 @@ async function runAction(action, failureMessage, loadingMessage = "Saving your c
       ? activeElement.closest("form")?.querySelector('button[type="submit"]')
       : null);
   const controlWasDisabled = control?.disabled ?? false;
+  const controlOriginalText = control?.textContent;
   const actionStartedAt = performance.now();
   let loadingTimer;
   let longLoadingTimer;
@@ -2700,6 +3358,7 @@ async function runAction(action, failureMessage, loadingMessage = "Saving your c
   if (control && !control.disabled) {
     control.disabled = true;
     control.setAttribute("aria-busy", "true");
+    if (buttonLoadingText) control.textContent = buttonLoadingText;
   }
   try {
     if (optimistic) {
@@ -2724,7 +3383,7 @@ async function runAction(action, failureMessage, loadingMessage = "Saving your c
       inlineFeedback.dataset.state = "error";
       inlineFeedback.textContent = error.userMessage || friendlyFailureMessage || failureMessage;
     } else {
-      showToast(failureMessage, "error");
+      showToast(formatFailureMessage?.(error) || error.userMessage || friendlyFailureMessage || failureMessage, "error");
     }
   } finally {
     window.clearTimeout(loadingTimer);
@@ -2733,6 +3392,7 @@ async function runAction(action, failureMessage, loadingMessage = "Saving your c
     if (inlineFeedback?.dataset.state === "loading") inlineFeedback.hidden = true;
     if (control && control.isConnected) {
       control.disabled = controlWasDisabled;
+      if (buttonLoadingText && controlOriginalText !== undefined) control.textContent = controlOriginalText;
       if (!controlWasDisabled) control.removeAttribute("aria-busy");
     }
     pendingActionCount = Math.max(0, pendingActionCount - 1);
@@ -2887,6 +3547,7 @@ async function bootstrapStudentApp() {
   }
   setDashboardLoadingPhase(96, "Finishing your dashboard…");
   showConnectedApp();
+  document.dispatchEvent(new Event("skillmate:session-ready"));
   document.querySelector("#booking-count").textContent = String(
     state.bookings.filter((booking) => !["Declined", "Cancelled", "Completed"].includes(booking.status)).length,
   );
@@ -2933,7 +3594,8 @@ function showPage(page, options = {}) {
     }
   }
   state.activePage = page;
-  if (page === "requests") window.skillmateGrowth?.refreshBoard();
+  if (page === "earnings") void refreshPayoutState();
+  if (["home", "requests"].includes(page)) window.skillmateGrowth?.refreshBoard();
   document.querySelector(".account-menu")?.removeAttribute("open");
   renderMarketplaceActivity();
   window.skillmateGrowth?.render();
@@ -3031,9 +3693,12 @@ function openBooking(providerId, serviceId, negotiationId = "") {
     document.querySelector("#booking-time").value = savedDraft.time;
     document.querySelector("#booking-note").value = savedDraft.note;
     document.querySelector("#booking-location").value = savedDraft.location;
-    document.querySelector("#booking-instructions").open = Boolean(savedDraft.note);
   }
   updateBookingSummary();
+  document.querySelector("#booking-instructions").open = Boolean(
+    (selectedService && serviceUsesPriceRange(selectedService) && !negotiation)
+      || savedDraft?.note,
+  );
   if (savedDraft) {
     const savedLocationType = savedDraft.locationType
       || (savedDraft.location === "Online" ? "online" : savedDraft.location === "On campus" ? "campus" : savedDraft.location ? "other" : "");
@@ -3307,11 +3972,15 @@ document.querySelector("#price-offer-form").addEventListener("submit", event => 
   runAction(async () => {
     let conversationId = activeConversationId
       || priceNegotiations.find(item => item.id === negotiationId)?.conversationId;
+    let updatedNegotiationId = negotiationId;
     if (action === "counter") {
-      const { error } = await appSupabase.rpc("decide_price_offer", {
-        p_offer_id: offerId, p_action: "counter", p_counter_amount: amount, p_message: message,
+      await submitPriceOfferDecision({
+        offerId,
+        action,
+        negotiationId,
+        counterAmount: amount,
+        message,
       });
-      if (error) throw error;
     } else {
       if (!conversationId) {
         const { data, error } = await appSupabase.rpc("start_conversation", {
@@ -3320,19 +3989,36 @@ document.querySelector("#price-offer-form").addEventListener("submit", event => 
         if (error) throw exposePriceActionError(error);
         conversationId = data;
       }
-      const { error } = await appSupabase.rpc("create_price_negotiation", {
+      const { data: createdNegotiationId, error } = await appSupabase.rpc("create_price_negotiation", {
         p_service_id: serviceId, p_conversation_id: conversationId,
         p_initial_amount: amount, p_message: message,
       });
       if (error) throw exposePriceActionError(error);
+      if (!createdNegotiationId) throw new Error("The price proposal was sent, but its negotiation could not be refreshed.");
+      updatedNegotiationId = createdNegotiationId;
     }
-    await refreshSupabaseState();
+    let refreshFailed = false;
+    try {
+      await refreshSupabaseState("negotiations");
+    } catch (refreshError) {
+      console.error("The price response was saved, but account data could not be refreshed.", refreshError);
+      refreshFailed = true;
+    }
+    try {
+      await refreshConversationPriceNegotiation(updatedNegotiationId);
+    } catch (refreshError) {
+      console.error("The price response was saved, but its negotiation could not be refreshed.", refreshError);
+      refreshFailed = true;
+    }
     if (conversationId) setActiveConversation(conversationId);
     document.querySelector("#price-offer-modal").close();
     document.querySelector("#provider-detail-modal").close();
     showPage("messages", { openConversation: true });
     renderConversations();
-    showToast(action === "counter" ? "Counteroffer sent." : "Price proposal sent.", "success");
+    showToast(refreshFailed
+      ? `${action === "counter" ? "Counteroffer" : "Price proposal"} saved. Reload the page to refresh the latest offer status.`
+      : action === "counter" ? "Counteroffer sent." : "Price proposal sent.",
+    refreshFailed ? "error" : "success");
   }, "Could not send this price proposal.", "Sending your price proposal…", {
     inlineFeedback: feedback,
     submitButton: form.querySelector('button[type="submit"]'),
@@ -3441,6 +4127,52 @@ function openProviderConversation(providerId) {
     document.querySelector('#chat-panel [name="message"]')?.focus();
   }, "Could not open this conversation.", "Opening conversation…");
 }
+function openBookingConversation(bookingId) {
+  const booking = state.bookings.find((item) => item.id === bookingId);
+  if (!booking) {
+    showToast("This booking is no longer available.");
+    return;
+  }
+  const providerView = isOwnBooking(booking);
+  const otherUserId = providerView ? booking.customerId : booking.providerId;
+  const otherName = providerView
+    ? booking.customer || "Student"
+    : getProvider(otherUserId)?.name || state.messages.find((item) => item.providerId === otherUserId)?.name || "Skillmate student";
+  if (!otherUserId) {
+    showToast("The other student for this booking could not be identified.", "error");
+    return;
+  }
+  if (state.blocked.includes(otherUserId)) {
+    showToast("You can’t message this student.");
+    return;
+  }
+  runAction(async () => {
+    let chat;
+    if (appSupabase) {
+      const { data: conversationId, error } = await appSupabase.rpc("start_conversation", {
+        p_other_user_id: otherUserId,
+        p_booking_id: booking.id,
+      });
+      if (error) throw error;
+      chat = state.messages.find((item) => item.id === conversationId);
+      if (!chat) {
+        const messages = await loadConversationMessages(conversationId, otherName);
+        chat = { id: conversationId, providerId: otherUserId, name: otherName, messages };
+        state.messages.unshift(chat);
+      }
+    } else {
+      chat = state.messages.find((item) => item.providerId === otherUserId);
+      if (!chat) {
+        chat = { id: `booking-chat-${booking.id}`, providerId: otherUserId, name: otherName, messages: [] };
+        state.messages.unshift(chat);
+      }
+    }
+    setActiveConversation(chat.id);
+    pendingReplyId = null;
+    showPage("messages", { openConversation: true });
+    document.querySelector('#chat-panel [name="message"]')?.focus();
+  }, "Could not open this booking conversation.", "Opening conversation…");
+}
 async function startConversation(providerId, text) {
   if (appSupabase) {
     let otherUserId = providerId;
@@ -3461,7 +4193,7 @@ async function startConversation(providerId, text) {
     });
     if (messageError) throw messageError;
     setActiveConversation(conversationId);
-    await refreshSupabaseState();
+    await refreshSupabaseState("messages");
     return;
   }
   let chat = state.messages.find((item) => item.providerId === providerId);
@@ -4043,6 +4775,16 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
         showToast("Booking request sent. You can track it in My bookings.", "success");
       } catch (error) {
         state.bookings = state.bookings.filter((booking) => booking.id !== temporaryId);
+        const duplicateRequest = error?.code === "23505"
+          && String(error?.message || "").includes("bookings_active_exact_request_unique_idx");
+        if (duplicateRequest) {
+          bookingDrafts.delete(bookingDraftKey);
+          await reconcileSavedChange();
+          renderAll();
+          showPage("bookings");
+          showToast("This booking request is already in your Sent bookings.", "info");
+          return;
+        }
         renderAll();
         window.skillmateGrowth?.refreshSlots();
         if (!document.querySelector("dialog[open]")) openModal("booking-modal");
@@ -4095,7 +4837,7 @@ document.querySelector("#group-form").addEventListener("submit", (event) => {
         p_price: groupPrice,
       });
       if (error) throw error;
-      await refreshSupabaseState();
+      await refreshSupabaseState("bookings");
       event.target.closest("dialog").close();
       renderAll();
       showToast("Group booking created. You’re the host!");
@@ -4144,7 +4886,7 @@ document.addEventListener("skillmate:open-conversation", event => {
   const conversationId = event.detail?.conversationId;
   if (!conversationId || !appSupabase) return;
   runAction(async () => {
-    await refreshSupabaseState();
+    await refreshSupabaseState("messages");
     if (!state.messages.some(chat => chat.id === conversationId)) {
       throw new Error("This conversation is no longer available.");
     }
@@ -4159,7 +4901,7 @@ document.addEventListener("skillmate:open-booking", event => {
   const bookingId = event.detail?.bookingId;
   if (!bookingId || !appSupabase) return;
   runAction(async () => {
-    await refreshSupabaseState();
+    await refreshSupabaseState("bookings");
     const booking = state.bookings.find(item => item.id === bookingId);
     if (!booking) throw new Error("This booking is no longer available.");
     bookingDirection = isOwnBooking(booking) ? "received" : "made";
@@ -4213,15 +4955,18 @@ document.querySelector("#chat-panel").addEventListener("click", (event) => {
     const chat = state.messages.find(item => item.id === activeConversationId);
     if (!service || !chat) return;
     const action = service.providerId === appUser?.id ? "proposal" : "initial";
+    const newOrder = proposePrice.dataset.newOrderNegotiation === "true";
     openPriceOfferForm({
       providerId: service.providerId,
       serviceId: service.id,
       action,
       negotiationId: proposePrice.dataset.negotiationId,
       conversationId: chat.id,
-      description: action === "initial"
-        ? `Propose a price for ${service.title}. The provider must explicitly accept, reject or counter.`
-        : `Propose a price for ${service.title}. The customer must explicitly accept or reject it.`,
+      description: newOrder
+        ? `Agree a fresh price for a new ${service.title} order. The previous price remains attached to its original booking.`
+        : action === "initial"
+          ? `Propose a price for ${service.title}. The provider must explicitly accept, reject or counter.`
+          : `Propose a price for ${service.title}. The customer must explicitly accept or reject it.`,
       chatProposal: true,
     });
     return;
@@ -4254,18 +4999,22 @@ document.querySelector("#chat-panel").addEventListener("click", (event) => {
     const previousNegotiation = negotiation ? { ...negotiation } : null;
     const previousOfferStatus = offer?.status;
     runAction(async () => {
-      const { error } = await appSupabase.rpc("decide_price_offer", {
-        p_offer_id: priceAction.dataset.offerId,
-        p_action: action,
-        p_counter_amount: null,
-        p_message: "",
+      await submitPriceOfferDecision({
+        offerId: priceAction.dataset.offerId,
+        action,
+        negotiationId: priceAction.dataset.negotiationId,
       });
-      if (error) throw error;
       let refreshFailed = false;
       try {
-        await refreshSupabaseState();
+        await refreshSupabaseState("negotiations");
       } catch (refreshError) {
         console.error("Price response was saved, but the latest negotiation data could not be refreshed.", refreshError);
+        refreshFailed = true;
+      }
+      try {
+        await refreshConversationPriceNegotiation(priceAction.dataset.negotiationId);
+      } catch (refreshError) {
+        console.error("Price response was saved, but its negotiation could not be refreshed.", refreshError);
         refreshFailed = true;
       }
       if (chat) setActiveConversation(chat.id);
@@ -4488,9 +5237,14 @@ document.querySelector("#listing-list").addEventListener("click", (event) => {
       renderAll();
       void runAction(async () => {
         try {
-          const { error } = await appSupabase.from("services").update({ is_active: service.active })
-            .eq("id", service.id).eq("provider_id", appUser.id);
+          const { data: updatedRows, error } = await appSupabase.from("services").update({ is_active: service.active })
+            .eq("id", service.id).eq("provider_id", appUser.id).select("id");
           if (error) throw error;
+          if (!updatedRows?.length) {
+            throw Object.assign(new Error("This service could not be updated. Refresh and try again."), {
+              userMessage: "This service could not be updated. Refresh and try again.",
+            });
+          }
           await reconcileSavedChange();
           populateServiceSelects();
           renderAll();
@@ -4855,18 +5609,20 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
       cvName = null;
     }
     if (cvPath !== previousCvPath || cvName !== previousCvName) {
-      const { error: cvUpdateError } = await appSupabase.from("profiles")
-        .update({ cv_path: cvPath, cv_name: cvName }).eq("id", appUser.id);
-      if (cvUpdateError) {
+      const { data: updatedProfile, error: cvUpdateError } = await appSupabase.from("profiles")
+        .update({ cv_path: cvPath, cv_name: cvName }).eq("id", appUser.id).select("id");
+      if (cvUpdateError || !updatedProfile?.length) {
+        const updateError = cvUpdateError || new Error("Your CV settings could not be saved. Please try again.");
+        updateError.userMessage = "Your CV settings could not be saved. Please try again.";
         if (uploadedCvPath) {
           const { error: cleanupError } = await appSupabase.storage.from("provider-cvs").remove([uploadedCvPath]);
           if (cleanupError) console.error("Could not remove the unused CV upload.", cleanupError);
         }
         if (avatarPath) {
           const cleaned = await removeUnusedAvatar(avatarPath, "Could not remove the unused profile photo after CV metadata failure.");
-          if (!cleaned) cvUpdateError.userMessage = "Your CV settings could not be saved, and the unused profile photo could not be removed from storage. Please contact support.";
+          if (!cleaned) updateError.userMessage = "Your CV settings could not be saved, and the unused profile photo could not be removed from storage. Please contact support.";
         }
-        throw cvUpdateError;
+        throw updateError;
       }
       cvMetadataUpdated = true;
     }
@@ -4887,7 +5643,15 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
         result.error.userMessage = "Campus changes are unavailable until the site setup is completed. Your changes have not been saved.";
       } else {
         delete profileUpdate.university;
-        result = await appSupabase.from("profiles").update(profileUpdate).eq("id", appUser.id);
+        result = await appSupabase.from("profiles").update(profileUpdate).eq("id", appUser.id).select("id");
+        if (!result.error && !result.data?.length) {
+          result = {
+            ...result,
+            error: Object.assign(new Error("Your profile could not be saved. Please try again."), {
+              userMessage: "Your profile could not be saved. Please try again.",
+            }),
+          };
+        }
       }
     }
     const { error } = result;
@@ -5002,11 +5766,16 @@ document.querySelector("#settings-notifications-save").addEventListener("click",
     notifyMessages: state.profile.notifyMessages,
   };
   runAction(async () => {
-    const { error } = await appSupabase.from("profiles").update({
+    const { data: updatedRows, error } = await appSupabase.from("profiles").update({
       notify_booking_updates: notifyBookingUpdates,
       notify_messages: notifyMessages,
-    }).eq("id", appUser.id);
+    }).eq("id", appUser.id).select("id");
     if (error) throw error;
+    if (!updatedRows?.length) {
+      throw Object.assign(new Error("Notification settings could not be saved. Refresh and try again."), {
+        userMessage: "Notification settings could not be saved. Refresh and try again.",
+      });
+    }
     setSettingsFeedback(feedback, "Notification settings have been saved.");
   }, "Could not save notification settings.", "Saving notification settings…", {
     inlineFeedback: feedback,
@@ -5302,9 +6071,14 @@ document.querySelector("#portfolio-grid").addEventListener("click", (event) => {
     const removedIndex = state.portfolio.indexOf(removedItem);
     runAction(async () => {
       const item = removedItem;
-      const { error } = await appSupabase.from("portfolio_items").delete()
-        .eq("id", button.dataset.removeWork).eq("provider_id", appUser.id);
+      const { data: deletedRows, error } = await appSupabase.from("portfolio_items").delete()
+        .eq("id", button.dataset.removeWork).eq("provider_id", appUser.id).select("id");
       if (error) throw error;
+      if (!deletedRows?.length) {
+        throw Object.assign(new Error("This portfolio item could not be removed. Refresh and try again."), {
+          userMessage: "This portfolio item could not be removed. Refresh and try again.",
+        });
+      }
       if (item?.imagePath) {
         const { error: storageError } = await appSupabase.storage.from("portfolio-images").remove([item.imagePath]);
         if (storageError) console.error("Portfolio item was removed, but its image could not be deleted.", storageError);
@@ -5464,6 +6238,108 @@ document.querySelector("#blocked-list").addEventListener("click", (event) => {
   showToast("Student unblocked.");
 });
 document.querySelector("#user-booking-list").addEventListener("click", (event) => {
+  const customerCancelButton = event.target.closest("[data-cancel-customer-unpaid-booking]");
+  if (customerCancelButton) {
+    const bookingId = customerCancelButton.dataset.cancelCustomerUnpaidBooking;
+    if (!window.confirm("Cancel this booking? If payment is processing, cancellation can proceed only after Paystack confirms that it failed.")) return;
+    runAction(async () => {
+      let booking = state.bookings.find(item => item.id === bookingId);
+      if (!isBookingAwaitingPayment(booking)) {
+        throw new Error("This booking is no longer eligible for unpaid cancellation.");
+      }
+      if (booking.paymentStatus === "processing" || booking.latestPaymentStatus === "pending") {
+        if (!booking.latestPaymentReference) {
+          const notice = "We can’t verify this payment yet, so the booking was not cancelled. Don’t pay again; check the payment status shortly.";
+          bookingPaymentNotices.set(bookingId, notice);
+          renderAll();
+          showToast(notice, "info");
+          return;
+        }
+        bookingPaymentNotices.delete(bookingId);
+        let verification;
+        try {
+          verification = await requestSkillmatePayment("/api/payments/verify", {
+            reference: booking.latestPaymentReference,
+          });
+        } catch (error) {
+          console.error("Could not verify the payment before cancelling the booking.", error);
+          const notice = "We couldn’t verify the payment, so the booking was not cancelled. Don’t pay again; check the status again shortly.";
+          bookingPaymentNotices.set(bookingId, notice);
+          renderAll();
+          showToast(notice, "error");
+          return;
+        }
+        if (verification.status !== "failed") {
+          try {
+            await refreshSupabaseState("bookings");
+          } catch (refreshError) {
+            console.error("Could not refresh the booking after checking its payment.", refreshError);
+          }
+          const paymentIsConfirmed = verification.status === "paid";
+          const notice = paymentIsConfirmed
+            ? ""
+            : verification.status === "processing"
+              ? "Payment is still processing, so this booking was not cancelled. Don’t pay again. Check payment again later; cancellation is safe only after Paystack confirms payment failed."
+              : "Payment has not been confirmed as failed, so this booking was not cancelled. Don’t pay again; check again later or contact support.";
+          if (notice) bookingPaymentNotices.set(bookingId, notice);
+          else bookingPaymentNotices.delete(bookingId);
+          renderAll();
+          showToast(paymentIsConfirmed
+            ? "Payment is confirmed. This booking cannot be cancelled as unpaid."
+            : notice, paymentIsConfirmed ? "success" : "info");
+          return;
+        }
+      }
+      const { error } = await appSupabase.rpc("cancel_unpaid_booking_by_customer", {
+        p_booking_id: bookingId,
+      });
+      if (error) throw error;
+      bookingPaymentNotices.delete(bookingId);
+      booking = state.bookings.find(item => item.id === bookingId);
+      if (booking) booking.status = "Cancelled";
+      let refreshed = true;
+      try {
+        await refreshSupabaseState("bookings");
+      } catch (refreshError) {
+        console.error("The booking was cancelled, but the latest booking list could not be refreshed.", refreshError);
+        refreshed = false;
+      }
+      renderAll();
+      showToast(refreshed
+        ? "Your booking is cancelled. No payment is due, and the provider has been notified."
+        : "Your booking was cancelled. Reload to see the latest status.", refreshed ? "success" : "error");
+    }, "Could not cancel this booking.", "Checking payment. Cancellation proceeds only if it failed…", {
+      buttonLoadingText: "Checking payment…",
+      formatFailureMessage: bookingStatusFailureMessage,
+    });
+    return;
+  }
+  const cancelUnpaidButton = event.target.closest("[data-cancel-unpaid-booking]");
+  if (cancelUnpaidButton) {
+    const bookingId = cancelUnpaidButton.dataset.cancelUnpaidBooking;
+    if (!window.confirm("Cancel this accepted booking before payment? The student will be notified.")) return;
+    runAction(async () => {
+      const { error } = await appSupabase.rpc("cancel_unpaid_booking", { p_booking_id: bookingId });
+      if (error) throw error;
+      let refreshed = true;
+      try {
+        await refreshSupabaseState("bookings");
+      } catch (refreshError) {
+        console.error("The unpaid booking was cancelled, but the latest booking list could not be refreshed.", refreshError);
+        refreshed = false;
+      }
+      renderAll();
+      showToast(refreshed
+        ? "Booking cancelled. The student can see the update in Requests, and you can see the status in My bookings."
+        : "Booking cancelled, but the list could not refresh. Reload to see the latest status.", refreshed ? "success" : "error");
+    }, "Could not cancel this booking.", "Cancelling booking…");
+    return;
+  }
+  const bookingMessageButton = event.target.closest("[data-booking-message]");
+  if (bookingMessageButton) {
+    openBookingConversation(bookingMessageButton.dataset.bookingMessage);
+    return;
+  }
   const messageButton = event.target.closest("[data-message]");
   if (messageButton) {
     const bookingId = messageButton.dataset.message.startsWith("customer:")
@@ -5475,6 +6351,17 @@ document.querySelector("#user-booking-list").addEventListener("click", (event) =
   }
   if (handleNegotiationChatAction(event)) return;
   if (handleAppointmentActions(event)) return;
+  const paymentButton = event.target.closest("[data-payment-booking-id]");
+  if (paymentButton) {
+    void openBookingPayment(paymentButton.dataset.paymentBookingId);
+    return;
+  }
+  const paymentCheckButton = event.target.closest("[data-check-payment-booking-id]");
+  if (paymentCheckButton) {
+    const booking = state.bookings.find(item => item.id === paymentCheckButton.dataset.checkPaymentBookingId);
+    void checkBookingPayment(booking);
+    return;
+  }
   const decision = event.target.closest("[data-decision]");
   if (decision) {
     const booking = state.bookings.find((item) => item.id === decision.dataset.bookingId);
@@ -5488,13 +6375,15 @@ document.querySelector("#user-booking-list").addEventListener("click", (event) =
       runAction(async () => {
         await persistBookingStatus(booking.id, decision.dataset.decision);
         showToast(decision.dataset.decision === "Confirmed"
-          ? "Booking accepted. The student can see the confirmation."
+          ? "Booking confirmed. Payment is required before work can begin."
           : decision.dataset.decision === "Declined"
             ? "Booking request declined."
             : decision.dataset.decision === "Completed"
               ? completionMessage
-              : decision.dataset.decision === "In progress" ? "Work started. The customer can see the update." : "Booking cancelled.");
-      }, "Could not update this booking.");
+              : decision.dataset.decision === "In progress" ? "Work started. The customer can see the update." : "Your booking request is cancelled. You can see the status in My bookings.");
+      }, "Could not update this booking.", "Saving booking…", {
+        formatFailureMessage: bookingStatusFailureMessage,
+      });
     } else {
       booking.status = decision.dataset.decision === "Completed" && isOwnBooking(booking)
         ? "Awaiting verification" : decision.dataset.decision;
@@ -5502,12 +6391,12 @@ document.querySelector("#user-booking-list").addEventListener("click", (event) =
       saveState();
       renderAll();
       showToast(decision.dataset.decision === "Confirmed"
-        ? "Booking accepted. The student can see the confirmation."
+        ? "Booking confirmed."
         : decision.dataset.decision === "Declined"
           ? "Booking request declined."
           : decision.dataset.decision === "Completed"
             ? completionMessage
-            : decision.dataset.decision === "In progress" ? "Work started. The customer can see the update." : "Booking cancelled.");
+            : decision.dataset.decision === "In progress" ? "Work started. The customer can see the update." : "Your booking request is cancelled. You can see the status in My bookings.");
     }
     return;
   }
@@ -5588,6 +6477,42 @@ document.querySelector("#booking-tabs").addEventListener("click", (event) => {
   activeBookingFilter = button.dataset.bookingFilter;
   renderBookingList("user-booking-list", bookingsForActiveFilter());
 });
+document.querySelector("#payment-submit").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  if (button.disabled || checkoutVerificationPromise) return;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  try {
+    if (checkoutInitialization) {
+      if (button.textContent === "Check payment") {
+        await finishPaystackPayment(checkoutInitialization.reference, true);
+      } else {
+        document.querySelector("#payment-modal").close();
+        openPaystackInline(checkoutInitialization);
+      }
+      return;
+    }
+    if (!checkoutBookingId) throw new Error("Choose an accepted booking to continue.");
+    setPaymentFeedback("Preparing your secure test-mode checkout…", "loading");
+    const initialized = await requestSkillmatePayment("/api/payments/initialize", { bookingId: checkoutBookingId });
+    if (!initialized.testMode
+        || !Number.isSafeInteger(initialized.totalAmountMinor)
+        || initialized.totalAmountMinor !== initialized.serviceAmountMinor + initialized.bookingFeeMinor) {
+      throw new Error("Payment details could not be securely verified.");
+    }
+    checkoutInitialization = initialized;
+    setPaymentFeedback("Choose Mobile Money or card in the secure Paystack checkout.", "info");
+    button.textContent = "Continue to secure payment";
+    document.querySelector("#payment-modal").close();
+    openPaystackInline(initialized);
+  } catch (error) {
+    console.error("Could not start the Skillmate payment checkout.", error);
+    setPaymentFeedback(error.message || "Could not start payment. Please try again.", "error");
+  } finally {
+    button.removeAttribute("aria-busy");
+    if (!checkoutVerificationPromise && document.querySelector("#payment-modal").open) button.disabled = false;
+  }
+});
 document.querySelector("#earnings-export").addEventListener("click", () => {
   const completed = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Completed");
   const rows = [["Service", "Customer", "Date", "Amount"], ...completed.map((booking) => [booking.service, booking.customer || state.profile.name, booking.date, currency(booking.price)])];
@@ -5597,6 +6522,155 @@ document.querySelector("#earnings-export").addEventListener("click", () => {
   link.href = url; link.download = "skillmate-earnings.csv"; link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   showToast(appSupabase ? "Your completed earnings were exported." : "Your completed demo earnings were exported.");
+});
+document.querySelector("#payout-type").addEventListener("change", renderPayoutBankOptions);
+document.querySelector("#payout-withdraw-open").addEventListener("click", () => {
+  if (!payoutState?.transfersEnabled || Number(payoutState.availableMinor) <= 0) return;
+  const feedback = document.querySelector("#payout-feedback");
+  if (!payoutState.recipients.length) {
+    document.querySelector("#payout-destination-form").hidden = false;
+    feedback.textContent = "Add and verify a bank or mobile-money destination before withdrawing.";
+    document.querySelector("#payout-destination-form").scrollIntoView({ behavior: "smooth", block: "center" });
+    document.querySelector("#payout-type").focus({ preventScroll: true });
+    return;
+  }
+  const form = document.querySelector("#payout-withdraw-form");
+  form.hidden = !form.hidden;
+  if (!form.hidden) {
+    form.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.querySelector("#payout-amount").focus({ preventScroll: true });
+  }
+});
+document.querySelector("#payout-destination-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = document.querySelector("#payout-recipient-submit");
+  const feedback = document.querySelector("#payout-feedback");
+  const selectedBank = document.querySelector("#payout-bank").selectedOptions[0];
+  if (!selectedBank?.value) {
+    feedback.textContent = "Choose a bank or mobile-money network.";
+    return;
+  }
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  feedback.textContent = "Verifying and saving your payout destination…";
+  try {
+    await payoutApiRequest("POST", {
+      action: "recipient",
+      type: document.querySelector("#payout-type").value,
+      name: document.querySelector("#payout-name").value,
+      accountNumber: document.querySelector("#payout-account").value,
+      bankCode: selectedBank.value,
+      bankName: selectedBank.dataset.name,
+    });
+    form.reset();
+    renderPayoutBankOptions();
+    feedback.textContent = "Payout destination saved securely with Paystack.";
+    await refreshPayoutState(false);
+  } catch (error) {
+    console.error("Could not save the Paystack payout destination.", error);
+    feedback.textContent = error.message || "Could not save this payout destination.";
+  } finally {
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+  }
+});
+document.querySelector("#payout-withdraw-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = document.querySelector("#payout-withdraw-submit");
+  const feedback = document.querySelector("#payout-feedback");
+  if (payoutWithdrawalInFlight) {
+    feedback.textContent = "Your withdrawal is already being submitted. Please wait for its status.";
+    return;
+  }
+  const amount = Number(document.querySelector("#payout-amount").value);
+  const amountMinor = Math.round(amount * 100);
+  if (!payoutState || !Number.isSafeInteger(amountMinor) || amountMinor <= 0
+      || amountMinor > payoutState.availableMinor) {
+    feedback.textContent = "Enter an amount within your available verified earnings.";
+    return;
+  }
+  const recipientId = document.querySelector("#payout-recipient").value;
+  const amountInput = document.querySelector("#payout-amount");
+  const recipientSelect = document.querySelector("#payout-recipient");
+  let intent;
+  try {
+    const savedIntent = readPayoutIntent();
+    intent = savedIntent?.recipientId === recipientId
+      && Number(savedIntent.amountMinor) === amountMinor
+      ? savedIntent
+      : { recipientId, amountMinor, idempotencyKey: crypto.randomUUID() };
+    writePayoutIntent(intent);
+  } catch (error) {
+    console.error("Could not preserve the withdrawal retry key.", error);
+    feedback.textContent = "Your browser could not safely preserve this withdrawal request. Check your browser storage settings and try again.";
+    return;
+  }
+  payoutWithdrawalInFlight = true;
+  button.disabled = true;
+  amountInput.disabled = true;
+  recipientSelect.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  feedback.textContent = "Submitting your withdrawal. Please wait; do not submit again.";
+  try {
+    const result = await payoutApiRequest("POST", {
+      action: "withdraw",
+      recipientId,
+      amountMinor,
+      idempotencyKey: intent.idempotencyKey,
+    });
+    intent.reference = result.reference;
+    if (["successful", "failed", "reversed"].includes(result.status)) {
+      clearPayoutIntent(result.reference);
+    } else {
+      writePayoutIntent(intent);
+    }
+    document.querySelector("#payout-amount").value = "";
+    feedback.textContent = payoutStatusMessage(result.status);
+    await refreshPayoutState(false);
+  } catch (error) {
+    console.error("Could not submit a Paystack withdrawal.", error);
+    if (error.reference) {
+      intent.reference = error.reference;
+      if (["successful", "failed", "reversed"].includes(error.status)) {
+        clearPayoutIntent(error.reference);
+      } else {
+        writePayoutIntent(intent);
+      }
+    } else if (error.statusCode === 400 || error.statusCode === 409) {
+      clearPayoutIntent();
+    }
+    feedback.textContent = error.message || "Could not submit the withdrawal. Check withdrawal history before retrying.";
+    await refreshPayoutState(false);
+  } finally {
+    payoutWithdrawalInFlight = false;
+    button.removeAttribute("aria-busy");
+    renderPayoutDashboard();
+  }
+});
+document.querySelector("#payout-history-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-payout-check]");
+  if (!button) return;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  document.querySelector("#payout-feedback").textContent = "Checking the withdrawal with Paystack…";
+  try {
+    const result = await payoutApiRequest("POST", {
+      action: "check",
+      reference: button.dataset.payoutCheck,
+    });
+    document.querySelector("#payout-feedback").textContent = payoutStatusMessage(result.status);
+    await refreshPayoutState(false);
+  } catch (error) {
+    console.error("Could not check the Paystack withdrawal.", error);
+    document.querySelector("#payout-feedback").textContent = error.message || "Could not check this withdrawal.";
+    await refreshPayoutState(false);
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+    }
+  }
 });
 document.querySelector("#signout-button").addEventListener("click", () => {
   if (!appSupabase) {

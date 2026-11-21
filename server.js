@@ -6,7 +6,7 @@ const express = require("express");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const { isOtpVerifiedSession } = require("./api/_lib/supabase");
-const { apiRateLimit, authRateLimit, createRateLimit } = require("./api/_lib/rate-limit");
+const { apiRateLimit, authRateLimit, endpointRateLimits } = require("./api/_lib/rate-limit");
 const { requestMetrics } = require("./api/_lib/http-metrics");
 
 const app = express();
@@ -20,14 +20,19 @@ const sessionCookieOptions = {
 };
 
 app.disable("x-powered-by");
-app.set("trust proxy", process.env.TRUST_PROXY === "1");
+app.set("trust proxy", process.env.TRUST_PROXY === "1" ? 1 : false);
 // Allow framing (e.g. editor preview panes) outside production only.
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
   frameguard: process.env.NODE_ENV === "production" ? { action: "sameorigin" } : false
 }));
-app.use(express.json({ limit: "16kb" }));
+app.use(express.json({
+  limit: "16kb",
+  verify(request, _response, buffer) {
+    request.rawBody = Buffer.from(buffer);
+  },
+}));
 app.use(cookieParser());
 app.use(requestMetrics);
 app.use("/api", apiRateLimit);
@@ -137,36 +142,45 @@ app.get("/supabase-config.js", (_request, response, next) => {
 });
 
 app.get("/api/health", require("./api/_lib/routes/health"));
-app.get("/api/push-config", (request, response) => {
+app.get("/api/push-config", endpointRateLimits["push-config"], (request, response) => {
   const { handlePushConfig } = require("./api/_lib/push");
   return handlePushConfig(request, response);
 });
-app.all("/api/push-subscriptions", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }, "push-subscriptions"), (request, response) => {
+app.all("/api/push-subscriptions", endpointRateLimits["push-subscriptions"], (request, response) => {
   const { handlePushSubscriptions } = require("./api/_lib/push");
   return handlePushSubscriptions(request, response);
 });
-app.all("/api/booking-reminders", require("./api/_lib/routes/booking-reminders"));
-app.all("/api/email-notifications", require("./api/_lib/routes/email-notifications"));
-app.get("/api/admin-observability", require("./api/_lib/routes/admin-observability"));
-app.all("/api/system-health-snapshot", require("./api/_lib/routes/system-health-snapshot"));
-app.post("/api/push-dispatch", (request, response) => {
+app.all("/api/booking-reminders", endpointRateLimits["booking-reminders"], require("./api/_lib/routes/booking-reminders"));
+app.all("/api/email-notifications", endpointRateLimits["email-notifications"], require("./api/_lib/routes/email-notifications"));
+app.get("/api/admin-observability", endpointRateLimits["admin-observability"], require("./api/_lib/routes/admin-observability"));
+app.post("/api/admin-moderation", endpointRateLimits["admin-moderation"], require("./api/_lib/routes/admin-moderation"));
+app.all("/api/system-health-snapshot", endpointRateLimits["system-health-snapshot"], require("./api/_lib/routes/system-health-snapshot"));
+app.post("/api/push-dispatch", endpointRateLimits["push-dispatch"], (request, response) => {
   const { handlePushDispatch } = require("./api/_lib/push");
   return handlePushDispatch(request, response);
 });
+const paystackPayments = require("./api/_lib/paystack-payments");
+const paystackPayouts = require("./api/_lib/paystack-payouts");
+app.post("/api/payments/quote", endpointRateLimits["payments/quote"], paystackPayments.handlePaymentQuote);
+app.post("/api/payments/initialize", endpointRateLimits["payments/initialize"], paystackPayments.handlePaymentInitialize);
+app.post("/api/payments/verify", endpointRateLimits["payments/verify"], paystackPayments.handlePaymentVerify);
+app.post("/api/paystack-webhook", endpointRateLimits["paystack-webhook"], paystackPayments.handlePaystackWebhook);
+app.all("/api/payouts", endpointRateLimits.payouts, paystackPayouts.handlePayouts);
+app.post("/api/paystack-transfer-webhook", endpointRateLimits["paystack-transfer-webhook"], paystackPayouts.handlePaystackTransferWebhook);
 
-app.post("/api/auth/sign-in", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }, "sign-in"), (request, response) => {
+app.post("/api/auth/sign-in", endpointRateLimits["auth/sign-in"], (request, response) => {
   const { signIn } = require("./api/_lib/email-2fa");
   return signIn(request, response);
 });
-app.post("/api/auth/google-2fa", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }, "google-2fa"), (request, response) => {
+app.post("/api/auth/google-2fa", endpointRateLimits["auth/google-2fa"], (request, response) => {
   const { googleSignIn } = require("./api/_lib/email-2fa");
   return googleSignIn(request, response);
 });
-app.post("/api/auth/session-otp", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }, "session-otp"), (request, response) => {
+app.post("/api/auth/session-otp", endpointRateLimits["auth/session-otp"], (request, response) => {
   const { sessionSignIn } = require("./api/_lib/email-2fa");
   return sessionSignIn(request, response);
 });
-app.post("/api/auth/sign-up", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: "draft-7", legacyHeaders: false }, "sign-up"), (request, response) => {
+app.post("/api/auth/sign-up", endpointRateLimits["auth/sign-up"], (request, response) => {
   const { signUp } = require("./api/_lib/email-2fa");
   return signUp(request, response);
 });
@@ -174,15 +188,15 @@ app.delete("/api/auth/sign-in", (request, response) => {
   const { signIn } = require("./api/_lib/email-2fa");
   return signIn(request, response);
 });
-app.post("/api/auth/verify", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 15, standardHeaders: "draft-7", legacyHeaders: false }, "verify"), (request, response) => {
+app.post("/api/auth/verify", endpointRateLimits["auth/verify"], (request, response) => {
   const { verify } = require("./api/_lib/email-2fa");
   return verify(request, response);
 });
-app.post("/api/auth/resend", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: "draft-7", legacyHeaders: false }, "resend"), (request, response) => {
+app.post("/api/auth/resend", endpointRateLimits["auth/resend"], (request, response) => {
   const { resend } = require("./api/_lib/email-2fa");
   return resend(request, response);
 });
-app.all("/api/auth/password-recovery", createRateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false }, "password-recovery"), (request, response) => {
+app.all("/api/auth/password-recovery", endpointRateLimits["auth/password-recovery"], (request, response) => {
   const { requestPasswordRecovery, updateRecoveredPassword } = require("./api/_lib/email-2fa");
   if (request.method === "POST") return requestPasswordRecovery(request, response);
   if (request.method === "PUT") return updateRecoveredPassword(request, response);
@@ -192,7 +206,7 @@ app.all("/api/auth/password-recovery", createRateLimit({ windowMs: 15 * 60 * 100
 
 app.post(
   "/api/session",
-  createRateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false }, "account-delete"),
+  endpointRateLimits.session,
   async (request, response) => {
     const accessToken = getBearerToken(request);
     if (!accessToken) return response.status(401).json({ error: "A valid Supabase sign-in session is required." });
@@ -227,7 +241,7 @@ app.delete("/api/session", (_request, response) => {
   response.status(204).end();
 });
 
-app.post("/api/account/delete", (request, response) => {
+app.post("/api/account/delete", endpointRateLimits["account-delete"], (request, response) => {
   const { handleAccountDelete } = require("./api/_lib/account-delete");
   return handleAccountDelete(request, response, request.cookies[sessionCookieName]);
 });

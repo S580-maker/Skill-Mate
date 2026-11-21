@@ -10,6 +10,10 @@ function createResponse() {
       this.headers[name] = value;
       return this;
     },
+    append(name, value) {
+      this.headers[name] = this.headers[name] ? `${this.headers[name]}, ${value}` : value;
+      return this;
+    },
     status(code) {
       this.statusCode = code;
       return this;
@@ -33,4 +37,16 @@ test("Vercel API router returns 404 for unknown routes", async () => {
   await apiRouter({ method: "GET", ip: "127.0.0.1", query: { path: "unknown" } }, response);
   assert.equal(response.statusCode, 404);
   assert.deepEqual(response.body, { error: "Not found." });
+});
+
+test("Vercel API router dispatches the admin moderation endpoint with origin protection", async () => {
+  const response = createResponse();
+  await apiRouter({
+    method: "POST",
+    ip: "127.0.0.1",
+    query: { path: "admin-moderation" },
+    headers: { origin: "https://attacker.example", host: "skillmate.example" },
+  }, response);
+  assert.equal(response.statusCode, 403);
+  assert.match(response.body.error, /same-origin|admin dashboard/i);
 });

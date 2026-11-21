@@ -6,19 +6,59 @@ const path = require("node:path");
 const read = file => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 
 function element() {
-  return {
-    children: [], handlers: {}, style: {}, attributes: {},
-    append(...items) { this.children.push(...items); },
-    replaceChildren() { this.children = []; },
-    replaceWith(item) { this.replacement = item; },
+  const node = {
+    children: [], handlers: {}, style: {
+      setProperty(name, value) { this[name] = value; },
+      removeProperty(name) { delete this[name]; },
+    }, attributes: {}, dataset: {},
+    append(...items) { items.forEach(item => { item.parentElement = this; }); this.children.push(...items); },
+    replaceChildren(...items) { this.children.forEach(item => { item.parentElement = null; }); this.children = []; this.append(...items); },
+    replaceWith(item) {
+      this.replacement = item;
+      if (this.parentElement) {
+        const index = this.parentElement.children.indexOf(this);
+        if (index >= 0) this.parentElement.children.splice(index, 1, item);
+        item.parentElement = this.parentElement;
+      }
+    },
+    remove() {
+      if (!this.parentElement) return;
+      const index = this.parentElement.children.indexOf(this);
+      if (index >= 0) this.parentElement.children.splice(index, 1);
+      this.parentElement = null;
+    },
+    insertBefore(item, sibling) {
+      const index = sibling ? this.children.indexOf(sibling) : -1;
+      item.parentElement = this;
+      this.children.splice(index < 0 ? this.children.length : index, 0, item);
+    },
     addEventListener(name, handler) { this.handlers[name] = handler; },
     setAttribute(name, value) { this.attributes[name] = value; },
     showModal() { this.open = true; },
+    querySelector(selector) {
+      const find = nodes => {
+        for (const child of nodes) {
+          if (`.${child.className}` === selector) return child;
+          const nested = find(child.children || []);
+          if (nested) return nested;
+        }
+        return null;
+      };
+      return find(this.children);
+    },
+    closest(selector) { return selector === "button" && this.tagName === "BUTTON" ? this : null; },
+    classList: {
+      values: new Set(),
+      add(name) { this.values.add(name); },
+      remove(name) { this.values.delete(name); },
+      contains(name) { return this.values.has(name); },
+    },
   };
+  return node;
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-test("notifications display every fetched item without marking any read; marking is individual and retryable", async () => {
+test("notifications expose manual and swipe actions and failed read saves can be retried", async () => {
   const elements = new Map();
   const get = selector => {
     if (!elements.has(selector)) elements.set(selector, element());
@@ -26,26 +66,67 @@ test("notifications display every fetched item without marking any read; marking
   };
   const writes = [];
   const ranges = [];
+  const readFilters = [];
+  let unreadCount = 10;
+  let unreadMessages = 3;
   let failWrite = true;
+  let noOpRead = false;
+  let noOpDelete = false;
+  let finishWrite;
+  const deletes = [];
   const context = {
     document: {
       querySelector: get,
       createElement: element,
       createTextNode: text => ({ text, replaceWith(item) { this.replacement = item; } }),
+      addEventListener() {},
+      hidden: false,
     },
-    appSupabase: { from() {
+    window: { setInterval() { return 1; }, setTimeout() { return 2; }, clearTimeout() {} },
+    appUser: { id: "student-1" },
+    appSupabase: { from(table) {
+      let countQuery = false;
+      let write = null;
       return {
-        select() { return this; }, order() { return this; },
+        select(_columns, options) { countQuery = Boolean(options?.head); return this; },
+        order() { return this; },
         range(start, end) {
           ranges.push([start, end]);
           return Promise.resolve({ data: start ? [] : Array.from({ length: 10 }, (_, id) => ({
-            id, title: `<b>Update ${id}</b>`, body: "Full update", created_at: "2026-10-27T10:00:00Z", read_at: null,
+            id, kind: "booking_update", title: `<b>Update ${id}</b>`, body: "Full update", created_at: "2026-10-27T10:00:00Z", read_at: null,
           })) });
         },
-        update() { return { eq: (column, id) => new Promise(resolve => {
-          writes.push({ column, id });
-          finishWrite = () => resolve({ error: failWrite ? { message: "offline" } : null });
-        }) }; },
+        update(data) { write = { table, data, filters: [] }; return this; },
+        delete() { write = { table, delete: true, filters: [] }; return this; },
+        eq(column, value) {
+          if (write) write.filters.push([column, value]);
+          else readFilters.push([column, value]);
+          return this;
+        },
+        neq() { return this; },
+        in(column, values) { if (write && column === "id") write.ids = values; return this; },
+        is(column, value) {
+          if (countQuery) return Promise.resolve({ count: table === "messages" ? unreadMessages : unreadCount, error: null });
+          writes.push(write);
+          return new Promise(resolve => {
+            finishWrite = () => {
+              const error = failWrite ? { message: "offline" } : null;
+              const data = !error && !noOpRead ? [{ id: write.filters.find(([column]) => column === "id")?.[1] }] : [];
+              if (!error && data.length && write.table === "notifications") unreadCount -= 1;
+              resolve({ data, error });
+            };
+          });
+        },
+        then(resolve, reject) {
+          if (write?.delete) {
+            deletes.push(write);
+            return Promise.resolve({
+              data: noOpDelete ? [] : [{ id: write.filters.find(([column]) => column === "id")?.[1] }],
+              error: null,
+            }).then(resolve, reject);
+          }
+          return Promise.resolve({ error: null }).then(resolve, reject);
+        },
       };
     } },
   };
@@ -53,26 +134,223 @@ test("notifications display every fetched item without marking any read; marking
   get("#notifications-button").handlers.click();
   await flush();
   assert.equal(get("#notifications-list").children.length, 10);
-  assert.equal(writes.length, 0);
+  assert.ok(readFilters.some(([column, value]) => column === "user_id" && value === "student-1"),
+    "notification pages are scoped to the signed-in user");
   const first = get("#notifications-list").children[0];
-  assert.equal(first.children[0].textContent, "<b>Update 0</b>");
-  const button = first.children[3];
-  let finishWrite;
+  assert.equal(first.children[0].children[0].textContent, "<b>Update 0</b>");
+  const actions = first.children[0].children.at(-1);
+  assert.equal(actions.children[0].textContent, "Mark as read");
+  assert.equal(writes.length, 0, "opening notifications does not silently mark every item as read");
+  assert.equal(typeof first.handlers.pointerdown, "function", "notifications support swipe gestures");
+  const button = actions.children[0];
+  button.tagName = "BUTTON";
   button.handlers.click();
-  assert.equal(button.replacement.text, "Read", "the UI updates before the database request finishes");
+  assert.equal(writes.length, 1);
+  assert.equal(first.classList.contains("is-read"), true, "marking a notification updates the UI immediately");
   finishWrite();
   await flush();
-  assert.equal(button.replacement.replacement, button, "failed saves restore the retry control");
+  assert.equal(first.classList.contains("is-read"), false, "failed saves restore the unread state");
   failWrite = false;
-  button.handlers.click();
-  assert.equal(button.replacement.text, "Read");
+  actions.children[0].handlers.click();
   finishWrite();
   await flush();
-  assert.deepEqual(writes, [{ column: "id", id: 0 }, { column: "id", id: 0 }]);
+  assert.equal(writes.length, 2);
+  assert.equal(actions.children.length, 1, "read notifications no longer show a Read label or mark-as-read action");
+  assert.equal(actions.children[0].textContent, "Delete");
+  assert.equal(first.classList.contains("is-read"), true, "successfully read notifications retain their dimmed state");
+  const swipeRow = get("#notifications-list").children[1];
+  const swipeContent = swipeRow.children[0];
+  swipeRow.handlers.pointerdown({
+    isPrimary: true, button: 0, pointerId: 7, clientX: 10, clientY: 10,
+    target: { closest: () => null },
+  });
+  swipeRow.handlers.pointermove({
+    pointerId: 7, clientX: 110, clientY: 10, cancelable: true, preventDefault() {},
+  });
+  noOpRead = true;
+  swipeRow.handlers.pointerup({ pointerId: 7, clientX: 110, clientY: 10 });
+  assert.equal(writes.length, 3, "swiping right starts the mark-as-read action");
+  finishWrite();
+  await flush();
+  assert.equal(swipeRow.classList.contains("is-read"), false, "a no-op read update is not reported as successful");
+  assert.equal(get("#notifications-status").textContent, "Could not mark this notification as read. Try again.");
+  noOpRead = false;
+  const retryActions = swipeRow.children[0].children.at(-1);
+  retryActions.children[0].handlers.click();
+  finishWrite();
+  await flush();
+  assert.equal(swipeRow.classList.contains("is-read"), true);
+  const pullDownRow = get("#notifications-list").children[2];
+  pullDownRow.handlers.pointerdown({
+    isPrimary: true, button: 0, pointerId: 8, clientX: 20, clientY: 10,
+    target: { closest: () => null },
+  });
+  pullDownRow.handlers.pointermove({
+    pointerId: 8, clientX: 20, clientY: 110, cancelable: true, preventDefault() {},
+  });
+  pullDownRow.handlers.pointerup({ pointerId: 8, clientX: 20, clientY: 110 });
+  await flush();
+  assert.equal(get("#notifications-list").children.includes(pullDownRow), false,
+    "pulling a notification tile downward dismisses it");
+  noOpDelete = true;
+  actions.children[0].handlers.click();
+  await flush();
+  assert.equal(deletes.length, 2, "pull-down dismissal and manual delete each remove only their chosen notification");
+  assert.equal(get("#notifications-list").children.includes(first), true, "a no-op delete restores the notification");
+  assert.equal(get("#notifications-status").textContent, "Could not delete this notification. Try again.");
+  noOpDelete = false;
+  actions.children[0].handlers.click();
+  await flush();
+  assert.equal(deletes.length, 3);
   get("#notifications-more").handlers.click();
   await flush();
-  assert.deepEqual(ranges, [[0, 9], [10, 19]]);
+  assert.deepEqual(ranges, [[0, 9], [8, 17]]);
   assert.equal(get("#notifications-more").hidden, true);
+});
+
+test("notification badge shows unread totals and rings when the count increases", async () => {
+  const elements = new Map();
+  const get = selector => {
+    if (!elements.has(selector)) elements.set(selector, element());
+    return elements.get(selector);
+  };
+  const documentHandlers = {};
+  const calls = [];
+  let unreadCount = 2;
+  let unreadMessages = 3;
+  let poll;
+  const context = {
+    document: {
+      querySelector: get,
+      createElement: element,
+      addEventListener(name, handler) { documentHandlers[name] = handler; },
+      hidden: false,
+    },
+    window: {
+      setInterval(handler, delay) { poll = handler; calls.push({ interval: delay }); return 1; },
+      setTimeout(handler, delay) { calls.push({ timeout: delay }); return 2; },
+      clearTimeout() {},
+    },
+    appUser: { id: "student-1" },
+    appSupabase: {
+      from(table) {
+        return {
+          select(columns, options) {
+            calls.push({ table, columns, options });
+            return this;
+          },
+          eq(column, value) { calls.push({ column, value }); return this; },
+          neq(column, value) { calls.push({ column, value }); return this; },
+          is(column, value) {
+            calls.push({ column, value });
+            return Promise.resolve({ count: table === "messages" ? unreadMessages : unreadCount, error: null });
+          },
+        };
+      },
+    },
+    console,
+  };
+  vm.runInNewContext(read("notifications.js"), context);
+  documentHandlers["skillmate:session-ready"]();
+  await flush();
+  const button = get("#notifications-button");
+  const badge = button.children.find(child => child.className === "notification-count");
+  assert.equal(badge.textContent, "5");
+  assert.equal(badge.hidden, false);
+  assert.equal(button.attributes["aria-label"], "Notifications, 5 unread");
+  assert.equal(button.classList.contains("is-ringing"), false, "the initial unread count does not ring");
+  assert.equal(calls.find(call => call.options)?.options.head, true);
+  assert.deepEqual(calls.filter(call => call.column).slice(0, 5), [
+    { column: "user_id", value: "student-1" },
+    { column: "kind", value: "message" },
+    { column: "read_at", value: null },
+    { column: "sender_id", value: "student-1" },
+    { column: "read_at", value: null },
+  ]);
+
+  unreadCount = 120;
+  unreadMessages = 6;
+  poll();
+  await flush();
+  assert.equal(badge.textContent, "99+");
+  assert.equal(button.attributes["aria-label"], "Notifications, 126 unread");
+  assert.equal(button.classList.contains("is-ringing"), true, `ring classes: ${Array.from(button.classList.values).join(",")}`);
+
+  unreadCount = 0;
+  unreadMessages = 0;
+  poll();
+  await flush();
+  assert.equal(badge.hidden, true);
+  assert.equal(button.attributes["aria-label"], "Notifications");
+  assert.equal(calls.some(call => call.timeout === 1000), true);
+});
+
+test("message notification summarizes unread messages and right swipe reads the conversation", async () => {
+  const elements = new Map();
+  const get = selector => {
+    if (!elements.has(selector)) elements.set(selector, element());
+    return elements.get(selector);
+  };
+  const writes = [];
+  const context = {
+    document: {
+      querySelector: get,
+      createElement: element,
+      createTextNode: text => ({ text, replaceWith(item) { this.replacement = item; } }),
+      addEventListener() {},
+      hidden: false,
+    },
+    window: { setInterval() { return 1; }, setTimeout() { return 2; }, clearTimeout() {} },
+    appUser: { id: "student-1" },
+    appSupabase: { from(table) {
+      let head = false;
+      let write = null;
+      return {
+        select(_columns, options) { head = Boolean(options?.head); return this; },
+        order() { return this; },
+        range() {
+          return Promise.resolve({ data: [{
+            id: "message-alert", kind: "message", title: "New messages",
+            body: "Open Skillmate to read your unread messages.", read_at: null,
+            created_at: "2026-10-27T10:00:00Z", conversation_id: "chat-1",
+          }] });
+        },
+        update(data) { write = { table, data, filters: [] }; return this; },
+        eq(column, value) { if (write) write.filters.push([column, value]); return this; },
+        neq(column, value) { if (write) write.filters.push([column, value]); return this; },
+        in(column, values) { if (write) write.filters.push([column, values]); return this; },
+        is(column, value) {
+          if (write) {
+            writes.push(write);
+            return Promise.resolve({
+              data: write.table === "notifications" ? [{ id: "message-alert" }] : null,
+              error: null,
+            });
+          }
+          if (head) return Promise.resolve({ count: table === "messages" ? 2 : 0, error: null });
+          return Promise.resolve({ data: [
+            { conversation_id: "chat-1" },
+            { conversation_id: "chat-1" },
+          ], error: null });
+        },
+      };
+    } },
+    console,
+  };
+  vm.runInNewContext(read("notifications.js"), context);
+  get("#notifications-button").handlers.click();
+  await flush();
+  const row = get("#notifications-list").children[0];
+  assert.equal(row.children[0].children[1].textContent, "2 unread messages in this conversation.");
+  row.handlers.pointerdown({
+    isPrimary: true, button: 0, pointerId: 8, clientX: 0, clientY: 0,
+    target: { closest: () => null },
+  });
+  row.handlers.pointermove({ pointerId: 8, clientX: 100, clientY: 0, cancelable: true, preventDefault() {} });
+  row.handlers.pointerup({ pointerId: 8, clientX: 100, clientY: 0 });
+  await flush();
+  assert.deepEqual(writes.map(write => write.table), ["messages", "notifications"]);
+  assert.equal(row.classList.contains("is-read"), true);
 });
 
 test("40 conversation histories use two batch requests and keep each chat's page", async () => {
@@ -148,6 +426,7 @@ test("dashboard skeleton appears immediately and stays visible with progress dur
     },
     window: {
       setTimeout(callback, delay) { timers.set(delay, callback); return delay; },
+      clearTimeout(id) { timers.delete(id); },
       setInterval(callback, delay) { intervals.set(delay, callback); return delay; },
       clearInterval(id) { intervals.delete(id); },
     },
@@ -156,6 +435,7 @@ test("dashboard skeleton appears immediately and stays visible with progress dur
     dashboardLoadingStartedAt: 0,
     dashboardLoadingProgress: 10,
     dashboardLoadingPhase: "Checking your session…",
+    dashboardLoadingTimeout: null,
     dashboardLoadingInterval: null,
     console,
   };
@@ -183,6 +463,12 @@ test("dashboard skeleton appears immediately and stays visible with progress dur
   context.finishDashboardLoading();
   assert.equal(get("#app-auth-status").hidden, true);
   assert.ok(Number(estimates.get("skillmate-dashboard-load-estimate-ms-v1")) >= 1000);
+
+  context.startDashboardLoading();
+  const pendingTimeout = context.dashboardLoadingTimeout;
+  assert.ok(timers.has(pendingTimeout), "Startup schedules the delayed loading progress");
+  context.finishDashboardLoading();
+  assert.equal(timers.has(pendingTimeout), false, "Finishing loading cancels the delayed progress callback");
 });
 
 test("a shared conversation directory query executes once for both consumers", async () => {
@@ -286,13 +572,16 @@ test("shared action helper applies optimistic changes immediately and rolls them
   assert.equal(context.pendingActionCount, 0);
 });
 
-test("booking status appears immediately and reverts when Supabase rejects the update", async () => {
+test("provider acceptance remains pending until payment and reverts when Supabase rejects the update", async () => {
   const source = read("user.js");
   const booking = { id: "booking-1", status: "Pending" };
   let rejectWrite;
   let renders = 0;
   const context = {
-    appSupabase: { rpc: () => new Promise((_, reject) => { rejectWrite = reject; }) },
+    appSupabase: { rpc: name => {
+      assert.equal(name, "accept_booking_request", "provider acceptance has a dedicated awaiting-payment RPC");
+      return new Promise((_, reject) => { rejectWrite = reject; });
+    } },
     pendingBookingStatuses: new Map(),
     state: { bookings: [booking] },
     toDatabaseStatus: value => value,
@@ -303,15 +592,81 @@ test("booking status appears immediately and reverts when Supabase rejects the u
     source.indexOf("async function persistBookingStatus"),
     source.indexOf("function handleAppointmentActions"),
   ), context);
+  assert.equal(typeof context.openBookingPayment, "function", "payment controls can access the checkout helpers");
+  assert.equal(typeof context.requestSkillmatePayment, "function", "payment requests are available outside booking updates");
   const update = context.persistBookingStatus("booking-1", "Confirmed");
-  assert.equal(booking.status, "Confirmed");
+  assert.equal(booking.status, "Pending");
+  assert.ok(booking.providerAcceptedAt);
+  assert.equal(booking.paymentStatus, "awaiting_payment");
   assert.equal(renders, 1);
   await context.persistBookingStatus("booking-1", "Completed");
-  assert.equal(booking.status, "Confirmed", "a second status action waits for the current write");
+  assert.equal(booking.status, "Pending", "a second status action waits for the current write");
   rejectWrite(new Error("offline"));
   await assert.rejects(update, /offline/);
   assert.equal(booking.status, "Pending");
+  assert.equal(booking.providerAcceptedAt, undefined);
+  assert.equal(booking.paymentStatus, undefined);
   assert.equal(renders, 2);
+});
+
+test("a cancelled booking closes the payment prompt instead of offering payment checks", async () => {
+  const source = read("user.js");
+  const closedModal = { closed: false, close() { this.closed = true; } };
+  const elements = new Map([
+    ["#payment-modal", closedModal],
+    ["#payment-feedback", { dataset: {}, hidden: true }],
+  ]);
+  const toasts = [];
+  let paymentVerificationCalls = 0;
+  let reopenedPaymentModal = false;
+  const context = {
+    checkoutVerificationPromise: null,
+    checkoutBookingId: "booking-1",
+    checkoutInitialization: { reference: "payment-1" },
+    state: {
+      bookings: [{
+        id: "booking-1",
+        status: "Pending",
+        providerAcceptedAt: "2026-11-12T10:00:00Z",
+        paymentStatus: "processing",
+      }],
+    },
+    document: {
+      querySelector(selector) {
+        if (!elements.has(selector)) elements.set(selector, { textContent: "", disabled: false });
+        return elements.get(selector);
+      },
+    },
+    requestSkillmatePayment: async () => {
+      paymentVerificationCalls++;
+      return { status: "processing" };
+    },
+    refreshSupabaseState: async () => { context.state.bookings[0].status = "Cancelled"; },
+    openModal: () => { reopenedPaymentModal = true; },
+    showToast: (message, type) => toasts.push({ message, type }),
+    console,
+  };
+  vm.createContext(context);
+  vm.runInContext(source.slice(
+    source.indexOf("function isTerminalBookingStatus"),
+    source.indexOf("function toLocalBookingStatus"),
+  ), context);
+  vm.runInContext(source.slice(
+    source.indexOf("function setPaymentFeedback"),
+    source.indexOf("function handleAppointmentActions"),
+  ), context);
+
+  assert.equal(context.isBookingAwaitingPayment(context.state.bookings[0]), true);
+  await context.finishPaystackPayment("payment-1", false);
+
+  assert.equal(context.isBookingAwaitingPayment(context.state.bookings[0]), false);
+  assert.equal(closedModal.closed, true);
+  assert.equal(reopenedPaymentModal, false);
+  assert.match(toasts[0].message, /booking was cancelled/i);
+  assert.match(toasts[0].message, /do not pay again/i);
+  assert.equal(context.checkoutInitialization, null);
+  await context.checkBookingPayment(context.state.bookings[0]);
+  assert.equal(paymentVerificationCalls, 1, "a stale check-payment control cannot verify a cancelled booking");
 });
 
 test("failed reconciliation preserves a confirmed change and reports that it was saved", async () => {

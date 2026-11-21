@@ -12,6 +12,7 @@ let authRedirectStarted = false;
 let googleOtpStarted = false;
 let sessionOtpStarted = false;
 let sessionCheckStarted = false;
+let pendingVerifiedSession = null;
 let otpCountdownTimer = null;
 const googleOtpCallbackParam = "skillmate-google-otp";
 
@@ -245,6 +246,7 @@ function startOtpCountdown(seconds = 30) {
 
 function showOtpChallenge(email, signup = false) {
   const inputs = [...document.querySelectorAll(".auth-otp-inputs input")];
+  pendingVerifiedSession = null;
   document.body.dataset.authMode = "verification";
   document.querySelector("#auth-title").hidden = true;
   document.querySelector("#auth-intro").hidden = true;
@@ -287,8 +289,9 @@ async function submitOtpCode(event) {
   event.preventDefault();
   if (authSubmitting || document.querySelector("#auth-otp").classList.contains("is-success")) return;
   const inputs = [...document.querySelectorAll(".auth-otp-inputs input")];
-  const code = inputs.map((input) => input.value).join("");
-  if (!/^\d{6}$/.test(code)) {
+  const retryingVerifiedSession = Boolean(pendingVerifiedSession);
+  const code = retryingVerifiedSession ? "" : inputs.map((input) => input.value).join("");
+  if (!retryingVerifiedSession && !/^\d{6}$/.test(code)) {
     document.querySelector("#otp-message").textContent = "Enter all six digits to continue.";
     inputs.find((input) => !input.value)?.focus();
     return;
@@ -310,40 +313,53 @@ async function submitOtpCode(event) {
   message.classList.remove("success");
   challenge.classList.remove("is-error");
   try {
-    const response = await fetch("/api/auth/verify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ code }),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.error || "Could not verify your code. Please try again.");
-    if (result.provider === "google") {
-      const { data, error } = await authClient.auth.getSession();
-      let session = !error ? data.session : null;
-      if (!session) {
-        if (!result.session?.access_token || !result.session?.refresh_token) {
-          throw error || new Error("Your Google sign-in expired. Please sign in with Google again.");
-        }
-        const restored = await authClient.auth.setSession({
-          access_token: result.session.access_token,
-          refresh_token: result.session.refresh_token,
-        });
-        if (restored.error) throw restored.error;
-        session = restored.data.session;
+    let session = pendingVerifiedSession;
+    if (!retryingVerifiedSession) {
+      const response = await fetch("/api/auth/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ code }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not verify your code. Please try again.");
+      if (!result.session?.access_token || !result.session?.refresh_token) {
+        throw new Error("The verified sign-in session is incomplete.");
       }
-      if (!session) throw new Error("Your Google sign-in expired. Please sign in with Google again.");
-      await window.syncSkillmateServerSession(session);
+      pendingVerifiedSession = result.session;
+      if (result.provider === "google") {
+        const { data, error } = await authClient.auth.getSession();
+        session = !error ? data.session : null;
+        if (!session) {
+          const restored = await authClient.auth.setSession({
+            access_token: result.session.access_token,
+            refresh_token: result.session.refresh_token,
+          });
+          if (restored.error) throw restored.error;
+          session = restored.data.session;
+        }
+      } else {
+        const { data, error } = await authClient.auth.setSession({
+          access_token: pendingVerifiedSession.access_token,
+          refresh_token: pendingVerifiedSession.refresh_token,
+        });
+        if (error) throw error;
+        session = data.session;
+      }
     } else {
       const { data, error } = await authClient.auth.setSession({
-        access_token: result.session.access_token,
-        refresh_token: result.session.refresh_token,
+        access_token: pendingVerifiedSession.access_token,
+        refresh_token: pendingVerifiedSession.refresh_token,
       });
       if (error) throw error;
-      await window.syncSkillmateServerSession(data.session);
+      session = data.session;
     }
+    if (!session) throw new Error("Your sign-in session could not be restored. Please try again.");
+    pendingVerifiedSession = session;
+    await window.syncSkillmateServerSession(session);
     window.sessionStorage.removeItem("skillmate-google-otp-active");
     sessionOtpStarted = false;
+    pendingVerifiedSession = null;
     verificationSucceeded = true;
     challenge.classList.add("is-success");
     message.classList.add("success");
@@ -359,9 +375,14 @@ async function submitOtpCode(event) {
     challenge.classList.remove("is-error");
     void challenge.offsetWidth;
     challenge.classList.add("is-error");
-    message.textContent = error.message || "Could not verify your code. Please try again.";
-    inputs.forEach((input) => { input.disabled = false; input.value = ""; });
-    inputs[0]?.focus();
+    if (pendingVerifiedSession) {
+      message.textContent = "Your code was accepted, but sign-in could not finish. Check your connection, then retry sign-in.";
+      inputs.forEach((input) => { input.disabled = true; input.value = ""; });
+    } else {
+      message.textContent = error.message || "Could not verify your code. Please try again.";
+      inputs.forEach((input) => { input.disabled = false; input.value = ""; });
+      inputs[0]?.focus();
+    }
     if (error.message?.includes("expired") || error.message?.includes("Sign in again")) {
       window.clearInterval(otpCountdownTimer);
       document.querySelector("#otp-resend").disabled = true;
@@ -373,7 +394,7 @@ async function submitOtpCode(event) {
       submit.disabled = true;
     } else {
       spinner.hidden = true;
-      label.textContent = "Verify code";
+      label.textContent = pendingVerifiedSession ? "Retry sign-in" : "Verify code";
       updateOtpSubmitState(inputs);
     }
   }
@@ -383,7 +404,7 @@ function updateOtpSubmitState(inputs = [...document.querySelectorAll(".auth-otp-
   const success = document.querySelector("#auth-otp").classList.contains("is-success");
   document.querySelector("#otp-submit").disabled = authSubmitting
     || success
-    || !/^\d{6}$/.test(inputs.map((input) => input.value).join(""));
+    || (!pendingVerifiedSession && !/^\d{6}$/.test(inputs.map((input) => input.value).join("")));
 }
 
 function animateOtpDigit(input) {

@@ -30,6 +30,13 @@ test("public homepage serves without a session while existing app routes remain 
     const admin = await fetch(base + "/admin.html", { redirect: "manual" });
     assert.equal(admin.status, 302);
     assert.equal(admin.headers.get("location"), "/login.html?next=admin");
+    const paymentQuote = await fetch(base + "/api/payments/quote", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bookingId: "00000000-0000-4000-8000-000000000000" }),
+    });
+    assert.equal(paymentQuote.status, 401);
+    assert.deepEqual(await paymentQuote.json(), { error: "Sign in to continue with payment." });
     for (const asset of ["/landing.css", "/landing.js", "/aurora.css", "/aurora.js"]) {
       assert.equal((await fetch(base + asset)).status, 200, asset);
     }

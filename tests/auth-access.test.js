@@ -73,7 +73,7 @@ function otpFixture(fetchHandler = async () => ({ ok: false, json: async () => (
   const context = {
     document,
     authSubmitting: false,
-    authClient: { auth: { setSession: async () => ({ data: { session: {} }, error: null }) } },
+    authClient: { auth: { setSession: async session => ({ data: { session }, error: null }) } },
     fetch: async (url, options) => {
       requests.push({ url, body: options.body ? JSON.parse(options.body) : undefined, options });
       return fetchHandler(url, options);
@@ -91,7 +91,7 @@ function otpFixture(fetchHandler = async () => ({ ok: false, json: async () => (
   };
   vm.createContext(context);
   context.getResendRetryDelay = require("../auth-utils").getResendRetryDelay;
-  vm.runInContext("let otpCountdownTimer = null;", context);
+  vm.runInContext("let otpCountdownTimer = null; let pendingVerifiedSession = null;", context);
   vm.runInContext(source.slice(
     source.indexOf("function startOtpCountdown"),
     source.indexOf("function showOtpChallenge"),
@@ -163,6 +163,33 @@ test("OTP verification rejects incorrect codes with retry feedback and accepts s
   assert.equal(nodes["#otp-submit-label"].textContent, "Verified");
   assert.deepEqual(navigations, ["index.html"]);
   assert.equal(context.authSubmitting, false);
+});
+
+test("accepted OTP retries session sync without consuming the code again", async () => {
+  const { context, inputs, nodes, requests, navigations } = otpFixture(async () => ({
+    ok: true,
+    json: async () => ({ session: { access_token: "verified-access", refresh_token: "verified-refresh" } }),
+  }));
+  let syncCalls = 0;
+  context.window.syncSkillmateServerSession = async session => {
+    syncCalls++;
+    assert.equal(session.access_token, "verified-access");
+    if (syncCalls === 1) throw new Error("Skillmate could not validate your session. Please try again.");
+  };
+  inputs.forEach((input, index) => { input.value = String(index); });
+
+  await nodes["#otp-form"].handlers.submit({ preventDefault() {} });
+  assert.equal(requests.length, 1, "The code is submitted once");
+  assert.equal(nodes["#otp-message"].textContent, "Your code was accepted, but sign-in could not finish. Check your connection, then retry sign-in.");
+  assert.equal(nodes["#otp-submit-label"].textContent, "Retry sign-in");
+  assert.equal(nodes["#otp-submit"].disabled, false);
+  assert.equal(inputs.every(input => input.disabled && input.value === ""), true);
+
+  await nodes["#otp-form"].handlers.submit({ preventDefault() {} });
+  assert.equal(requests.length, 1, "Retry does not submit the consumed one-time code");
+  assert.equal(syncCalls, 2);
+  assert.equal(nodes["#auth-otp"].classList.contains("is-success"), true);
+  assert.deepEqual(navigations, ["index.html"]);
 });
 
 test("OTP resend handles success and honors the server cooldown", async () => {

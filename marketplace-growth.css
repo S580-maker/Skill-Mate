@@ -18,6 +18,7 @@
 .request-board-toolbar label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .request-board-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .request-card { display: flex; flex-direction: column; align-items: start; min-width: 0; padding: 22px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.featured-request-badge { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 999px; color: var(--main); background: var(--main-soft); font-size: 11px; font-weight: 700; }
 .request-card h2 { margin: 10px 0; font-size: 19px; overflow-wrap: anywhere; }
 .request-card p { font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .request-card small { color: var(--muted); line-height: 1.7; }
@@ -63,18 +64,30 @@
 .availability-days-off { margin-top: 14px; }
 .availability-feedback:empty { display: none; }
 .availability-form > button[type=submit] { width: 100%; }
-.booking-progress { display: flex; flex-wrap: wrap; gap: 7px; margin: 13px 0 7px; padding: 0; list-style: none; }
-.booking-progress li { padding: 4px 8px; border-radius: 6px; background: var(--bg); color: var(--muted); font-size: 12px; }
-.booking-progress li.is-done { color: var(--success); background: color-mix(in srgb, var(--success) 9%, var(--surface)); }
-.booking-progress li[aria-current=step] { color: var(--main); background: var(--main-soft); font-weight: 600; }
-.booking-next-step { display: block; margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
+.booking-progress { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin: 13px 0 7px; padding: 0; list-style: none; }
+.booking-progress li { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 6px; padding: 0; color: var(--muted); background: transparent; font-size: 11px; line-height: 1.25; text-align: center; }
+.booking-progress li::after { position: absolute; z-index: 0; top: 11px; left: calc(50% + 13px); width: calc(100% - 26px); height: 2px; background: var(--border); content: ""; }
+.booking-progress li.is-done::after { background: color-mix(in srgb, var(--success) 65%, var(--border)); }
+.booking-progress li:last-child::after { display: none; }
+.booking-step-marker { position: relative; z-index: 1; display: grid; width: 24px; height: 24px; flex: 0 0 24px; place-items: center; border: 2px solid var(--border); border-radius: 50%; color: var(--muted); background: var(--surface); font-size: 10px; font-weight: 700; }
+.booking-progress li.is-done .booking-step-marker { border-color: var(--success); color: #fff; background: var(--success); }
+.booking-progress li[aria-current=step] { color: var(--main); font-weight: 700; }
+.booking-progress li[aria-current=step] .booking-step-marker { border-color: var(--main); color: #fff; background: var(--main); box-shadow: 0 0 0 4px color-mix(in srgb, var(--main) 13%, transparent); }
+.booking-next-step { display: block; margin: 6px 0 10px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+@keyframes booking-step-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--main) 8%, transparent); } }
+.booking-progress li[aria-current=step] .booking-step-marker { animation: booking-step-pulse 1.8s ease-out infinite; }
 .chat-opening-state { display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); animation: chat-opening-in 180ms ease-out both; }
 .chat-opening-spinner { width: 17px; height: 17px; flex: 0 0 17px; border: 2px solid color-mix(in srgb, var(--main) 20%, transparent); border-top-color: var(--main); border-radius: 50%; animation: chat-opening-spin .7s linear infinite; }
 @keyframes chat-opening-spin { to { transform: rotate(360deg); } }
 @keyframes chat-opening-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
-  .booking-inline-link[aria-busy="true"]::before, .chat-opening-spinner { animation: none; }
+  .booking-inline-link[aria-busy="true"]::before, .chat-opening-spinner, .booking-step-marker { animation: none; }
   .chat-opening-state { animation: none; }
+}
+@media (max-width: 540px) {
+  .booking-progress li { font-size: 10px; }
+  .booking-step-marker { width: 22px; height: 22px; flex-basis: 22px; }
+  .booking-progress li::after { top: 10px; left: calc(50% + 12px); width: calc(100% - 24px); }
 }
 .growth-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 8px 0 18px; }
 .growth-metrics article { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 8px 12px; border-left: 1px solid var(--border); }

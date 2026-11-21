@@ -13,6 +13,26 @@ test("filters combine budget, delivery, verification and published hours", () =>
   assert.equal(utils.matchesFilters({ ...provider, deliveryMethod: "in_person" }, filters, true), false);
   assert.equal(utils.matchesFilters(provider, { ...filters, min: "80", max: "30" }, true), false);
 });
+test("featured requests include only open online-capable posts from the current campus", () => {
+  const now = Date.parse("2026-11-13T00:00:00Z");
+  const candidates = [
+    { id: "online", campus: "Campus A", requester_id: "student-a", delivery_method: "online", status: "open", expires_at: "2026-11-14T00:00:00Z" },
+    { id: "either", campus: "Campus A", requester_id: "student-b", delivery_method: "both", status: "open", expires_at: "2026-11-14T00:00:00Z" },
+    { id: "in-person", campus: "Campus A", requester_id: "student-c", delivery_method: "in_person", status: "open", expires_at: "2026-11-14T00:00:00Z" },
+    { id: "other-campus", campus: "Campus B", requester_id: "student-d", delivery_method: "online", status: "open", expires_at: "2026-11-14T00:00:00Z" },
+    { id: "own", campus: "Campus A", requester_id: "me", delivery_method: "online", status: "open", expires_at: "2026-11-14T00:00:00Z" },
+    { id: "blocked", campus: "Campus A", requester_id: "blocked", delivery_method: "online", status: "open", expires_at: "2026-11-14T00:00:00Z" },
+    { id: "closed", campus: "Campus A", requester_id: "student-e", delivery_method: "online", status: "closed", expires_at: "2026-11-14T00:00:00Z" },
+    { id: "expired", campus: "Campus A", requester_id: "student-f", delivery_method: "online", status: "open", expires_at: "2026-11-12T00:00:00Z" },
+  ];
+
+  assert.deepEqual(utils.featuredOnlineRequests(candidates, {
+    campus: "Campus A", ownId: "me", blocked: ["blocked"], now,
+  }).map(request => request.id), ["online", "either"]);
+  assert.deepEqual(utils.featuredOnlineRequests(candidates.concat({
+    id: "third", campus: "Campus A", requester_id: "student-g", delivery_method: "online", status: "open", expires_at: "2026-11-14T00:00:00Z",
+  }), { campus: "Campus A", ownId: "me", blocked: ["blocked"], now }).map(request => request.id), ["online", "either"]);
+});
 test("availability excludes dates off, past starts and overlapping confirmed appointments", () => {
   const now = Date.parse("2026-11-09T08:00:00Z");
   const date = "2026-11-09";
@@ -37,6 +57,18 @@ test("invalid hours and duplicate days cannot be published", () => {
 test("booking progress distinguishes provider and customer next steps", () => {
   assert.equal(utils.bookingProgress({ status: "Pending" }, true).step, 0);
   assert.match(utils.bookingProgress({ status: "Pending" }, false).next, /Waiting/);
+  assert.match(utils.bookingProgress({
+    status: "Pending", providerAcceptedAt: "2026-11-11T13:03:00Z", paymentStatus: "awaiting_payment",
+  }, true).next, /awaiting payment.*work cannot start/i);
+  assert.match(utils.bookingProgress({
+    status: "Pending", providerAcceptedAt: "2026-11-11T13:03:00Z", paymentStatus: "awaiting_payment",
+  }, false).next, /awaiting payment.*pay before work can start.*cancel the booking/i);
+  assert.match(utils.bookingProgress({
+    status: "Pending", providerAcceptedAt: "2026-11-11T13:03:00Z", paymentStatus: "processing",
+  }, false).next, /do not pay again/i);
+  assert.equal(utils.bookingProgress({
+    status: "Confirmed", providerAcceptedAt: "2026-11-11T13:03:00Z", paymentStatus: "legacy",
+  }, false).step, 1, "legacy paid bookings do not return to awaiting payment");
   assert.equal(utils.bookingProgress({ status: "Confirmed", workStartedAt: "2026-11-09" }, false).step, 2);
   assert.equal(utils.bookingProgress({ status: "Completed" }, false).step, 4);
   assert.equal(utils.bookingProgress({ status: "Cancelled" }, false).step, -1);

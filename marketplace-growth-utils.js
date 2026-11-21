@@ -67,6 +67,22 @@
       next: providerView ? "The client needs to verify that the work is complete." : "Your provider marked the work complete. Confirm when you are satisfied with the service.",
     };
     if (booking.status === "In progress" || booking.workStartedAt) return { step: 2, next: providerView ? "Mark complete when the agreed work is finished." : "Your provider has started the work." };
+    if (booking.providerAcceptedAt && !["paid", "legacy"].includes(booking.paymentStatus)) return {
+      step: 1,
+      next: booking.paymentStatus === "processing"
+        ? providerView
+          ? "Payment is processing. Work cannot start until it is verified; cancellation is available if payment fails."
+          : "Payment is processing. Do not pay again; work starts only after verification, and you can cancel if payment fails."
+        : booking.paymentStatus === "failed"
+          ? providerView
+            ? "Payment failed. The customer can retry or cancel the booking."
+            : "Payment failed. Retry payment or cancel the booking."
+          : booking.paymentStatus === "action_required"
+            ? "Payment needs attention before this booking can proceed."
+            : providerView
+              ? "Awaiting payment from the customer. Work cannot start until payment is verified."
+              : "Awaiting payment. Pay before work can start, or cancel the booking.",
+    };
     if (booking.status === "Confirmed") return { step: 1, next: providerView ? "Start the work when the appointment begins." : "Your appointment is confirmed. Message your provider if plans change." };
     return { step: 0, next: booking.pendingAppointmentProposalId ? (providerView ? "Waiting for the customer to respond to your time suggestion." : "Please accept or decline the suggested time.") : providerView ? "Your reply is needed. Accept or decline this request." : "Waiting for the provider to confirm your request." };
   }
@@ -77,5 +93,15 @@
     completed.forEach(item => { if (item.customerId) counts.set(item.customerId, (counts.get(item.customerId) || 0) + 1); });
     return { requests: bookings.length, confirmed, completed: completed.length, repeatCustomers: [...counts.values()].filter(count => count > 1).length };
   }
-  return { matchesFilters, compareServices, validSchedule, zonedInstant, slotsForDate, bookingProgress, metrics };
+  function featuredOnlineRequests(requests, { campus, ownId, blocked = [], now = Date.now() } = {}) {
+    if (!campus) return [];
+    const blockedRequesters = new Set(blocked);
+    return requests.filter(request => request.status === "open"
+      && Date.parse(request.expires_at) > now
+      && request.campus === campus
+      && request.requester_id !== ownId
+      && !blockedRequesters.has(request.requester_id)
+      && ["online", "both"].includes(request.delivery_method)).slice(0, 2);
+  }
+  return { matchesFilters, compareServices, validSchedule, zonedInstant, slotsForDate, bookingProgress, metrics, featuredOnlineRequests };
 });

@@ -918,6 +918,13 @@ begin
   ) then
     raise exception 'Start a conversation from an active service or booking.';
   end if;
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      least(auth.uid()::text, p_other_user_id::text)
+        || ':' || greatest(auth.uid()::text, p_other_user_id::text),
+      0
+    )
+  );
   select c.id into v_conversation_id
   from public.conversations c
   join public.conversation_members mine

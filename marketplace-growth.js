@@ -107,10 +107,24 @@
     matches(provider) { return utils.matchesFilters(provider, readFilters(), Boolean(scheduleFor(provider.id))); },
     compare(left, right) { return utils.compareServices(left, right, readFilters().sort); },
     reviewDismissed() { return reviewDismissal === reviewKey(); },
+    featuredRequests() {
+      const activeFilters = readFilters();
+      if (activeFilters.min || activeFilters.max || activeFilters.delivery || activeFilters.sort
+        || activeFilters.verified || activeFilters.scheduled) return [];
+      return utils.featuredOnlineRequests(requests, {
+        campus: state.profile.university, ownId: ownId(), blocked: state.blocked,
+      });
+    },
+    featuredRequestCard(item) {
+      const responded = responses.some(reply => reply.request_id === item.id && reply.responder_id === ownId());
+      const delivery = item.delivery_method === "both" ? "Online or in person" : "Online";
+      return `<article class="request-card featured-request-card"><span class="featured-request-badge">Online request</span><small>${escapeHTML(item.category)} · ${escapeHTML(item.campus)}</small><h2>${escapeHTML(item.title)}</h2><p>${escapeHTML(item.description)}</p><div class="request-meta"><span>${item.budget ? `Budget ${currency(item.budget)}` : "Budget to discuss"}</span><span>${delivery}</span><span>Until ${escapeHTML(new Date(item.expires_at).toLocaleDateString(undefined, { timeZone: "Africa/Accra" }))}</span></div><small>Posted by ${escapeHTML(item.requester_name || "a student")}</small><div class="request-actions"><button class="button button-primary button-small" type="button" data-reply-request="${escapeHTML(item.id)}" ${responded ? "disabled" : ""}>${responded ? "Response sent" : "Offer to help"}</button></div></article>`;
+    },
     progress(booking, providerView) {
       const progress = utils.bookingProgress(booking, providerView);
-      const stages = ["Requested", "Confirmed", "In progress", "Client verification", "Completed"];
-      return `${progress.step < 0 ? "" : `<ol class="booking-progress" aria-label="Booking progress">${stages.map((label, index) => `<li${index === progress.step ? ' aria-current="step"' : ""} class="${index < progress.step ? "is-done" : ""}">${index < progress.step ? "✓ " : ""}${label}</li>`).join("")}</ol>`}<small class="booking-next-step">${escapeHTML(progress.next)}</small>`;
+      const awaitingPayment = booking.providerAcceptedAt && !["paid", "legacy"].includes(booking.paymentStatus);
+      const stages = ["Requested", awaitingPayment ? "Payment" : "Confirmed", "In progress", "Verify", "Completed"];
+      return `${progress.step < 0 ? "" : `<ol class="booking-progress" aria-label="Booking progress">${stages.map((label, index) => `<li${index === progress.step ? ' aria-current="step"' : ""} class="${index < progress.step ? "is-done" : ""}"><span class="booking-step-marker" aria-hidden="true">${index < progress.step ? "✓" : index + 1}</span><span class="booking-step-label">${label}</span></li>`).join("")}</ol>`}<small class="booking-next-step">${escapeHTML(progress.next)}</small>`;
     },
     canStartWork() { return !appSupabase || schedulesAvailable; },
     async refresh() {
@@ -129,7 +143,7 @@
       if ($("#booking-modal").open) growth.refreshSlots();
       if (!$("#availability-form").matches(":focus-within")) populateHours();
       $("#availability-form button[type=submit]").disabled = !schedulesAvailable;
-      if (state.activePage === "requests") await growth.refreshBoard();
+      if (["home", "requests"].includes(state.activePage)) await growth.refreshBoard();
       growth.render();
       renderMarketplace();
     },
@@ -200,6 +214,7 @@
         }
         feedback("#request-board-feedback", appSupabase ? "Requests expire at the end of their chosen day in Ghana time. Keep personal and payment details out of public posts." : "Demo board: posts and replies stay in this browser and are not sent to other students.");
         renderBoard();
+        if (state.activePage === "home") renderMarketplace();
       } catch {
         feedback("#request-board-feedback", "Campus requests could not load. Try Refresh in a moment.", true);
         $("#request-board-grid").innerHTML = '<div class="empty-card"><strong>Requests are temporarily unavailable</strong><small>Your existing bookings and messages are still available.</small></div>';

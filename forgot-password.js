@@ -89,6 +89,13 @@ recoveryForm.addEventListener("submit", async (event) => {
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Could not start password recovery.");
+    if (result.recoveryStarted !== true) {
+      recoveryMessage.textContent = result.message || "No recovery code was sent. Check the email address and try again.";
+      recoveryMessage.classList.remove("success");
+      recoveryForm.hidden = false;
+      recoveryOtp.hidden = true;
+      return;
+    }
     recoveryMessage.textContent = result.message;
     recoveryMessage.classList.add("success");
     document.querySelector("#recovery-title").textContent = "Verify your email";

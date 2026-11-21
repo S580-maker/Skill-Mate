@@ -16,6 +16,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/paystack-webhook",
+      "destination": "/api/paystack-webhook"
+    },
+    {
+      "source": "/api/paystack-transfer-webhook",
+      "destination": "/api/paystack-transfer-webhook"
+    },
+    {
       "source": "/supabase-config.js",
       "destination": "/api/index?path=supabase-config"
     },

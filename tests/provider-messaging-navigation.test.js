@@ -126,3 +126,60 @@ test("provider chat opening is not blocked by an unrelated dashboard refresh fai
   assert.equal(fixture.activeConversation(), "conversation-1");
   assert.equal(fixture.activePage().page, "messages");
 });
+
+test("booking message action opens the booking-linked chat directly", async () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "user.js"), "utf8");
+  const start = source.indexOf("function openBookingConversation(");
+  const end = source.indexOf("async function startConversation(", start);
+  const context = {
+    appSupabase: {
+      rpc: async (name, args) => {
+        assert.equal(name, "start_conversation");
+        assert.equal(args.p_other_user_id, "student-1");
+        assert.equal(args.p_booking_id, "booking-1");
+        return { data: "booking-chat-1", error: null };
+      },
+    },
+    state: {
+      bookings: [{
+        id: "booking-1", providerId: "provider-1", customerId: "student-1", customer: "Student",
+      }],
+      messages: [],
+      blocked: [],
+    },
+    ownProviderId: () => "provider-1",
+    isOwnBooking: booking => booking.providerId === "provider-1",
+    getProvider: () => null,
+    loadConversationMessages: async (id, name) => {
+      assert.equal(id, "booking-chat-1");
+      assert.equal(name, "Student");
+      return [{ id: "message-1", text: "Hello" }];
+    },
+    setActiveConversation: id => { context.activeConversationId = id; },
+    showPage: (page, options) => { context.activePage = { page, options }; },
+    pendingReplyId: "reply-1",
+    document: {
+      querySelector: () => ({ focus() { context.focused = true; } }),
+    },
+    runAction: action => { context.action = action(); },
+    showToast() {},
+  };
+  vm.createContext(context);
+  vm.runInContext(source.slice(start, end), context);
+
+  context.openBookingConversation("booking-1");
+  await context.action;
+
+  assert.equal(context.state.messages[0].id, "booking-chat-1");
+  assert.equal(context.state.messages[0].messages[0].text, "Hello");
+  assert.equal(context.activeConversationId, "booking-chat-1");
+  assert.equal(context.activePage.page, "messages");
+  assert.equal(context.activePage.options.openConversation, true);
+  assert.equal(context.focused, true);
+  assert.equal(context.pendingReplyId, null);
+});
+
+test("incoming pending bookings have an explicit confirmation button", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "user.js"), "utf8");
+  assert.match(source, /data-decision="Confirmed"[^>]*>Accept<\/button>/);
+});

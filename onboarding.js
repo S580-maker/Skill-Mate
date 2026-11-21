@@ -188,14 +188,17 @@ async function saveOnboarding(skip = false) {
       const { data } = onboardingClient.storage.from("portfolio-images").getPublicUrl(imagePath);
       avatarUrl = data.publicUrl;
     }
-    const { error } = await onboardingClient.from("profiles").update({
+    const { data: updatedRows, error } = await onboardingClient.from("profiles").update({
       full_name: onboardingName.value.trim(),
       university: onboardingCampus.value.trim(),
       skills: [...selectedSkills.values()],
       avatar_url: avatarUrl || null,
       onboarding_completed: true,
-    }).eq("id", currentUser.id);
+    }).eq("id", currentUser.id).select("id");
     if (error) throw error;
+    if (!updatedRows?.length) {
+      throw new Error("Your profile could not be saved. Please refresh and try again.");
+    }
     const { data: sessionData, error: sessionError } = await onboardingClient.auth.getSession();
     if (sessionError) throw sessionError;
     await window.syncSkillmateServerSession(sessionData.session);

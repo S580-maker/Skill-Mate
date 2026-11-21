@@ -152,6 +152,19 @@ function respondError(response, status, message) {
   return response.status(status).json({ error: message });
 }
 
+function emailVerificationErrorMessage(error) {
+  const message = error instanceof Error ? error.message : "";
+  const isConfigurationError = message.startsWith("Missing required server setting:")
+    || message.startsWith("Missing required email server settings:")
+    || message.startsWith("AUTH_OTP_SECRET must contain")
+    || message.startsWith("Set both SUPABASE_URL and SUPABASE_ANON_KEY")
+    || message.startsWith("SUPABASE_URL must")
+    || message.startsWith("SUPABASE_ANON_KEY must");
+  return isConfigurationError
+    ? message
+    : "Email verification is temporarily unavailable. Please try again shortly.";
+}
+
 async function deleteExpiredChallenges() {
   const before = encodeURIComponent(new Date().toISOString());
   const { response } = await supabaseRequest(`/rest/v1/auth_login_challenges?expires_at=lt.${before}`, {
@@ -252,8 +265,10 @@ async function requestPasswordRecovery(request, response) {
     return respondError(response, 405, "Method not allowed.");
   }
   const email = String(request.body?.email || "").trim().toLowerCase();
-  const genericMessage = "If an account uses this email, a six-digit verification code has been sent.";
-  if (!/^\S+@\S+\.\S+$/.test(email)) return response.status(200).json({ message: genericMessage });
+  const genericMessage = "No recovery code was sent. Check the email address and try again.";
+  if (!/^\S+@\S+\.\S+$/.test(email)) {
+    return response.status(200).json({ message: genericMessage, recoveryStarted: false });
+  }
 
   try {
     getServiceKey();
@@ -264,21 +279,34 @@ async function requestPasswordRecovery(request, response) {
     }, true);
     if (lookupResponse.status >= 400 && lookupResponse.status < 500
       && lookupResponse.status !== 401 && lookupResponse.status !== 403) {
-      return response.status(200).json({ message: genericMessage });
+      return response.status(200).json({ message: genericMessage, recoveryStarted: false });
     }
     if (!lookupResponse.ok) throw new Error("Could not look up the password recovery account.");
-    const userId = result?.user?.id;
-    if (!userId) return response.status(200).json({ message: genericMessage });
+    const userId = result?.user?.id || result?.id;
+    if (!userId) {
+      return response.status(200).json({ message: genericMessage, recoveryStarted: false });
+    }
 
     const recent = await findRecentChallenge(email);
-    if (recent.length >= maximumChallengesPerWindow
-      || (recent[0] && Date.now() - new Date(recent[0].last_sent_at).getTime() < resendCooldownMs)) {
-      return response.status(200).json({ message: genericMessage });
+    if (recent[0] && Date.now() - new Date(recent[0].last_sent_at).getTime() < resendCooldownMs) {
+      return response.status(200).json({
+        message: "A recovery code was sent recently. Wait 30 seconds before trying again.",
+        recoveryStarted: false,
+      });
+    }
+    if (recent.length >= maximumChallengesPerWindow) {
+      return response.status(200).json({
+        message: "Too many recovery codes were requested. Try again in 15 minutes.",
+        recoveryStarted: false,
+      });
     }
     const token = await createChallenge(email, { type: "recovery", userId });
     setChallengeCookie(response, token);
     response.setHeader("Cache-Control", "no-store");
-    return response.status(200).json({ message: genericMessage });
+    return response.status(200).json({
+      message: "A six-digit verification code was sent to your email.",
+      recoveryStarted: true,
+    });
   } catch (error) {
     console.error("Could not start Skillmate password recovery.", error);
     return respondError(response, 503, "Password recovery is temporarily unavailable. Please try again shortly.");
@@ -379,17 +407,7 @@ async function signIn(request, response) {
     return response.status(200).json({ message: "A six-digit sign-in code was sent to your email." });
   } catch (error) {
     console.error("Could not start Skillmate email verification.", error);
-    const message = error instanceof Error ? error.message : "";
-    const isConfigurationError = message.startsWith("Missing required server setting:")
-      || message.startsWith("Missing required email server settings:")
-      || message.startsWith("AUTH_OTP_SECRET must contain");
-    return respondError(
-      response,
-      503,
-      isConfigurationError
-        ? message
-        : "Email verification is temporarily unavailable. Please try again shortly.",
-    );
+    return respondError(response, 503, emailVerificationErrorMessage(error));
   }
 }
 
@@ -438,7 +456,7 @@ async function googleSignIn(request, response) {
     return response.status(200).json({ email, message: "A six-digit sign-in code was sent to your email." });
   } catch (error) {
     console.error("Could not start Google email verification.", error);
-    return respondError(response, 503, "Email verification is temporarily unavailable. Please try again shortly.");
+    return respondError(response, 503, emailVerificationErrorMessage(error));
   }
 }
 
@@ -488,7 +506,7 @@ async function sessionSignIn(request, response) {
     return response.status(200).json({ email, message: "A six-digit sign-in code was sent to your email." });
   } catch (error) {
     console.error("Could not start restored-session email verification.", error);
-    return respondError(response, 503, "Email verification is temporarily unavailable. Please try again shortly.");
+    return respondError(response, 503, emailVerificationErrorMessage(error));
   }
 }
 
@@ -522,7 +540,7 @@ async function signUp(request, response) {
     return response.status(200).json({ message: "A six-digit verification code was sent to your email." });
   } catch (error) {
     console.error("Could not start Skillmate signup verification.", error);
-    return respondError(response, 503, "Email verification is temporarily unavailable. Please try again shortly.");
+    return respondError(response, 503, emailVerificationErrorMessage(error));
   }
 }
 

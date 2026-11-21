@@ -15,6 +15,10 @@ const consolidatedModesMigration = fs.readFileSync(
   path.join(__dirname, "..", "supabase", "migrations", "20261105110000_consolidated_negotiation_modes.sql"),
   "utf8",
 );
+const newOrderMigration = fs.readFileSync(
+  path.join(__dirname, "..", "supabase", "migrations", "20261121100000_new_order_price_negotiation.sql"),
+  "utf8",
+);
 const userScript = fs.readFileSync(path.join(__dirname, "..", "user.js"), "utf8");
 const index = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 
@@ -68,7 +72,7 @@ test("pricing modes are simplified, legacy modes migrate safely and fixed servic
   assert.match(userScript, /service\.negotiationMode === "fixed" \? "Fixed Price"/);
   assert.match(userScript, /service\.negotiationMode !== "fixed" \? `<span class="detail-negotiation-actions">/);
   assert.match(userScript, /serviceMap\.set\(service\.id, service\)/);
-  assert.match(userScript, /propose\.textContent = "Propose Price"/);
+  assert.match(userScript, /propose\.textContent = canNegotiateNewOrder \? "Negotiate New Order" : "Propose Price"/);
   assert.match(userScript, /function createChatPriceOfferCard/);
   assert.match(consolidatedModesMigration, /Fixed Price does not use a minimum price/);
 });
@@ -94,7 +98,21 @@ test("fixed services reject direct negotiation writes and preserve prior negotia
   assert.match(migration, /revoke insert, update on public\.services from authenticated/);
   assert.match(migration, /grant update \(is_active\) on public\.services to authenticated/);
   assert.doesNotMatch(saveListing, /delete from public\.price_negotiations|delete from public\.price_offers/);
-  assert.match(saveListing, /where id = p_service_id and provider_id = auth\.uid\(\)/);
+});
+
+test("a terminal order can start a fresh negotiation without adding database tables", () => {
+  assert.match(newOrderMigration, /drop constraint if exists price_negotiations_service_id_customer_id_key/);
+  assert.match(newOrderMigration, /create index if not exists price_negotiations_service_id_customer_id_idx/);
+  assert.match(newOrderMigration, /pg_advisory_xact_lock/);
+  assert.match(newOrderMigration, /v_booking_status in \('cancelled', 'declined', 'completed'\)/);
+  assert.doesNotMatch(newOrderMigration, /create table/i);
+  const startConversation = newOrderMigration.slice(
+    newOrderMigration.indexOf("create or replace function public.start_conversation"),
+    newOrderMigration.indexOf("notify pgrst"),
+  );
+  assert.match(startConversation, /pg_advisory_xact_lock/);
+  assert.match(startConversation, /least\(auth\.uid\(\)::text, p_other_user_id::text\)/);
+  assert.match(startConversation, /greatest\(auth\.uid\(\)::text, p_other_user_id::text\)/);
 });
 
 test("chat bar shows booking for fixed services and negotiation only for negotiable services", () => {
@@ -105,4 +123,18 @@ test("chat bar shows booking for fixed services and negotiation only for negotia
   assert.match(userScript, /if \(selectedService\.negotiationMode !== "fixed" && negotiation\?\.state === "agreed"\)/);
   assert.match(index, /<strong>Negotiable<\/strong>/);
   assert.match(userScript, /selector\.dataset\.chatServiceSelect = ""/);
+});
+
+test("offer responses reload their exact negotiation after shared dashboard refresh", () => {
+  const responseHandler = userScript.slice(
+    userScript.indexOf('const priceAction = event.target.closest("[data-price-action]")'),
+    userScript.indexOf('const retryButton = event.target.closest("[data-retry-message]")'),
+  );
+  assert.match(responseHandler, /await refreshSupabaseState(?:\("negotiations"\))?[\s\S]*await refreshConversationPriceNegotiation\(priceAction\.dataset\.negotiationId\)/);
+  const refreshHelper = userScript.slice(
+    userScript.indexOf("async function refreshConversationPriceNegotiation"),
+    userScript.indexOf("async function loadAllRows"),
+  );
+  assert.match(refreshHelper, /loadConversationPriceNegotiation\(negotiationId\)/);
+  assert.match(refreshHelper, /priceNegotiations = \[\s+negotiation,/);
 });

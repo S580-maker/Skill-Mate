@@ -7,10 +7,10 @@
     <title>Skillmate | Student marketplace</title>
     <link rel="preload" href="/assets/fonts/plus-jakarta-sans-latin-variable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="landing-fonts.css?v=3" />
-    <link rel="preload" href="user.css?v=33" as="style" />
-    <link rel="stylesheet" href="user.css?v=33" />
-    <link rel="stylesheet" href="app-refresh.css?v=13" />
-    <link rel="stylesheet" href="marketplace-growth.css?v=11" />
+    <link rel="preload" href="user.css?v=38" as="style" />
+    <link rel="stylesheet" href="user.css?v=38" />
+    <link rel="stylesheet" href="app-refresh.css?v=16" />
+    <link rel="stylesheet" href="marketplace-growth.css?v=14" />
   <link rel="stylesheet" href="student-gold.css?v=4" />
     <link rel="stylesheet" href="marketplace-redesign.css?v=3" />
     <link rel="stylesheet" href="/brand-colors.css?v=1" />
@@ -134,8 +134,8 @@
             <p class="growth-feedback" id="request-board-feedback" role="status" aria-live="polite"></p><div class="request-board-grid" id="request-board-grid"></div>
           </section>
           <section class="view" id="view-bookings" data-view="bookings">
-            <div class="view-heading"><div><p class="eyebrow">YOUR SKILLMATE ACTIVITY</p><h1>My bookings</h1><p>Every appointment, request and group booking in one place.</p></div><button class="button button-primary" type="button" data-page-link="home">Find a service</button></div>
-            <div class="booking-directions" role="group" aria-label="Booking direction"><button class="active" type="button" data-booking-direction="made" aria-pressed="true">Bookings I made</button><button type="button" data-booking-direction="received" aria-pressed="false">Requests I received</button></div>
+            <div class="view-heading"><div><p class="eyebrow">YOUR SKILLMATE ACTIVITY</p><h1>Bookings</h1><p>Manage your bookings and requests.</p></div><button class="button button-primary" type="button" data-page-link="home">Find a service</button></div>
+            <div class="booking-directions" role="group" aria-label="Booking direction"><button class="active" type="button" data-booking-direction="made" aria-pressed="true">Sent</button><button type="button" data-booking-direction="received" aria-pressed="false">Received <span class="booking-request-count" data-booking-request-count aria-label="0 new requests" hidden>0</span></button></div>
             <div class="tab-row" id="booking-tabs"><button class="tab-button active" data-booking-filter="all">All <span id="all-booking-count">0</span></button><button class="tab-button" data-booking-filter="upcoming">Upcoming</button><button class="tab-button" data-booking-filter="requests">Requests</button><button class="tab-button" data-booking-filter="completed">Completed</button></div>
             <aside class="required-review-reminder" id="required-review-reminder" aria-live="polite" hidden></aside>
             <div class="booking-list" id="user-booking-list"></div>
@@ -145,6 +145,9 @@
             <div class="view-heading messages-page-heading"><div><p class="eyebrow">KEEP IT ON CAMPUS</p><h1>Messages</h1><p>Coordinate with students and service providers.</p></div></div>
             <div class="messages-layout" id="messages-layout">
               <aside class="conversation-sidebar" aria-label="Conversations">
+                <div class="conversation-sidebar-heading">
+                  <div><p class="eyebrow">INBOX</p><h2>Conversations</h2></div>
+                </div>
                 <label class="conversation-search"><span aria-hidden="true">⌕</span><input id="conversation-search" type="search" placeholder="Search chats" aria-label="Search conversations" /></label>
                 <div class="conversation-list" id="conversation-list"></div>
               </aside>
@@ -183,10 +186,33 @@
           </section>
 
           <section class="view" id="view-earnings" data-view="earnings">
-            <div class="view-heading"><div><p class="eyebrow">YOUR SIDE HUSTLE</p><h1>Estimated earnings</h1><p>Based on completed jobs. Payments are arranged directly with your customers.</p></div><button class="button button-outline" id="earnings-export" type="button">Export completed jobs</button></div>
+            <div class="view-heading"><div><p class="eyebrow">YOUR SIDE HUSTLE</p><h1>Estimated earnings</h1><p>Customer-verified Paystack payments become available for withdrawal.</p></div><button class="button button-outline" id="earnings-export" type="button">Export completed jobs</button></div>
             <div id="growth-metrics" class="growth-metrics" aria-label="Your booking results"></div>
-            <div class="earnings-hero"><div><span>COMPLETED WORK · ESTIMATED TOTAL</span><strong id="earnings-total">GH₵ 0</strong><small>This adds up completed booking prices. Skillmate does not collect payments or confirm what you’ve been paid.</small></div><span class="earnings-illustration">GH₵</span></div>
-            <div class="section-heading"><div><h2>Completed jobs</h2><p>Listed job values; this is not a payment or payout record.</p></div></div><div class="booking-list" id="earnings-list"></div>
+            <div class="earnings-summary-grid">
+              <article class="earnings-hero earnings-total-card"><div><span>TOTAL EARNINGS · PAID COMPLETIONS</span><strong id="earnings-total">GH₵ 0</strong><small id="earnings-pending">Includes paid work still waiting for customer verification.</small></div><span class="earnings-illustration">GH₵</span></article>
+              <article class="earnings-hero earnings-available-card"><div><span>AVAILABLE BALANCE</span><strong id="earnings-available">GH₵ 0</strong><small id="earnings-available-note">Ready to withdraw after customer verification.</small><button class="button button-primary" id="payout-withdraw-open" type="button" disabled>Withdraw</button><form class="payout-form payout-withdraw-form" id="payout-withdraw-form" hidden><h3>Withdraw earnings</h3><label>Payout destination<select id="payout-recipient" name="recipient" required></select></label><label>Amount (GH₵)<input id="payout-amount" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required /></label><button class="button button-primary" id="payout-withdraw-submit" type="submit">Confirm withdrawal</button></form></div><span class="earnings-illustration">GH₵</span></article>
+            </div>
+            <div class="payout-wallet-metrics" aria-label="Virtual wallet balances">
+              <article><span>Pending verification</span><strong id="wallet-pending">GH₵ 0</strong></article>
+              <article><span>Reserved withdrawals</span><strong id="wallet-reserved">GH₵ 0</strong></article>
+              <article><span>Withdrawn</span><strong id="wallet-withdrawn">GH₵ 0</strong></article>
+            </div>
+            <section class="panel payout-panel" aria-labelledby="payout-heading">
+              <div class="panel-heading"><div><h2 id="payout-heading">Virtual wallet activity</h2><p>Withdraw only from your available verified earnings. Pending amounts cannot be withdrawn.</p></div></div>
+              <p class="payout-feedback" id="payout-feedback" role="status" aria-live="polite">Loading your payout details…</p>
+              <div class="payout-destination-list" id="payout-destination-list"></div>
+              <form class="payout-form" id="payout-destination-form" hidden>
+                <h3>Add a payout destination</h3>
+                <label>Destination type<select id="payout-type" name="type" required><option value="nuban">Ghana bank account</option><option value="mobile_money">Ghana mobile money</option></select></label>
+                <label>Bank or mobile network<select id="payout-bank" name="bank" required><option value="">Loading destinations…</option></select></label>
+                <label>Account holder name<input id="payout-name" name="name" autocomplete="name" maxlength="100" required /></label>
+                <label id="payout-account-label">Account number<input id="payout-account" name="accountNumber" inputmode="numeric" autocomplete="off" required /></label>
+                <button class="button button-outline" id="payout-recipient-submit" type="submit">Save payout destination</button>
+              </form>
+              <div class="payout-history"><h3>Withdrawal history</h3><div id="payout-history-list"></div></div>
+              <div class="payout-history"><h3>Transaction ledger</h3><div id="payout-ledger-list"></div></div>
+            </section>
+            <div class="section-heading"><div><h2>Completed jobs</h2><p>Only completed work verified by the customer is marked Paid.</p></div></div><div class="booking-list" id="earnings-list"></div>
           </section>
 
           <section class="view" id="view-profile-settings" data-view="profile-settings">
@@ -330,6 +356,26 @@
         </footer>
       </form>
     </dialog>
+    <dialog class="app-modal payment-modal" id="payment-modal" aria-labelledby="payment-title">
+      <div class="modal-frame">
+        <button class="modal-close" type="button" data-close aria-label="Close payment">×</button>
+        <p class="eyebrow">SECURE CHECKOUT · TEST MODE</p>
+        <h2 id="payment-title">Complete your booking</h2>
+        <p class="modal-description" id="payment-service-name">Your accepted service</p>
+        <section class="payment-breakdown" aria-label="Payment breakdown">
+          <div class="payment-line"><span>Agreed service price</span><strong id="payment-service-price">—</strong></div>
+          <div class="payment-line"><span>Skillmate booking fee <small id="payment-fee-rate">5%</small></span><strong id="payment-booking-fee">—</strong></div>
+          <div class="payment-line payment-total"><span>Total payable</span><strong id="payment-total">—</strong></div>
+        </section>
+        <section class="payment-methods" aria-label="Available payment methods">
+          <div class="payment-method"><span aria-hidden="true">▤</span><span><strong>Mobile Money</strong><small>Pay with your mobile wallet</small></span></div>
+          <div class="payment-method"><span aria-hidden="true">▰</span><span><strong>Debit or credit card</strong><small>Visa, Mastercard and more</small></span></div>
+        </section>
+        <p class="payment-disclaimer">Your provider starts after your payment is confirmed. Payments are securely processed by Paystack.</p>
+        <p class="modal-feedback" id="payment-feedback" role="status" aria-live="polite" hidden></p>
+        <button class="button button-primary modal-submit" id="payment-submit" type="button" disabled>Loading payment details…</button>
+      </div>
+    </dialog>
     <dialog class="app-modal" id="price-offer-modal" aria-labelledby="price-offer-title"><form class="modal-frame" id="price-offer-form" novalidate><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">PRICE NEGOTIATION</p><h2 id="price-offer-title">Make a price offer</h2><p class="modal-description" id="price-offer-description"></p><section class="price-offer-service-summary" id="price-offer-service-summary" aria-label="Selected service" hidden><strong id="price-offer-service-name"></strong><span>Listed price <strong id="price-offer-listed-price"></strong></span></section><input type="hidden" id="price-offer-provider-id" /><input type="hidden" id="price-offer-service-id" /><input type="hidden" id="price-offer-negotiation-id" /><input type="hidden" id="price-offer-response-id" /><input type="hidden" id="price-offer-action" /><input type="hidden" id="price-offer-conversation-id" /><label>Proposed price (GH₵)<input id="price-offer-amount" type="number" min="0.01" max="99999999.99" step="0.01" required /></label><label>Message <span class="label-hint">(optional)</span><textarea id="price-offer-message" rows="3" maxlength="500" placeholder="Add a note about your proposal."></textarea></label><p class="settings-feedback" id="price-offer-feedback" role="status" aria-live="polite" hidden></p><button class="button button-primary modal-submit" id="price-offer-submit" type="submit">Send offer</button></form></dialog>
     <dialog class="app-modal" id="appointment-proposal-modal" aria-labelledby="appointment-proposal-title"><form class="modal-frame" id="appointment-proposal-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">BOOKING SCHEDULE</p><h2 id="appointment-proposal-title">Suggest another time</h2><p class="modal-description">The customer must approve this time. The booking stays unconfirmed until they respond.</p><input type="hidden" id="appointment-proposal-booking-id" /><div class="form-row"><label>Suggested date<input id="appointment-proposal-date" type="date" required /></label><label>Suggested time<input id="appointment-proposal-time" type="time" required /></label></div><p class="settings-feedback" id="appointment-proposal-feedback" role="status" aria-live="polite" hidden></p><button class="button button-primary modal-submit" type="submit">Send time suggestion</button></form></dialog>
     <dialog class="app-modal" id="groups-modal" aria-labelledby="groups-title"><div class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close groups">×</button><p class="eyebrow">BETTER TOGETHER</p><h2 id="groups-title">Book with friends</h2><p class="modal-description">Join a group for this provider or suggest a group of your own. Confirm the price together before booking.</p><div class="group-grid" id="group-grid"></div><button class="button button-primary" type="button" data-open="group-modal">Start a group</button></div></dialog>
@@ -412,11 +458,12 @@
     <script defer src="service-form-utils.js?v=3"></script>
     <script defer src="marketplace-utils.js?v=4"></script>
     <script defer src="push-notification-platform.js?v=1"></script>
-    <script defer src="marketplace-growth-utils.js?v=1"></script>
+    <script defer src="marketplace-growth-utils.js?v=4"></script>
     <script defer src="loading-ui.js?v=1"></script>
-    <script defer src="user.js?v=52"></script>
-    <script defer src="marketplace-growth.js?v=8"></script>
+    <script defer src="https://js.paystack.co/v1/inline.js"></script>
+    <script defer src="user.js?v=63"></script>
+    <script defer src="marketplace-growth.js?v=12"></script>
     <script defer src="service-form.js?v=4"></script>
-    <script defer src="notifications.js?v=2"></script>
+    <script defer src="notifications.js?v=6"></script>
   </body>
 </html>
