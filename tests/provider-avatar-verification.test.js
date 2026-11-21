@@ -8,7 +8,7 @@ const start = source.indexOf("function providerAvatarMarkup(");
 const end = source.indexOf("\nfunction listingImage(", start);
 const context = {
   escapeHTML: value => String(value ?? "").replace(/[&<>"']/g, ""),
-  window: { skillmateMarketplace: { safeImageUrl: () => "" } },
+  window: { skillflexMarketplace: { safeImageUrl: () => "" } },
 };
 vm.createContext(context);
 vm.runInContext(source.slice(start, end), context);

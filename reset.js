@@ -1,4 +1,4 @@
-const resetClient = window.skillmateSupabase;
+const resetClient = window.skillflexSupabase;
 const resetForm = document.querySelector("#reset-form");
 const newPassword = document.querySelector("#new-password");
 const passwordToggle = document.querySelector("#password-visibility");
@@ -35,7 +35,7 @@ newPassword.addEventListener("input", updateResetPasswordHint);
 
 async function checkResetSession() {
   if (!resetClient) {
-    resetMessage.textContent = window.skillmateSupabaseError || "Password reset is unavailable because Supabase is not connected.";
+    resetMessage.textContent = window.skillflexSupabaseError || "Password reset is unavailable because Supabase is not connected.";
     resetSubmit.disabled = true;
     return;
   }
@@ -57,7 +57,7 @@ resetClient?.auth.onAuthStateChange((event, session) => {
 });
 
 checkResetSession().catch((error) => {
-  console.error("Could not validate the Skillmate password reset link.", error);
+  console.error("Could not validate the Skill Flex password reset link.", error);
   resetMessage.textContent = friendlyResetError(error);
   resetSubmit.disabled = true;
 });
@@ -83,12 +83,12 @@ resetForm.addEventListener("submit", async (event) => {
     if (error) throw error;
     const { data, error: sessionError } = await resetClient.auth.getSession();
     if (sessionError) throw sessionError;
-    await window.syncSkillmateServerSession(data.session);
-    resetMessage.textContent = "Your password has been updated. Taking you to Skillmate…";
+    await window.syncSkillflexServerSession(data.session);
+    resetMessage.textContent = "Your password has been updated. Taking you to Skill Flex…";
     resetMessage.classList.add("success");
     window.setTimeout(() => window.location.assign("index.html"), 700);
   } catch (error) {
-    console.error("Could not update the Skillmate password.", error);
+    console.error("Could not update the Skill Flex password.", error);
     resetMessage.textContent = friendlyResetError(error);
     resetSubmit.disabled = false;
   } finally {

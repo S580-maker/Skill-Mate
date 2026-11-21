@@ -1,7 +1,7 @@
 (function initializeSmartSearch(root, factory) {
   const smartSearch = factory();
   if (typeof module !== "undefined" && module.exports) module.exports = smartSearch;
-  if (root) root.skillmateSmartSearch = smartSearch;
+  if (root) root.skillflexSmartSearch = smartSearch;
 }(typeof window !== "undefined" ? window : null, () => {
   const synonymGroups = [
     ["tech help", "tech support", "it support", "technology", "laptop", "laptops", "computer", "computers", "phone", "phones", "device", "devices", "software", "setup", "troubleshooting"],

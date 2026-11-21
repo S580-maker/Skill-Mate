@@ -8,7 +8,7 @@ const migration = fs.readFileSync(
   path.join(root, "supabase", "migrations", "20261104130000_customer_confirmed_price_agreement_bookings.sql"),
   "utf8",
 );
-const userScript = fs.readFileSync(path.join(root, "user.js"), "utf8");
+const userScript = fs.readFileSync(path.join(root, "user.js"), "utf8") + fs.readFileSync(path.join(__dirname, "..", "booking-ui.js"), "utf8") + fs.readFileSync(path.join(__dirname, "..", "provider-profile.js"), "utf8");
 const userStyle = fs.readFileSync(path.join(root, "user.css"), "utf8");
 const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const notifications = fs.readFileSync(path.join(root, "notifications.js"), "utf8");
@@ -61,8 +61,8 @@ test("agreed booking UI requires customer confirmation and exposes time approval
   assert.match(userScript, /p_proposed_at: proposedAt\.toISOString\(\)/);
   assert.match(userScript, /p_accept: accept/);
   assert.match(notifications, /conversation_id, booking_id/);
-  assert.match(notifications, /skillmate:open-booking/);
-  assert.match(userScript, /skillmate:open-booking/);
+  assert.match(notifications, /skillflex:open-booking/);
+  assert.match(userScript, /skillflex:open-booking/);
 });
 
 test("existing chats expose the compact service bar and agreed booking link", () => {

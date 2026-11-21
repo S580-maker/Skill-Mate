@@ -1,4 +1,4 @@
-const baseUrl = new URL(process.env.SKILLMATE_LOCAL_URL || "http://127.0.0.1:3000");
+const baseUrl = new URL(process.env.SKILLFLEX_LOCAL_URL || "http://127.0.0.1:3000");
 const localHosts = new Set(["127.0.0.1", "localhost", "::1"]);
 const requestCount = 1000;
 const concurrency = 25;
@@ -43,6 +43,6 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error("Local Skillmate load check failed.", error);
+  console.error("Local Skillflex load check failed.", error);
   process.exitCode = 1;
 });

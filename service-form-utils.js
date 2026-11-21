@@ -106,5 +106,5 @@
   }
   const api = { MAX_IMAGE_BYTES, deliveryLabels, example, validate, validateImageHeader, compressImageFile, normalizeNegotiationMode, metadata, payload };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  else root.skillmateServiceUtils = api;
+  else root.skillflexServiceUtils = api;
 })(globalThis);

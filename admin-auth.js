@@ -1,7 +1,9 @@
-const adminClient = window.skillmateSupabase;
+const adminClient = window.skillflexSupabase;
 const adminStatus = document.querySelector("#admin-auth-status");
 
 function showAdminGate(message, withLogin = false, withReload = false) {
+  document.querySelector("#admin-auth-gate")?.removeAttribute("aria-busy");
+  document.querySelector("#admin-auth-gate")?.classList.add("is-error");
   adminStatus.replaceChildren(document.createTextNode(message));
   if (withLogin) {
     const link = document.createElement("a");
@@ -285,7 +287,7 @@ async function refreshAdminSystemStatus() {
       ? `Service issue: ${unavailable.join(" and ")} unavailable`
       : "Some services are unavailable";
   } catch (error) {
-    console.error("Could not check Skillmate system status.", error);
+    console.error("Could not check Skill Flex system status.", error);
     status.dataset.status = "unavailable";
     label.textContent = "System status unavailable";
     authStatus.textContent = "Unavailable";
@@ -425,7 +427,9 @@ async function refreshAdminOperations() {
   }
 }
 
+let supportTicketsRequest = 0;
 async function fetchSupportTickets() {
+  const requestId = ++supportTicketsRequest;
   const status = document.querySelector("#support-queue-status");
   const rows = document.querySelector("#support-ticket-rows");
   status.textContent = "Loading support tickets…";
@@ -501,6 +505,7 @@ async function fetchSupportTickets() {
     status.textContent = ["PGRST205", "42P01"].includes(error.code)
       ? "Support tickets require the settings and support database migration."
       : "Could not load support tickets. Refresh to try again.";
+    if (!rows.children.length) window.skillflexLoading.showError(rows, { message: status.textContent, onRetry: fetchSupportTickets });
   }
 }
 
@@ -627,8 +632,8 @@ async function fetchAdminDashboard() {
   document.querySelector(".welcome-row .demo-pill").textContent = "LIVE DATA";
   document.querySelector("#admin-date").firstChild.textContent = new Date().toLocaleDateString("en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
-  }).toUpperCase() + " ";
-  document.querySelector(".welcome-row h1").innerHTML = `Welcome, ${escapeAdminText(window.adminProfile.full_name)} <span aria-hidden="true">✦</span>`;
+  });
+  document.querySelector(".welcome-row h1").textContent = `${timeOfDay}, ${firstName}`;
   document.querySelector(".profile-copy strong").textContent = window.adminProfile.full_name;
   document.querySelector(".profile-avatar").textContent = initials(window.adminProfile.full_name);
   const rows = bookings.data || [];
@@ -760,8 +765,8 @@ function updateAdminChart(days) {
 
 async function protectAdminDashboard() {
   if (!adminClient) {
-    showAdminGate(window.skillmateSupabaseError
-      ? `Admin access is locked. ${window.skillmateSupabaseError}`
+    showAdminGate(window.skillflexSupabaseError
+      ? `Admin access is locked. ${window.skillflexSupabaseError}`
       : "Admin access is locked. Configure the Supabase Project URL and public key in the server environment.", true);
     return;
   }
@@ -778,7 +783,7 @@ async function protectAdminDashboard() {
     }
     adminStatus.textContent = "Securing your session…";
     await withAdminTimeout(
-      window.syncSkillmateServerSession(sessionData.session),
+      window.syncSkillflexServerSession(sessionData.session),
       "Securing your session timed out. Check your connection and try again.",
     );
     adminStatus.textContent = "Verifying administrator role…";
@@ -828,7 +833,7 @@ async function protectAdminDashboard() {
     signout.addEventListener("click", async () => {
       signout.disabled = true;
       try {
-        await window.skillmateSignOut();
+        await window.skillflexSignOut();
         window.location.replace("/");
       } catch (error) {
         console.error("Could not sign out.", error);
@@ -1132,13 +1137,13 @@ async function protectAdminDashboard() {
 if (adminClient) {
   adminClient.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_OUT") {
-      window.clearSkillmateServerSession()
-        .catch((sessionError) => console.error("Could not clear the secure Skillmate session.", sessionError))
+      window.clearSkillflexServerSession()
+        .catch((sessionError) => console.error("Could not clear the secure Skill Flex session.", sessionError))
         .finally(() => window.location.replace("login.html?next=admin"));
     }
     if (event === "TOKEN_REFRESHED" && session) {
-      window.syncSkillmateServerSession(session).catch((syncError) => {
-        console.error("Could not refresh the secure Skillmate session.", syncError);
+      window.syncSkillflexServerSession(session).catch((syncError) => {
+        console.error("Could not refresh the secure Skill Flex session.", syncError);
       });
     }
   });

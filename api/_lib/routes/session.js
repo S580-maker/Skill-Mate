@@ -8,6 +8,7 @@ const {
 } = require("../supabase");
 
 module.exports = async function session(request, response) {
+  response.setHeader("Cache-Control", "private, no-store");
   if (request.method === "DELETE") {
     clearSessionCookie(response);
     return response.status(204).end();
@@ -25,6 +26,7 @@ module.exports = async function session(request, response) {
   try {
     const user = await getSupabaseUser(accessToken);
     if (!user?.id) {
+      clearSessionCookie(response);
       return response.status(401).json({ error: "Your sign-in session has expired. Please sign in again." });
     }
     if (!await isOtpVerifiedSession(accessToken, user.id)) {
@@ -44,7 +46,7 @@ module.exports = async function session(request, response) {
     setSessionCookie(response, accessToken);
     return response.status(204).end();
   } catch (error) {
-    console.error("Could not validate the Skillmate session.", error);
-    return response.status(503).json({ error: "Skillmate could not validate your session. Please try again." });
+    console.error("Could not validate the Skill Flex session.", error);
+    return response.status(503).json({ error: "Skill Flex could not validate your session. Please try again." });
   }
 };

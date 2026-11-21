@@ -2,7 +2,7 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Serve Skillmate",
+			"label": "Serve Skill Flex",
 			"type": "shell",
 			"command": "node server.js",
 			"isBackground": true,

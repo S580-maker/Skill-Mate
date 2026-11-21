@@ -1,4 +1,4 @@
-window.SKILLMATE_UNIVERSITY_DIRECTORY = {
+window.SKILLFLEX_UNIVERSITY_DIRECTORY = {
   fallback: [
     "Academic City University",
     "Accra Institute of Technology",

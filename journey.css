@@ -1,0 +1,23 @@
+/* Booking clarity and provider evidence. */
+.booking-next-action { display:grid; gap:4px; margin-top:12px; padding:12px 14px; border-left:3px solid var(--accent, #9b752b); background:var(--surface); border-radius:8px; }
+.booking-next-action strong { font-size:.8rem; }
+.booking-next-action span,.booking-next-action small { font-size:.8rem; line-height:1.5; }
+.booking-contract { margin-top:10px; max-width:100%; font-size:.8rem; }
+.booking-contract summary { cursor:pointer; padding:8px 0; font-weight:600; }
+.booking-contract dl { margin:6px 0; display:grid; gap:8px; }
+.booking-contract dl div { display:grid; grid-template-columns:90px minmax(0,1fr); gap:10px; }
+.booking-contract dd { margin:0; overflow-wrap:anywhere; white-space:pre-wrap; }
+.booking-contract dt { font-weight:600; }
+.provider-evidence { display:grid; gap:10px; padding:18px; border:1px solid var(--border); border-radius:14px; background:var(--surface); }
+.provider-evidence>div:first-child { display:grid; gap:5px; }
+.provider-evidence p { margin:0; font-size:.82rem; line-height:1.6; }
+.provider-evidence-links { display:flex; flex-wrap:wrap; gap:12px; }
+.provider-detail-modal .detail-actions { position:sticky; bottom:-22px; z-index:2; margin-top:12px; padding:14px 0; background:var(--surface); }
+.journey-feedback { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0; font-size:.8rem; line-height:1.5; }
+.journey-feedback:empty { display:none; }
+.journey-feedback[data-state="error"] { color:var(--danger, #a82727); }
+.discovery-resume { margin:8px 0; font-size:.8rem; }
+@media(max-width:768px) {
+  .provider-detail-modal .detail-actions { bottom:-18px; }
+  .booking-contract dl div { grid-template-columns:70px minmax(0,1fr); }
+}

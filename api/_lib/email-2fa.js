@@ -7,12 +7,22 @@ const {
   recordOtpVerifiedSession,
 } = require("./supabase");
 
-const challengeCookie = "skillmate_login_challenge";
-const passwordRecoveryCookie = "skillmate_password_recovery";
+const challengeCookie = "skillflex_login_challenge";
+const passwordRecoveryCookie = "skillflex_password_recovery";
 const challengeLifetimeMs = 10 * 60 * 1000;
 const resendCooldownMs = 30 * 1000;
 const maximumChallengesPerWindow = 5;
 const challengeWindowMs = 15 * 60 * 1000;
+
+// Treat JSON fields as data. Coercing an object can throw before the handler's
+// error boundary, or turn an invalid password into "[object Object]".
+function stringField(body, name) {
+  return typeof body?.[name] === "string" ? body[name] : "";
+}
+
+function validEmail(email) {
+  return email.length <= 254 && /^\S+@\S+\.\S+$/.test(email);
+}
 
 function getServiceKey() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
@@ -31,8 +41,8 @@ function deriveSecretKey(purpose) {
   const key = crypto.hkdfSync(
     "sha256",
     Buffer.from(getOtpSecret(), "utf8"),
-    Buffer.from("Skillmate auth key derivation v1"),
-    Buffer.from(`skillmate:${purpose}:v1`),
+    Buffer.from("Skill Flex auth key derivation v1"),
+    Buffer.from(`skillflex:${purpose}:v1`),
     32,
   );
   return Buffer.from(key);
@@ -128,23 +138,23 @@ async function supabaseRequest(path, options = {}, useServiceKey = false) {
 async function sendCode(email, code, purpose) {
   const { from, transport } = getMailer();
   const signup = purpose === "signup";
-  const subject = signup ? "Verify your Skillmate account" : "Your Skillmate sign-in code";
+  const subject = signup ? "Verify your Skill Flex account" : "Your Skill Flex sign-in code";
   const recovery = purpose === "recovery";
   const heading = recovery ? "Reset your password" : signup ? "Verify your email" : "Verify it’s you";
   const instruction = recovery
     ? "Enter this code to verify your email before resetting your password."
     : signup
-      ? "Enter this code to create your Skillmate account."
+      ? "Enter this code to create your Skill Flex account."
       : "Enter this code to finish signing in.";
   const messageSubject = recovery
-    ? "Your Skillmate password reset code"
+    ? "Your Skill Flex password reset code"
     : subject;
   await transport.sendMail({
     from,
     to: email,
     subject: messageSubject,
-    text: `${instruction} Your Skillmate verification code is ${code}. It expires in 10 minutes. If you did not request it, you can ignore this email.`,
-    html: `<div style="font-family:Arial,sans-serif;color:#172033;max-width:480px;margin:0 auto;padding:32px"><div style="font-size:13px;font-weight:700;letter-spacing:2px;color:#596b8a">SKILLMATE</div><h1 style="font-size:24px;margin:28px 0 8px">${heading}</h1><p style="color:#596273;line-height:1.6">${instruction} It expires in 10 minutes.</p><div style="margin:26px 0;padding:18px;border:1px solid #dfe4ee;border-radius:12px;background:#f8f9fc;text-align:center;font-size:32px;font-weight:700;letter-spacing:10px">${code}</div><p style="color:#747d8d;font-size:12px">If you did not request it, you can ignore this email.</p></div>`,
+    text: `${instruction} Your Skill Flex verification code is ${code}. It expires in 10 minutes. If you did not request it, you can ignore this email.`,
+    html: `<div style="font-family:Arial,sans-serif;color:#172033;max-width:480px;margin:0 auto;padding:32px"><div style="font-size:13px;font-weight:700;letter-spacing:2px;color:#596b8a">SKILL FLEX</div><h1 style="font-size:24px;margin:28px 0 8px">${heading}</h1><p style="color:#596273;line-height:1.6">${instruction} It expires in 10 minutes.</p><div style="margin:26px 0;padding:18px;border:1px solid #dfe4ee;border-radius:12px;background:#f8f9fc;text-align:center;font-size:32px;font-weight:700;letter-spacing:10px">${code}</div><p style="color:#747d8d;font-size:12px">If you did not request it, you can ignore this email.</p></div>`,
   });
 }
 
@@ -308,7 +318,7 @@ async function requestPasswordRecovery(request, response) {
       recoveryStarted: true,
     });
   } catch (error) {
-    console.error("Could not start Skillmate password recovery.", error);
+    console.error("Could not start Skill Flex password recovery.", error);
     return respondError(response, 503, "Password recovery is temporarily unavailable. Please try again shortly.");
   }
 }
@@ -319,7 +329,7 @@ async function updateRecoveredPassword(request, response) {
     return respondError(response, 405, "Method not allowed.");
   }
   const token = getCookie(request, passwordRecoveryCookie);
-  const password = String(request.body?.password || "");
+  const password = stringField(request.body, "password");
   if (!token) return respondError(response, 410, "Your verification expired. Request a new password reset code.");
   if ([...password].length < 8 || Buffer.byteLength(password, "utf8") > 72) {
     return respondError(response, 400, "Choose a password with at least 8 characters and no more than 72 bytes.");
@@ -353,7 +363,7 @@ async function updateRecoveredPassword(request, response) {
     response.setHeader("Cache-Control", "no-store");
     return response.status(200).json({ message: "Your password has been updated. Sign in with your new password." });
   } catch (error) {
-    console.error("Could not complete Skillmate password recovery.", error);
+    console.error("Could not complete Skill Flex password recovery.", error);
     return respondError(response, 503, "Could not update your password right now. Request a new code and try again.");
   }
 }
@@ -366,7 +376,7 @@ async function signIn(request, response) {
         const challengeHash = hashValue(token);
         await supabaseRequest(`/rest/v1/auth_login_challenges?challenge_hash=eq.${challengeHash}`, { method: "DELETE" }, true);
       } catch (error) {
-        console.error("Could not remove the abandoned Skillmate login challenge.", error);
+        console.error("Could not remove the abandoned Skill Flex login challenge.", error);
       }
     }
     clearChallengeCookie(response);
@@ -377,9 +387,9 @@ async function signIn(request, response) {
     return respondError(response, 405, "Method not allowed.");
   }
 
-  const email = String(request.body?.email || "").trim().toLowerCase();
-  const password = String(request.body?.password || "");
-  if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 1 || Buffer.byteLength(password, "utf8") > 72) {
+  const email = stringField(request.body, "email").trim().toLowerCase();
+  const password = stringField(request.body, "password");
+  if (!validEmail(email) || password.length < 1 || Buffer.byteLength(password, "utf8") > 72) {
     return respondError(response, 400, "Enter a valid email address and password.");
   }
 
@@ -417,7 +427,7 @@ async function googleSignIn(request, response) {
     return respondError(response, 405, "Method not allowed.");
   }
   const accessToken = String(request.headers?.authorization || "").match(/^Bearer\s+(.+)$/i)?.[1];
-  const refreshToken = String(request.body?.refresh_token || "");
+  const refreshToken = stringField(request.body, "refresh_token");
   if (!accessToken || !refreshToken || refreshToken.length > 4096) {
     return respondError(response, 401, "Sign in with Google again to continue.");
   }
@@ -466,7 +476,7 @@ async function sessionSignIn(request, response) {
     return respondError(response, 405, "Method not allowed.");
   }
   const accessToken = String(request.headers?.authorization || "").match(/^Bearer\s+(.+)$/i)?.[1];
-  const refreshToken = String(request.body?.refresh_token || "");
+  const refreshToken = stringField(request.body, "refresh_token");
   if (!accessToken || !refreshToken || refreshToken.length > 4096) {
     return respondError(response, 401, "Sign in again to verify your session.");
   }
@@ -515,11 +525,11 @@ async function signUp(request, response) {
     response.setHeader("Allow", "POST");
     return respondError(response, 405, "Method not allowed.");
   }
-  const email = String(request.body?.email || "").trim().toLowerCase();
-  const password = String(request.body?.password || "");
-  const fullName = String(request.body?.fullName || "").trim();
-  const university = String(request.body?.university || "").trim();
-  if (!/^\S+@\S+\.\S+$/.test(email) || [...password].length < 8 || Buffer.byteLength(password, "utf8") > 72
+  const email = stringField(request.body, "email").trim().toLowerCase();
+  const password = stringField(request.body, "password");
+  const fullName = stringField(request.body, "fullName").trim();
+  const university = stringField(request.body, "university").trim();
+  if (!validEmail(email) || [...password].length < 8 || Buffer.byteLength(password, "utf8") > 72
     || fullName.length < 2 || fullName.length > 80 || university.length < 2 || university.length > 120) {
     return respondError(response, 400, "Enter a valid email, a password with at least 8 characters and no more than 72 bytes, name, and university.");
   }
@@ -557,7 +567,7 @@ async function createSupabaseAccount(pending) {
   if (createResponse.status === 409 || createResponse.status === 422) {
     return { error: "An account may already exist with this email. Try signing in instead.", status: 409 };
   }
-  if (!createResponse.ok || !createdUser.id) throw new Error("Could not create the verified Skillmate account.");
+  if (!createResponse.ok || !createdUser.id) throw new Error("Could not create the verified Skill Flex account.");
 
   const { response: authResponse, result: session } = await supabaseRequest(
     "/auth/v1/token?grant_type=password",
@@ -575,7 +585,7 @@ async function verify(request, response) {
     return respondError(response, 405, "Method not allowed.");
   }
   const token = getCookie(request);
-  const code = String(request.body?.code || "");
+  const code = stringField(request.body, "code");
   if (!token || !/^\d{6}$/.test(code)) return respondError(response, 400, "Enter the six-digit code from your email.");
 
   try {
@@ -625,7 +635,7 @@ async function verify(request, response) {
     }
     return respondError(response, 400, "That code doesn’t match. Check it and try again.");
   } catch (error) {
-    console.error("Could not verify the Skillmate email code.", error);
+    console.error("Could not verify the Skill Flex email code.", error);
     return respondError(response, 503, "Could not verify your code right now. Please try again.");
   }
 }
@@ -679,7 +689,7 @@ async function resend(request, response) {
     if (!updateResponse.ok) throw new Error("Could not update the email verification code.");
     return response.status(200).json({ message: "A new code was sent to your email." });
   } catch (error) {
-    console.error("Could not resend the Skillmate email code.", error);
+    console.error("Could not resend the Skill Flex email code.", error);
     return respondError(response, 503, "Could not resend your code right now. Please try again.");
   }
 }

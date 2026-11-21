@@ -23,7 +23,7 @@ function token(claims = {}) {
 }
 
 function configureSupabase() {
-  process.env.SUPABASE_URL = "https://skillmate-test.supabase.co";
+  process.env.SUPABASE_URL = "https://skillflex-test.supabase.co";
   process.env.SUPABASE_ANON_KEY = token({ role: "anon" });
   process.env.SUPABASE_SERVICE_ROLE_KEY = "server-only-service-key";
 }
@@ -161,6 +161,6 @@ test("OTP-verified persistent sessions continue to receive the server cookie", a
   }, result);
 
   assert.equal(result.statusCode, 204);
-  assert.match(result.headers["Set-Cookie"], /skillmate_session=/);
+  assert.match(result.headers["Set-Cookie"], /skillflex_session=/);
   assert.doesNotMatch(result.headers["Set-Cookie"], /Max-Age=0/);
 });

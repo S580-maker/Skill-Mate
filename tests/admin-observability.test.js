@@ -58,7 +58,7 @@ test("observability endpoint rejects users without an OTP-verified admin session
     return { ok: true, json: async () => [] };
   };
   const response = responseStub();
-  await handler({ method: "GET", headers: { cookie: `skillmate_session=${accessToken()}` } }, response);
+  await handler({ method: "GET", headers: { cookie: `skillflex_session=${accessToken()}` } }, response);
   assert.equal(response.statusCode, 403);
   assert.equal(queriedSnapshot, false);
   assert.equal(response.headers["cache-control"], "private, no-store");
@@ -93,7 +93,7 @@ test("observability endpoint returns sampled telemetry and explicitly configured
     assert.fail(`Unexpected request: ${url}`);
   };
   const response = responseStub();
-  await handler({ method: "GET", headers: { cookie: `skillmate_session=${accessToken()}` } }, response);
+  await handler({ method: "GET", headers: { cookie: `skillflex_session=${accessToken()}` } }, response);
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.limits.databaseBytes, 1_000_000_000);
   assert.equal(response.body.limits.storageBytes, 2_000_000_000);

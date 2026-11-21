@@ -1,5 +1,5 @@
-const { maskEmail, getResendRetryDelay } = globalThis.skillmateAuthUtils;
-const authClient = window.skillmateSupabase;
+const { maskEmail, getResendRetryDelay, requestAuth } = globalThis.skillflexAuthUtils;
+const authClient = window.skillflexSupabase;
 const authForm = document.querySelector("#auth-form");
 const authMessage = document.querySelector("#auth-message");
 const passwordInput = document.querySelector("#auth-password");
@@ -14,10 +14,10 @@ let sessionOtpStarted = false;
 let sessionCheckStarted = false;
 let pendingVerifiedSession = null;
 let otpCountdownTimer = null;
-const googleOtpCallbackParam = "skillmate-google-otp";
+const googleOtpCallbackParam = "skillflex-google-otp";
 
 if (new URLSearchParams(window.location.search).get(googleOtpCallbackParam) === "1") {
-  window.sessionStorage.setItem("skillmate-google-otp-pending", "1");
+  window.sessionStorage.setItem("skillflex-google-otp-pending", "1");
 }
 
 function clearGoogleOtpCallbackParams() {
@@ -31,17 +31,17 @@ function clearGoogleOtpCallbackParams() {
 function reportMissingGoogleSession() {
   if (
     googleOtpStarted ||
-    window.sessionStorage.getItem("skillmate-google-otp-pending") !== "1"
+    window.sessionStorage.getItem("skillflex-google-otp-pending") !== "1"
   ) return;
-  window.sessionStorage.removeItem("skillmate-google-otp-pending");
+  window.sessionStorage.removeItem("skillflex-google-otp-pending");
   clearGoogleOtpCallbackParams();
   authMessage.textContent = "Google sign-in returned without an authenticated session. Please try again.";
 }
 
 async function redirectForSession(session) {
   if (!session || authMode === "recovery") return;
-  if (window.sessionStorage.getItem("skillmate-google-otp-active") === "1") return;
-  if (window.sessionStorage.getItem("skillmate-google-otp-pending") === "1") {
+  if (window.sessionStorage.getItem("skillflex-google-otp-active") === "1") return;
+  if (window.sessionStorage.getItem("skillflex-google-otp-pending") === "1") {
     if (!googleOtpStarted) {
       googleOtpStarted = true;
       window.setTimeout(() => startGoogleOtp(session), 0);
@@ -51,14 +51,14 @@ async function redirectForSession(session) {
   if (authSubmitting || authRedirectStarted || sessionOtpStarted || sessionCheckStarted) return;
   sessionCheckStarted = true;
   try {
-    await window.syncSkillmateServerSession(session);
+    await window.syncSkillflexServerSession(session);
     authRedirectStarted = true;
     window.location.replace(getPostAuthUrl());
   } catch (error) {
     if (error.code === "OTP_VERIFICATION_REQUIRED") {
       await startSessionOtp(session);
     } else {
-      console.error("Could not verify the restored Skillmate session.", error);
+      console.error("Could not verify the restored Skill Flex session.", error);
       authMessage.textContent = error.message || "Could not check your sign-in session. Reload the page and try again.";
     }
   } finally {
@@ -75,7 +75,7 @@ async function startSessionOtp(session) {
   googleButton.disabled = true;
   authMessage.textContent = "Sending your verification code…";
   try {
-    const response = await fetch("/api/auth/session-otp", {
+    const response = await requestAuth("/api/auth/session-otp", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -92,7 +92,7 @@ async function startSessionOtp(session) {
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Could not start email verification.");
     if (result.verified) {
-      await window.syncSkillmateServerSession(session);
+      await window.syncSkillflexServerSession(session);
       authRedirectStarted = true;
       window.location.replace(getPostAuthUrl());
       return;
@@ -100,7 +100,7 @@ async function startSessionOtp(session) {
     authMessage.textContent = "";
     showOtpChallenge(result.email);
   } catch (error) {
-    console.error("Skillmate restored-session email verification failed.", error);
+    console.error("Skill Flex restored-session email verification failed.", error);
     authMessage.textContent = error.message || "Could not start email verification. Please try again.";
     sessionOtpStarted = false;
   } finally {
@@ -117,7 +117,7 @@ async function startGoogleOtp(session) {
   button.setAttribute("aria-busy", "true");
   authMessage.textContent = "Sending your verification code…";
   try {
-    const response = await fetch("/api/auth/google-2fa", {
+    const response = await requestAuth("/api/auth/google-2fa", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -133,15 +133,15 @@ async function startGoogleOtp(session) {
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Could not start Google verification.");
-    window.sessionStorage.removeItem("skillmate-google-otp-pending");
-    window.sessionStorage.setItem("skillmate-google-otp-active", "1");
+    window.sessionStorage.removeItem("skillflex-google-otp-pending");
+    window.sessionStorage.setItem("skillflex-google-otp-active", "1");
     clearGoogleOtpCallbackParams();
     authMessage.textContent = "";
     showOtpChallenge(result.email);
   } catch (error) {
-    console.error("Skillmate Google email verification failed.", error);
-    window.sessionStorage.removeItem("skillmate-google-otp-pending");
-    window.sessionStorage.removeItem("skillmate-google-otp-active");
+    console.error("Skill Flex Google email verification failed.", error);
+    window.sessionStorage.removeItem("skillflex-google-otp-pending");
+    window.sessionStorage.removeItem("skillflex-google-otp-active");
     clearGoogleOtpCallbackParams();
     sessionOtpStarted = false;
     await authClient.auth.signOut({ scope: "local" }).catch((signOutError) => {
@@ -174,6 +174,7 @@ function setPasswordVisibility(input, button, visible, label) {
 function friendlyAuthError(error, mode) {
   const code = (error?.code || "").toLowerCase();
   const message = (error?.message || "").toLowerCase();
+  if (error?.cause?.name === "TimeoutError") return error.message;
   if (isInvalidRefreshTokenError(error)) {
     return "Your sign-in session expired. Please sign in again.";
   }
@@ -370,7 +371,7 @@ async function submitOtpCode(event) {
     await new Promise((resolve) => window.setTimeout(resolve, 450));
     window.location.assign(getPostAuthUrl());
   } catch (error) {
-    console.error("Skillmate email verification failed.", error);
+    console.error("Skill Flex email verification failed.", error);
     challenge.classList.remove("is-success");
     challenge.classList.remove("is-error");
     void challenge.offsetWidth;
@@ -488,7 +489,7 @@ document.querySelector("#otp-resend").addEventListener("click", async () => {
   message.classList.remove("success");
   let response;
   try {
-    response = await fetch("/api/auth/resend", { method: "POST", credentials: "same-origin" });
+    response = await requestAuth("/api/auth/resend", { method: "POST", credentials: "same-origin" });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Could not resend your code.");
     message.textContent = result.message;
@@ -515,11 +516,11 @@ document.querySelector("#otp-resend").addEventListener("click", async () => {
 
 document.querySelector("#otp-back").addEventListener("click", () => {
   if (authSubmitting || document.querySelector("#auth-otp").classList.contains("is-success")) return;
-  fetch("/api/auth/sign-in", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
+  requestAuth("/api/auth/sign-in", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
   sessionOtpStarted = false;
-  if (window.sessionStorage.getItem("skillmate-google-otp-active") === "1" || sessionOtpStarted) {
+  if (window.sessionStorage.getItem("skillflex-google-otp-active") === "1" || sessionOtpStarted) {
     sessionOtpStarted = false;
-    window.sessionStorage.removeItem("skillmate-google-otp-active");
+    window.sessionStorage.removeItem("skillflex-google-otp-active");
     authClient.auth.signOut({ scope: "local" }).catch((error) => {
       console.error("Could not clear the unverified sign-in session.", error);
     });
@@ -541,7 +542,7 @@ function setAuthMode(mode) {
   document.querySelector("#auth-tabs").dataset.mode = signup ? "signup" : "signin";
   setPasswordVisibility(passwordInput, passwordVisibility, false, "password");
   setPasswordVisibility(confirmPasswordInput, confirmPasswordVisibility, false, "confirm password");
-  document.title = signup ? "Create account | Skillmate" : recovery ? "Reset password | Skillmate" : "Sign in | Skillmate";
+  document.title = signup ? "Create account | Skill Flex" : recovery ? "Reset password | Skill Flex" : "Sign in | Skill Flex";
   document.querySelector("#auth-tabs").hidden = recovery;
   document.querySelector("#signin-tab").classList.toggle("active", signin);
   document.querySelector("#signup-tab").classList.toggle("active", signup);
@@ -569,7 +570,7 @@ function setAuthMode(mode) {
   document.querySelector("#password-label").textContent = recovery ? "New password" : "Password";
   document.querySelector("#auth-title").textContent = signup ? "Create your account" : recovery ? "Choose a new password" : "Welcome back.";
   document.querySelector("#auth-intro").textContent = recovery
-    ? "Enter a new password for your Skillmate account."
+    ? "Enter a new password for your Skill Flex account."
     : signup
     ? "Just the basics. You can add a photo and verify your student status later."
     : "Your campus community is one sign-in away.";
@@ -586,7 +587,7 @@ function setAuthMode(mode) {
 }
 
 function loadGhanaianUniversities() {
-  const directory = window.SKILLMATE_UNIVERSITY_DIRECTORY;
+  const directory = window.SKILLFLEX_UNIVERSITY_DIRECTORY;
   const options = document.querySelector("#ghana-university-options");
   const status = document.querySelector("#university-directory-status");
   options.replaceChildren(...directory.fallback.map((university) => {
@@ -632,7 +633,7 @@ async function signInWithGoogle(button) {
   button.setAttribute("aria-busy", "true");
   authMessage.textContent = "";
   try {
-    window.sessionStorage.setItem("skillmate-google-otp-pending", "1");
+    window.sessionStorage.setItem("skillflex-google-otp-pending", "1");
     const callbackUrl = new URL("login.html", window.location.href);
     callbackUrl.searchParams.set(googleOtpCallbackParam, "1");
     if (new URLSearchParams(window.location.search).get("next") === "admin") {
@@ -647,8 +648,8 @@ async function signInWithGoogle(button) {
     });
     if (error) throw error;
   } catch (error) {
-    console.error("Skillmate Google sign-in failed.", error);
-    window.sessionStorage.removeItem("skillmate-google-otp-pending");
+    console.error("Skill Flex Google sign-in failed.", error);
+    window.sessionStorage.removeItem("skillflex-google-otp-pending");
     authMessage.textContent = friendlyAuthError(error, authMode);
     authSubmitting = false;
     button.disabled = false;
@@ -666,15 +667,15 @@ loadGhanaianUniversities();
 const requestedAuthMode = new URLSearchParams(window.location.search).get("mode");
 setAuthMode(["signup", "recovery"].includes(requestedAuthMode) ? requestedAuthMode : "signin");
 if (authClient) {
-  window.skillmateRestoreSession().then(async session => {
+  window.skillflexRestoreSession().then(async session => {
     if (!session) {
       reportMissingGoogleSession();
       return;
     }
     await redirectForSession(session);
   }).catch((error) => {
-    console.error("Could not restore the Skillmate sign-in session.", error);
-    if (window.sessionStorage.getItem("skillmate-google-otp-pending") === "1") {
+    console.error("Could not restore the Skill Flex sign-in session.", error);
+    if (window.sessionStorage.getItem("skillflex-google-otp-pending") === "1") {
       reportMissingGoogleSession();
       return;
     }
@@ -726,7 +727,7 @@ authForm.addEventListener("submit", async (event) => {
         authMessage.textContent = "Enter your name and university to create an account.";
         return;
       }
-      const response = await fetch("/api/auth/sign-up", {
+      const response = await requestAuth("/api/auth/sign-up", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",
@@ -735,7 +736,7 @@ authForm.addEventListener("submit", async (event) => {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
         const error = new Error(result.error || "Could not start account verification.");
-        error.isSkillmateApiError = true;
+        error.isSkillflexApiError = true;
         throw error;
       }
       passwordInput.value = "";
@@ -748,10 +749,10 @@ authForm.addEventListener("submit", async (event) => {
       if (error) throw error;
       const { data: refreshedSession, error: refreshedSessionError } = await authClient.auth.getSession();
       if (refreshedSessionError) throw refreshedSessionError;
-      await window.syncSkillmateServerSession(refreshedSession.session);
+      await window.syncSkillflexServerSession(refreshedSession.session);
       window.location.assign("index.html");
     } else {
-      const response = await fetch("/api/auth/sign-in", {
+      const response = await requestAuth("/api/auth/sign-in", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",
@@ -760,18 +761,18 @@ authForm.addEventListener("submit", async (event) => {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
         const error = new Error(result.error || "Could not start email verification.");
-        error.isSkillmateApiError = true;
+        error.isSkillflexApiError = true;
         throw error;
       }
       passwordInput.value = "";
       showOtpChallenge(email);
     }
   } catch (error) {
-    console.error("Skillmate authentication failed.", error);
+    console.error("Skill Flex authentication failed.", error);
     if (isInvalidRefreshTokenError(error)) {
-      await window.clearExpiredSkillmateSession();
+      await window.clearExpiredSkillflexSession();
     }
-    authMessage.textContent = error.isSkillmateApiError
+    authMessage.textContent = error.isSkillflexApiError
       ? error.message
       : friendlyAuthError(error, authMode);
   } finally {
@@ -786,6 +787,6 @@ authForm.addEventListener("submit", async (event) => {
 });
 
 if (!authClient) {
-  console.error("Skillmate sign-in unavailable:", window.skillmateSupabaseError);
+  console.error("Skill Flex sign-in unavailable:", window.skillflexSupabaseError);
   authMessage.textContent = "Sign-in is temporarily unavailable. Please try again shortly.";
 }

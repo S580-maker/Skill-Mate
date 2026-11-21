@@ -1,7 +1,7 @@
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
-  else root.skillmateGrowthUtils = api;
+  else root.skillflexGrowthUtils = api;
 })(typeof window === "undefined" ? globalThis : window, function () {
   function matchesFilters(service, filters, hasSchedule = false) {
     const price = Number(service.price);

@@ -71,7 +71,7 @@ test("Upstash store increments with TTL and supports decrement and reset", async
     ["EVAL", calls[1].body[1], "1"],
     ["EVAL", "return redis.call('DEL',KEYS[1])", "1"],
   ]);
-  assert.ok(calls.every(call => call.body[3] === "skillmate:rate-limit:v1:auth:127.0.0.1"));
+  assert.ok(calls.every(call => call.body[3] === "skillflex:rate-limit:v1:auth:127.0.0.1"));
 });
 
 test("rate-limit factory accepts configured shared storage", () => {

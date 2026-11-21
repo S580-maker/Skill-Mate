@@ -88,16 +88,16 @@ test("image compression permits a source up to 5 MB while enforcing the smaller 
     name: "portfolio.jpg", type: "image/jpeg", size: 4_000_000, lastModified: 1,
     slice() { return { arrayBuffer: async () => new Uint8Array([255, 216, 255]).buffer }; },
   };
-  const compressed = await context.skillmateServiceUtils.compressImageFile(input, {
+  const compressed = await context.skillflexServiceUtils.compressImageFile(input, {
     maxInputBytes: 5_000_000, maxOutputBytes: 1_000_000,
   });
   assert.equal(compressed.type, "image/webp");
   assert.equal(compressed.size, 500_000);
   assert.equal(compressed.name, "portfolio.webp");
-  await assert.rejects(context.skillmateServiceUtils.compressImageFile(input, {
+  await assert.rejects(context.skillflexServiceUtils.compressImageFile(input, {
     maxInputBytes: 5_000_000, maxOutputBytes: 400_000,
   }), /could not be compressed/);
-  await assert.rejects(context.skillmateServiceUtils.compressImageFile({
+  await assert.rejects(context.skillflexServiceUtils.compressImageFile({
     ...input, size: 5_000_001,
   }), /smaller than 5 MB/);
 });
@@ -192,8 +192,8 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
   };
   const context = {
     window: {
-      skillmateServiceUtils: utils,
-      skillmateOnServicePublished: service => publishedServices.push(service),
+      skillflexServiceUtils: utils,
+      skillflexOnServicePublished: service => publishedServices.push(service),
     },
     document: { getElementById: get, activeElement: opener, querySelector: () => opener, createElement: () => element() },
     appSupabase: demo ? null : supabase, appUser: { id: "owner" },
@@ -208,7 +208,7 @@ function fixture({ schema = true, failSave = false, failRefresh = false, demo = 
   return { get, context, writes, rpcCalls, messages, publishedServices, opener,
     fail(value) { saveFails = value; },
     async prepare(service) {
-      context.window.skillmateServiceEditor.prepare(service);
+      context.window.skillflexServiceEditor.prepare(service);
       await new Promise(resolve => setImmediate(resolve));
     },
     fill() {

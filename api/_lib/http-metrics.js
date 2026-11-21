@@ -45,7 +45,7 @@ function logAndReset() {
     return cumulative >= Math.ceil(count * 0.95);
   });
   if (percentileIndex < 0) percentileIndex = buckets.length;
-  console.info("Skillmate HTTP performance", JSON.stringify({
+  console.info("Skill Flex HTTP performance", JSON.stringify({
     windowSeconds: Math.max(1, Math.round((Date.now() - state.intervalStartedAt) / 1000)),
     requests: count,
     activeRequests: state.active,

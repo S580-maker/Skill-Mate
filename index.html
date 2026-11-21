@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-    <meta name="description" content="Find trusted student services or earn with your skills on Skillmate." />
-    <title>Skillmate | Student marketplace</title>
+    <meta name="description" content="Find trusted student services or earn with your skills on Skill Flex." />
+    <title>Skill Flex | Student marketplace</title>
     <link rel="preload" href="/assets/fonts/plus-jakarta-sans-latin-variable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="landing-fonts.css?v=3" />
     <link rel="preload" href="user.css?v=38" as="style" />
@@ -18,61 +18,35 @@
     <script src="theme.js?v=2"></script>
   </head>
   <body class="app-auth-pending">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <div class="auth-screen" id="app-auth-status" role="status" aria-live="polite">
-      <section class="dashboard-loading-skeleton" id="dashboard-loading-skeleton" aria-label="Loading your dashboard">
-        <aside class="dashboard-skeleton-sidebar" aria-hidden="true">
-          <div class="dashboard-skeleton-brand"><strong>Skillmate</strong></div>
-          <i class="skeleton dashboard-skeleton-campus"></i>
-          <div class="dashboard-skeleton-nav"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div>
-          <i class="skeleton dashboard-skeleton-profile"></i>
-        </aside>
-        <div class="dashboard-skeleton-content">
-          <header class="dashboard-skeleton-top">
-            <i class="skeleton dashboard-skeleton-crumb"></i>
-            <i class="skeleton dashboard-skeleton-avatar"></i>
-          </header>
-          <main class="dashboard-skeleton-main" aria-hidden="true">
-            <div class="dashboard-skeleton-intro">
-              <i class="skeleton dashboard-skeleton-eyebrow"></i>
-              <i class="skeleton dashboard-skeleton-title"></i>
-              <i class="skeleton dashboard-skeleton-subtitle"></i>
-              <i class="skeleton dashboard-skeleton-search"></i>
-            </div>
-            <div class="dashboard-skeleton-categories"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div>
-            <div class="dashboard-skeleton-section"><i class="skeleton dashboard-skeleton-section-title"></i><i class="skeleton dashboard-skeleton-section-meta"></i></div>
-            <div class="dashboard-skeleton-cards">
-              <article class="dashboard-skeleton-card"><i class="skeleton dashboard-skeleton-cover"></i><div><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div></article>
-              <article class="dashboard-skeleton-card"><i class="skeleton dashboard-skeleton-cover"></i><div><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div></article>
-            </div>
-          </main>
-        </div>
-        <nav class="dashboard-skeleton-mobile-nav" aria-hidden="true"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></nav>
-      </section>
+      <section class="dashboard-loading-skeleton" id="dashboard-loading-skeleton" aria-label="Loading your dashboard"></section>
       <section class="dashboard-loading-progress" id="dashboard-loading-progress" hidden>
         <strong id="dashboard-loading-label">Getting your dashboard ready…</strong>
         <progress id="dashboard-loading-bar" max="100" value="10" aria-label="Dashboard loading progress"></progress>
         <span><span id="dashboard-loading-elapsed">10 seconds elapsed</span><span id="dashboard-loading-remaining">Estimated time remaining: calculating…</span></span>
       </section>
     </div>
+    <script src="loading-ui.js?v=20261110b"></script>
     <div class="app-shell" id="app-shell">
       <header class="topbar marketplace-header">
-        <a class="brand" href="#home" data-page-link="home" aria-label="Skillmate home">
-          <span class="brand-name">Skillmate</span>
+        <a class="brand" href="#home" data-page-link="home" aria-label="Skill Flex home">
+          <span class="brand-name">Skill Flex</span>
         </a>
         <button class="icon-button menu-toggle" id="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg></button>
         <div class="sidebar" id="sidebar">
           <nav class="side-nav" aria-label="Student navigation"><a class="nav-link active" href="#home" data-page="home"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></svg><span>Discover</span></a>
-<a class="nav-link" href="#bookings" data-page="bookings"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M7.5 3.5v3M16.5 3.5v3M3.5 10h17M8 14h3M8 17h6" /></svg><span>My Bookings</span><span class="nav-count" id="booking-count">2</span></a>
+<a class="nav-link" href="#bookings" data-page="bookings"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M7.5 3.5v3M16.5 3.5v3M3.5 10h17M8 14h3M8 17h6" /></svg><span>My bookings</span><span class="nav-count" id="booking-count">2</span></a>
 <a class="nav-link" href="#messages" data-page="messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 9 9 0 0 1-4-.9L3 20l1.8-4A7.2 7.2 0 0 1 4 12c0-4.1 3.6-7.5 8-7.5s8 3.1 8 7Z" /><path d="M8 12h.01M12 12h.01M16 12h.01" /></svg><span>Messages</span><span class="nav-count nav-count-soft" id="message-count">2</span></a>
 <a class="nav-link" href="#saved" data-page="saved"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16Z" /></svg><span>Saved</span></a>
-<a class="nav-link" href="#provider" data-page="provider"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8m0-12.8L5.6 18.4" /></svg><span>My Listings</span><span class="nav-dot"></span></a><a class="nav-link" href="#activity" data-page="activity"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 15v-4m6 4V5m6 10V8"/></svg><span>My Activity</span></a></nav>
-          <details class="account-menu"><summary aria-label="More account options">More <span aria-hidden="true">&#8964;</span></summary><div class="account-menu-content"><div class="campus-card"><span class="campus-icon">UG</span><span><small>YOUR CAMPUS</small><strong>University of Ghana</strong></span><button class="verified-mark" id="verification-open" type="button" title="Campus verification" aria-label="Verify your campus">!</button></div><a class="nav-link" href="#requests" data-page="requests"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span>Campus requests</span></a>
+<a class="nav-link" href="#provider" data-page="provider"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8m0-12.8L5.6 18.4" /></svg><span>My listings</span><span class="nav-dot"></span></a><a class="nav-link" href="#activity" data-page="activity"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 15v-4m6 4V5m6 10V8"/></svg><span>My activity</span></a></nav>
+          <details class="account-menu"><summary aria-label="More account options">More <span aria-hidden="true">&#8964;</span></summary><div class="account-menu-content"><div class="campus-card"><span class="campus-icon">UG</span><span><small>Your campus</small><strong>University of Ghana</strong></span><button class="verified-mark" id="verification-open" type="button" title="Campus verification" aria-label="Verify your campus">!</button></div><a class="nav-link" href="#requests" data-page="requests"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span>Campus requests</span></a>
 <a class="nav-link" href="#earnings" data-page="earnings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h16a2 2 0 0 1 2 2v10H5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2h13M21 11h-5a2 2 0 0 0 0 4h5" /><path d="M16 13h.01" /></svg><span>Estimated earnings</span></a>        <div class="sidebar-bottom">
           <button class="trust-mini verification-cta" id="verification-cta" type="button" aria-label="Verify to earn a campus badge"><span class="trust-mini-icon" aria-hidden="true">✓</span><span><strong>Your campus, your community</strong><small>Verify to earn a campus badge</small></span></button>
-          <a class="nav-link" href="#profile-settings" data-page="profile-settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg><span>Profile &amp; Settings</span></a>
-          <a class="nav-link" href="#help-support" data-page="help-support"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.6 9a2.5 2.5 0 1 1 4.3 1.8c-1.1 1-1.9 1.4-1.9 3M12 17.2h.01" /></svg><span>Help &amp; Support</span></a>
+          <a class="nav-link" href="#profile-settings" data-page="profile-settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg><span>Profile &amp; settings</span></a>
+          <a class="nav-link" href="#help-support" data-page="help-support"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.6 9a2.5 2.5 0 1 1 4.3 1.8c-1.1 1-1.9 1.4-1.9 3M12 17.2h.01" /></svg><span>Help &amp; support</span></a>
           <button class="signout-button" id="signout-button" type="button">Sign out</button>
-          <a class="admin-link" id="admin-link" href="admin.html" hidden>Admin dashboard <span aria-hidden="true">↗</span></a>
+          <a class="admin-link" id="admin-link" href="admin.html" hidden>Admin dashboard</a>
           <div class="profile"><div class="profile-avatar">AM</div><span class="profile-copy"><strong>Alex Morgan</strong><small>Student · University of Ghana</small></span><button class="icon-button" id="profile-menu" type="button" aria-label="Edit profile">⋯</button></div>
         </div>
 </div></details>
@@ -85,15 +59,16 @@
 
       </header>
       <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close navigation" hidden></button>
-      <main class="main-content">
+      <main id="main-content" tabindex="-1" class="main-content">
         <div class="page-content">
           <section class="view active-view" id="view-home" data-view="home">
-            <div class="discover-intro">
-              <p class="eyebrow" hidden><span class="demo-pill" hidden>STUDENT MARKETPLACE</span><time id="marketplace-date" hidden></time></p>
+            <div class="discover-intro discover-welcome">
+              <skillflex-illustration name="onboarding" class="dashboard-welcome-illustration"><img src="/assets/illustrations/storyset/onboarding.svg" width="500" height="500" alt="" loading="lazy" /></skillflex-illustration>
+              <p class="eyebrow" hidden><span class="demo-pill" hidden>Student marketplace</span><time id="marketplace-date" hidden></time></p>
               <h1>Find Skills &amp; Services<br />from <span>Students Like You</span></h1>
               <p>Get help, collaborate, and make campus life easier.</p>
               <div class="discover-search">
-                <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg><input id="global-search" type="search" placeholder="Search for services (e.g., tutoring, design, editing...)" aria-label="Search services, skills, or providers" aria-describedby="search-status" aria-controls="search-suggestions" aria-expanded="false" /><button class="search-clear" id="search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>&times;</button><kbd>Ctrl K</kbd></label><button type="button" class="button marketplace-search-submit" id="marketplace-search-submit">Search <span aria-hidden="true">&#8594;</span></button>
+                <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg><input id="global-search" type="search" placeholder="Search for services (e.g., tutoring, design, editing...)" aria-label="Search services, skills, or providers" aria-describedby="search-status" aria-controls="search-suggestions" aria-expanded="false" /><button class="search-clear" id="search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>&times;</button><kbd>Ctrl K</kbd></label><button type="button" class="button marketplace-search-submit" id="marketplace-search-submit">Search</button>
                 <div class="search-suggestions" id="search-suggestions" role="group" aria-label="Search suggestions" hidden></div>
               </div>
             </div>
@@ -114,22 +89,23 @@
               <label class="filter-toggle"><input name="scheduled" type="checkbox" /> Published hours</label>
               <button class="subtle-button" type="reset">Clear filters</button>
             </form>
-            <div class="marketplace-heading"><div><h2 id="marketplace-heading">Featured Services</h2><p id="marketplace-description">Popular services from talented students on your campus.</p></div><span id="marketplace-result-count" aria-live="polite"></span></div>
+            <div class="marketplace-heading"><div><h2 id="marketplace-heading">Featured services</h2><p id="marketplace-description">Popular services from talented students on your campus.</p></div><span id="marketplace-result-count" aria-live="polite"></span></div>
             <p class="search-status" id="search-status" aria-live="polite" hidden></p>
+            <div class="discovery-resume" id="discovery-resume" role="status" hidden></div>
             <div class="marketplace-grid" id="marketplace-grid"></div>
-            <section class="recent-services" id="recent-services" aria-labelledby="recent-heading"><div class="marketplace-heading"><div><h2 id="recent-heading">Recently Added</h2><p>New services from students around campus.</p></div><button class="subtle-button" type="button" id="recent-view-all">View All <span aria-hidden="true">&#8599;</span></button></div><div class="marketplace-grid" id="recent-grid"></div></section>
+            <section class="recent-services" id="recent-services" aria-labelledby="recent-heading"><div class="marketplace-heading"><div><h2 id="recent-heading">Recently added</h2><p>New services from students around campus.</p></div><button class="subtle-button" type="button" id="recent-view-all">View all</button></div><div class="marketplace-grid" id="recent-grid"></div></section>
             <aside class="request-board-entry"><div><h2>Need help finding a service?</h2><p>Post your task and let students on your campus offer to help.</p></div><button class="button button-primary" type="button" data-new-request>Post what you need</button></aside>
             <section class="safety-note"><span class="safety-note-icon">✓</span><span><strong>Made for students. Built around trust.</strong><small>See campus badges, keep booking records, and report or block when needed. <button type="button" data-open="safety-modal">Read our safety tips</button></small></span></section>
             </div><aside class="marketplace-activity" aria-label="My activity">
-              <section class="welcome-card"><span class="activity-avatar" data-activity-avatar aria-hidden="true"></span><p class="eyebrow">YOUR CAMPUS, CONNECTED</p><h2>Welcome back, <span data-student-name>student</span></h2><p>Discover services, book help, or offer your own skills.</p><span class="activity-campus" data-student-campus></span></section>
-              <section class="activity-card"><div class="activity-card-heading"><h2>Your Activity</h2><a href="#activity" data-page-link="activity" aria-label="View all activity">&#8599;</a></div><div class="activity-links"><a href="#bookings" data-page-link="bookings"><span>Upcoming Bookings</span><strong data-activity-count="bookings">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#messages" data-page-link="messages"><span>Unread Messages</span><strong data-activity-count="messages">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#saved" data-page-link="saved"><span>Saved Services</span><strong data-activity-count="saved">0</strong><span aria-hidden="true">&#8599;</span></a></div></section>
-              <section class="offer-skill-card"><span class="offer-icon" aria-hidden="true">&#10023;</span><h2>Offer Your Skill</h2><p>Turn what you're good at into opportunities for other students.</p><button type="button" class="button" data-open="service-modal">Create a Service <span aria-hidden="true">&#8599;</span></button></section>
+              <section class="welcome-card"><span class="activity-avatar" data-activity-avatar aria-hidden="true"></span><p class="eyebrow">Your campus, connected</p><h2>Welcome back, <span data-student-name>student</span></h2><p>Discover services, book help, or offer your own skills.</p><span class="activity-campus" data-student-campus></span></section>
+              <section class="activity-card"><div class="activity-card-heading"><h2>Your activity</h2><a href="#activity" data-page-link="activity" aria-label="View all activity"></a></div><div class="activity-links"><a href="#bookings" data-page-link="bookings"><span>Upcoming bookings</span><strong data-activity-count="bookings">0</strong></a><a href="#messages" data-page-link="messages"><span>Unread messages</span><strong data-activity-count="messages">0</strong></a><a href="#saved" data-page-link="saved"><span>Saved services</span><strong data-activity-count="saved">0</strong></a></div></section>
+              <section class="offer-skill-card"><span class="offer-icon" aria-hidden="true">&#10023;</span><h2>Offer Your Skill</h2><p>Turn what you're good at into opportunities for other students.</p><button type="button" class="button" data-open="service-modal">Create a Service</button></section>
             </aside></div>
           </section>
 
-          <section class="view" id="view-activity" data-view="activity"><div class="view-heading"><div><p class="eyebrow">YOUR CAMPUS CONNECTIONS</p><h1>My Activity</h1><p>Your bookings, conversations, and account at a glance.</p></div></div><div class="activity-page-layout"><section class="activity-card"><h2>Your Activity</h2><div class="activity-links"><a href="#bookings" data-page-link="bookings"><span>Upcoming Bookings</span><strong data-activity-count="bookings">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#messages" data-page-link="messages"><span>Unread Messages</span><strong data-activity-count="messages">0</strong><span aria-hidden="true">&#8599;</span></a><a href="#saved" data-page-link="saved"><span>Saved Services</span><strong data-activity-count="saved">0</strong><span aria-hidden="true">&#8599;</span></a></div><p class="activity-explanation">Upcoming bookings include pending and confirmed appointments that have not passed.</p></section><section class="activity-card"><h2>Your account</h2><p class="activity-account-name" data-student-full-name></p><p data-student-campus></p><p data-student-verification></p><div class="activity-links"><a href="#profile-settings" data-page-link="profile-settings">Profile &amp; Settings <span aria-hidden="true">&#8599;</span></a><a href="#provider" data-page-link="provider">My Listings <span aria-hidden="true">&#8599;</span></a><a href="#earnings" data-page-link="earnings">Estimated earnings <span aria-hidden="true">&#8599;</span></a><a href="#requests" data-page-link="requests">Campus requests <span aria-hidden="true">&#8599;</span></a><a href="#help-support" data-page-link="help-support">Help &amp; Support <span aria-hidden="true">&#8599;</span></a></div></section></div></section>
+          <section class="view" id="view-activity" data-view="activity"><div class="view-heading"><div><p class="eyebrow">Campus connections</p><h1>My activity</h1><p>Your bookings, conversations, and account at a glance.</p></div></div><div class="activity-page-layout"><section class="activity-card"><h2>Your activity</h2><div class="activity-links"><a href="#bookings" data-page-link="bookings"><span>Upcoming bookings</span><strong data-activity-count="bookings">0</strong></a><a href="#messages" data-page-link="messages"><span>Unread messages</span><strong data-activity-count="messages">0</strong></a><a href="#saved" data-page-link="saved"><span>Saved services</span><strong data-activity-count="saved">0</strong></a></div><p class="activity-explanation">Upcoming bookings include pending and confirmed appointments that have not passed.</p></section><section class="activity-card"><h2>Your account</h2><p class="activity-account-name" data-student-full-name></p><p data-student-campus></p><p data-student-verification></p><div class="activity-links"><a href="#profile-settings" data-page-link="profile-settings">Profile &amp; settings</a><a href="#provider" data-page-link="provider">My listings</a><a href="#earnings" data-page-link="earnings">Estimated earnings</a><a href="#requests" data-page-link="requests">Campus requests</a><a href="#help-support" data-page-link="help-support">Help &amp; support</a></div></section></div></section>
           <section class="view request-board" id="view-requests" data-view="requests">
-            <div class="view-heading"><div><p class="eyebrow">HELP STARTS HERE</p><h1>Campus requests</h1><p>Tell your campus what you need, or offer your skills to another student.</p></div><button class="button button-primary" id="request-post-open" type="button">Post a request</button></div>
+            <div class="view-heading"><div><p class="eyebrow">Help starts here</p><h1>Campus requests</h1><p>Tell your campus what you need, or offer your skills to another student.</p></div><button class="button button-primary" id="request-post-open" type="button">Post a request</button></div>
             <div class="request-board-toolbar"><label>Show<select id="request-board-filter"><option value="campus">Open requests on my campus</option><option value="mine">My requests</option><option value="responses">Requests I replied to</option></select></label><button class="subtle-button" id="request-board-refresh" type="button">Refresh</button></div>
             <p class="growth-feedback" id="request-board-feedback" role="status" aria-live="polite"></p><div class="request-board-grid" id="request-board-grid"></div>
           </section>
@@ -138,11 +114,16 @@
             <div class="booking-directions" role="group" aria-label="Booking direction"><button class="active" type="button" data-booking-direction="made" aria-pressed="true">Sent</button><button type="button" data-booking-direction="received" aria-pressed="false">Received <span class="booking-request-count" data-booking-request-count aria-label="0 new requests" hidden>0</span></button></div>
             <div class="tab-row" id="booking-tabs"><button class="tab-button active" data-booking-filter="all">All <span id="all-booking-count">0</span></button><button class="tab-button" data-booking-filter="upcoming">Upcoming</button><button class="tab-button" data-booking-filter="requests">Requests</button><button class="tab-button" data-booking-filter="completed">Completed</button></div>
             <aside class="required-review-reminder" id="required-review-reminder" aria-live="polite" hidden></aside>
+            <aside class="booking-success" id="booking-success" hidden>
+              <skillflex-illustration name="success"><span aria-hidden="true">✓</span></skillflex-illustration>
+              <div class="booking-success-copy"><strong data-booking-success-title>Booking request sent</strong><p data-booking-success-description>Awaiting provider confirmation. You can track the request below.</p></div>
+              <button type="button" class="button button-small button-outline" data-dismiss-booking-success aria-label="Dismiss booking receipt">Dismiss</button>
+            </aside>
             <div class="booking-list" id="user-booking-list"></div>
           </section>
 
           <section class="view" id="view-messages" data-view="messages">
-            <div class="view-heading messages-page-heading"><div><p class="eyebrow">KEEP IT ON CAMPUS</p><h1>Messages</h1><p>Coordinate with students and service providers.</p></div></div>
+            <div class="view-heading messages-page-heading"><div><p class="eyebrow">Keep it on campus</p><h1>Messages</h1><p>Coordinate with students and service providers.</p></div></div>
             <div class="messages-layout" id="messages-layout">
               <aside class="conversation-sidebar" aria-label="Conversations">
                 <div class="conversation-sidebar-heading">
@@ -156,13 +137,13 @@
           </section>
 
           <section class="view" id="view-saved" data-view="saved">
-            <div class="view-heading"><div><p class="eyebrow">YOUR SHORTLIST</p><h1>Saved providers</h1><p>People and services you want to come back to.</p></div><button class="button button-outline" type="button" data-page-link="home">Explore services</button></div>
+            <div class="view-heading"><div><p class="eyebrow">Your shortlist</p><h1>Saved providers</h1><p>People and services you want to come back to.</p></div><button class="button button-outline" type="button" data-page-link="home">Explore services</button></div>
             <div class="marketplace-grid" id="saved-grid"></div>
           </section>
 
           <section class="view" id="view-provider" data-view="provider">
-            <div class="view-heading"><div><p class="eyebrow">YOUR SKILLS, YOUR BUSINESS</p><h1>My Listings</h1><p>Manage the work you offer to your campus community.</p></div><button class="button button-primary" type="button" data-open="service-modal">＋ Add a service</button></div>
-            <div class="provider-summary"><div class="provider-stat"><span>ACTIVE LISTINGS</span><strong id="active-listings-count">0</strong><small>Services visible to students</small></div><div class="provider-stat"><span>ACTIVE REQUESTS</span><strong id="provider-request-count">0</strong><small>Bookings to review</small></div><div class="provider-stat"><span>YOUR RATING</span><strong>—</strong><small>No reviews yet</small></div><div class="provider-stat"><span>THIS MONTH</span><strong id="provider-earnings">GH₵ 0</strong><small>Completed bookings</small></div></div>
+            <div class="view-heading"><div><p class="eyebrow">Your skills, your business</p><h1>My listings</h1><p>Manage the work you offer to your campus community.</p></div><button class="button button-primary" type="button" data-open="service-modal">＋ Add a service</button></div>
+            <div class="provider-summary"><div class="provider-stat"><span>Active listings</span><strong id="active-listings-count">0</strong><small>Services visible to students</small></div><div class="provider-stat"><span>Active requests</span><strong id="provider-request-count">0</strong><small>Bookings to review</small></div><div class="provider-stat"><span>Your rating</span><strong>—</strong><small>No reviews yet</small></div><div class="provider-stat"><span>This month</span><strong id="provider-earnings">GH₵ 0</strong><small>Completed bookings</small></div></div>
             <article class="panel provider-profile-panel"><div class="provider-profile-main"><div class="profile-avatar profile-avatar-large">AM</div><div><span class="verified-pill">✓ Campus verified</span><h2>Alex Morgan</h2><p>Graphic designer &amp; laptop fixer · University of Ghana</p><div class="profile-tags"><span>Graphic design</span><span>Tech help</span><span>Available this week</span></div></div></div><button class="button button-outline" type="button" data-open="profile-modal">Edit profile</button></article>
             <details class="panel availability-panel" id="availability-settings">
               <summary class="availability-summary">
@@ -216,11 +197,9 @@
           </section>
 
           <section class="view" id="view-profile-settings" data-view="profile-settings">
-            <div class="view-heading"><div><p class="eyebrow">YOUR ACCOUNT</p><h1>Profile &amp; Settings</h1><p>Manage your public profile and account preferences.</p></div></div>
-            <nav class="profile-shortcuts" aria-label="Your shortcuts"><button type="button" data-page-link="saved"><span aria-hidden="true">♡</span> Saved providers <span aria-hidden="true">→</span></button><button type="button" data-page-link="help-support"><span aria-hidden="true">?</span> Help &amp; support <span aria-hidden="true">→</span></button></nav>
-            <section class="seller-entry panel"><div><p class="eyebrow">PUT YOUR SKILLS TO WORK</p><h2 id="seller-entry-title">Good at something?</h2><p id="seller-entry-description">Create a listing and help someone on campus.</p></div><button class="button button-primary" id="mode-switch" type="button"><span id="mode-switch-label">Offer a service</span></button><button class="subtle-button" type="button" data-page-link="earnings" data-seller-only hidden>Estimated earnings →</button></section>
+            <div class="view-heading"><div><p class="eyebrow">Your account</p><h1>Profile &amp; settings</h1><p>Manage your public profile and account preferences.</p></div></div>
+            <nav class="profile-shortcuts" aria-label="Your shortcuts"><button type="button" data-page-link="saved"><span aria-hidden="true">♡</span> Saved providers</button><button type="button" data-page-link="help-support"><span aria-hidden="true">?</span> Help &amp; support</button></nav>
             <div id="profile-completeness-root"></div>
-            <section class="panel appearance-settings"><div><h2>Appearance</h2><p>Choose the theme that feels right for you.</p></div><button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to dark mode"><span data-theme-icon aria-hidden="true">☾</span> Change theme</button></section>
             <form class="settings-form" id="account-profile-form">
               <section class="panel settings-section">
                 <div class="panel-heading"><div><h2>Profile details</h2><p>These details help students recognize you on campus.</p></div></div>
@@ -229,12 +208,13 @@
                 <label>Email address<input id="settings-email" type="email" readonly aria-readonly="true" /></label>
                 <label>Campus or university<input id="settings-university" required minlength="2" maxlength="120" /></label>
                 <label>Bio<textarea id="settings-bio" rows="4" maxlength="500"></textarea></label>
-                <div class="cv-editor"><div><strong>Professional CV <span class="label-hint">(optional)</span></strong><small id="settings-cv-current">Add a PDF CV to your provider profile. Only signed-in Skillmate students can open it.</small></div><label class="button button-outline settings-upload-label" for="settings-cv-file">Choose CV (PDF)</label><input id="settings-cv-file" type="file" accept="application/pdf,.pdf" /><label class="check-label cv-remove-option" id="settings-cv-remove-row" hidden><input id="settings-cv-remove" type="checkbox" /> Remove current CV</label></div>
+                <div class="cv-editor"><div><strong>Professional CV <span class="label-hint">(optional)</span></strong><small id="settings-cv-current">Add a PDF CV to your provider profile. Only signed-in Skill Flex students can open it.</small></div><label class="button button-outline settings-upload-label" for="settings-cv-file">Choose CV (PDF)</label><input id="settings-cv-file" type="file" accept="application/pdf,.pdf" /><label class="check-label cv-remove-option" id="settings-cv-remove-row" hidden><input id="settings-cv-remove" type="checkbox" /> Remove current CV</label></div>
                 <label>Phone number<input id="settings-phone" type="tel" maxlength="32" autocomplete="tel" /></label>
                 <p class="settings-feedback" id="account-profile-feedback" role="status" aria-live="polite" hidden></p>
                 <button class="button button-primary settings-save-button" type="submit">Save profile</button>
               </section>
             </form>
+            <section class="panel appearance-settings"><div><h2>Appearance</h2><p>Choose the theme that feels right for you.</p></div><button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch to dark mode"><span data-theme-icon aria-hidden="true">☾</span> Change theme</button></section>
             <form class="settings-form" id="password-change-form">
               <section class="panel settings-section">
                 <div class="panel-heading"><div><h2>Change password</h2><p>Use at least 8 characters; password input is limited to 72 bytes.</p></div></div>
@@ -245,18 +225,19 @@
               </section>
             </form>
             <section class="panel settings-section">
-              <div class="panel-heading"><div><h2>Notifications</h2><p>Choose which updates you receive in Skillmate and on this device.</p></div></div>
+              <div class="panel-heading"><div><h2>Notifications</h2><p>Choose which updates you receive in Skill Flex and on this device.</p></div></div>
               <label class="settings-toggle"><span><strong>Booking updates</strong><small>Requests, confirmations and cancellations.</small></span><input id="settings-notify-bookings" type="checkbox" /></label>
               <label class="settings-toggle"><span><strong>Messages</strong><small>New messages from other students.</small></span><input id="settings-notify-messages" type="checkbox" /></label>
               <p class="settings-feedback" id="notification-settings-feedback" role="status" aria-live="polite" hidden></p>
               <button class="button button-primary settings-save-button" id="settings-notifications-save" type="button">Save notification settings</button>
               <div class="settings-push-control">
-                <p><strong>Browser notifications</strong><br /><small>Get booking and message alerts when Skillmate is closed. Message previews are kept private.</small></p>
+                <p><strong>Browser notifications</strong><br /><small>Get booking and message alerts when Skill Flex is closed. Message previews are kept private.</small></p>
                 <button class="button button-outline" id="settings-push-toggle" type="button">Enable on this device</button>
-                <small class="settings-push-help" id="settings-push-help" hidden>On iPhone/iPad: Share → Add to Home Screen. Then open Skillmate from its new icon and tap Enable.</small>
+                <small class="settings-push-help" id="settings-push-help" hidden>On iPhone/iPad: Use Share, then Add to Home Screen. Then open Skill Flex from its new icon and tap Enable.</small>
                 <p class="settings-feedback" id="settings-push-feedback" role="status" aria-live="polite" hidden></p>
               </div>
             </section>
+            <section class="seller-entry panel"><div><p class="eyebrow">Put your skills to work</p><h2 id="seller-entry-title">Good at something?</h2><p id="seller-entry-description">Create a listing and help someone on campus.</p></div><button class="button button-primary" id="mode-switch" type="button"><span id="mode-switch-label">Offer a service</span></button><button class="subtle-button" type="button" data-page-link="earnings" data-seller-only hidden>Estimated earnings</button></section>
             <section class="panel settings-section danger-zone">
               <div class="panel-heading"><div><h2>Delete account</h2><p>Your profile will be anonymized, listings deactivated, and sign-in disabled. Booking and safety history is retained without your profile details.</p></div></div>
               <button class="button button-danger" id="delete-account-open" type="button">Delete my account</button>
@@ -265,17 +246,17 @@
           </section>
 
           <section class="view" id="view-help-support" data-view="help-support">
-            <div class="view-heading"><div><p class="eyebrow">WE’RE HERE TO HELP</p><h1>Help &amp; Support</h1><p>Answers to common questions and a direct line to our team.</p></div></div>
+            <div class="view-heading"><div><p class="eyebrow">We’re here to help</p><h1>Help &amp; support</h1><p>Answers to common questions and a direct line to our team.</p></div></div>
             <section class="panel support-section">
-              <div class="panel-heading"><div><h2>Frequently asked questions</h2><p>Quick answers about using Skillmate.</p></div></div>
+              <div class="panel-heading"><div><h2>Frequently asked questions</h2><p>Quick answers about using Skill Flex.</p></div></div>
               <div class="support-faq">
                 <details><summary>How do I request a booking?</summary><p>Open a provider’s listing, choose Request booking, then select a service, date and time. You can coordinate final details in Messages.</p></details>
-                <details><summary>How do payments work?</summary><p>Skillmate does not collect payment for bookings. Agree on the price and a safe payment method directly with the provider before the appointment.</p></details>
+                <details><summary>How do payments work?</summary><p>Skill Flex does not collect payment for bookings. Agree on the price and a safe payment method directly with the provider before the appointment.</p></details>
                 <details><summary>How do I become a provider?</summary><p>Open Profile, choose Offer a service, and add a clear description, price and examples of your work.</p></details>
                 <details><summary>Can I cancel or change a booking?</summary><p>Open My bookings and message the other student as soon as possible to agree on a change or cancellation.</p></details>
                 <details><summary>How does campus verification work?</summary><p>Submit your university email and a clear photo of your current student ID. A campus badge appears only after review and approval. Your ID photo is private and deleted after review.</p></details>
                 <details><summary>What should I do if someone behaves inappropriately?</summary><p>Use Report on their profile or booking, block them if needed, and contact support. Do not share passwords or banking details.</p></details>
-                <details><summary>How do I update my profile or password?</summary><p>Open Profile &amp; Settings from the sidebar to update your profile details, change your password and choose notification preferences.</p></details>
+                <details><summary>How do I update my profile or password?</summary><p>Open Profile &amp; settings from the sidebar to update your profile details, change your password and choose notification preferences.</p></details>
               </div>
             </section>
             <section class="panel support-section">
@@ -294,6 +275,7 @@
             </section>
           </section>
         </div>
+      <footer class="illustration-attribution"><a class="storyset-credit" href="https://storyset.com">Artwork: Storyset</a></footer>
       </main>
     </div>
     <nav class="mobile-nav" aria-label="Main navigation">
@@ -303,7 +285,7 @@
       <a href="#profile-settings" data-page-link="profile-settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>Profile</span></a>
     </nav>
 
-    <dialog class="app-modal category-modal" id="category-modal" aria-labelledby="category-modal-title"><div class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close categories">×</button><p class="eyebrow">FIND YOUR KIND OF HELP</p><h2 id="category-modal-title">All categories</h2><div id="all-categories" class="all-categories"></div></div></dialog>
+    <dialog class="app-modal category-modal" id="category-modal" aria-labelledby="category-modal-title"><div class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close categories">×</button><p class="eyebrow">Find your kind of help</p><h2 id="category-modal-title">All categories</h2><div id="all-categories" class="all-categories"></div></div></dialog>
 
     <dialog class="app-modal" id="notifications-modal" aria-labelledby="notifications-title">
       <div class="modal-frame">
@@ -317,20 +299,21 @@
     <dialog class="app-modal booking-modal" id="booking-modal" aria-labelledby="booking-title">
       <form method="dialog" class="modal-frame booking-form" id="booking-form">
         <header class="booking-header">
-          <div><p class="eyebrow">BOOKING REQUEST</p><h2 id="booking-title">Request this service</h2></div>
+          <div><p class="eyebrow">Booking request</p><h2 id="booking-title">Request this service</h2></div>
           <button class="modal-close" type="button" data-close aria-label="Close booking">×</button>
         </header>
         <p class="booking-context" id="booking-description"></p>
+        <div class="journey-feedback" id="booking-save-status" role="status" aria-live="polite"></div>
         <input type="hidden" id="booking-provider-id" />
         <input type="hidden" id="booking-negotiation-id" />
         <section class="booking-service-summary" aria-live="polite">
-          <div class="booking-service-copy"><span class="booking-field-kicker">SERVICE</span><strong id="booking-summary-service"></strong><small id="booking-provider-name"></small></div>
+          <div class="booking-service-copy"><span class="booking-field-kicker">Service</span><strong id="booking-summary-service"></strong><small id="booking-provider-name"></small></div>
           <div class="booking-price-copy"><span id="booking-price-label">Listed price</span><strong id="booking-price"></strong><span id="booking-negotiable-badge" class="booking-price-type">Negotiable</span><p id="booking-price-detail"></p></div>
         </section>
         <label id="booking-service-switch" class="booking-service-switch" hidden>Switch service<select id="booking-service" required></select></label>
         <section class="booking-agreement-review" id="booking-agreement-review" hidden>
-          <div><span>PROVIDER</span><strong id="booking-provider-summary"></strong></div>
-          <div><span>AGREED SCOPE</span><p id="booking-scope-summary"></p></div>
+          <div><span>Provider</span><strong id="booking-provider-summary"></strong></div>
+                    <div><span>Agreed scope</span><p id="booking-scope-summary"></p></div>
           <div class="booking-agreement-prices"><span>Original listing <strong id="booking-original-price"></strong></span><span>Agreed price <strong id="booking-agreed-price"></strong></span></div>
         </section>
         <section class="booking-input-section" id="booking-appointment-details" aria-label="Appointment details">
@@ -349,7 +332,7 @@
           <textarea id="booking-note" rows="2" maxlength="1000" placeholder="Share a helpful detail"></textarea>
         </details>
         <label class="booking-confirm-check" id="booking-confirm-label" hidden><input id="booking-confirm-details" type="checkbox" /><span>I’ve reviewed the agreed service scope and price. I understand this is a request and the provider still needs to confirm.</span></label>
-        <div id="booking-negotiation-option" class="booking-negotiation-option" hidden><button id="booking-negotiate" class="booking-inline-link" type="button">Prefer a different price? <span>Negotiate in chat →</span></button></div>
+        <div id="booking-negotiation-option" class="booking-negotiation-option" hidden><button id="booking-negotiate" class="booking-inline-link" type="button">Prefer a different price? <span>Negotiate in chat</span></button></div>
         <footer class="booking-submit-footer">
           <p class="booking-availability-note" id="booking-availability-note">The provider must confirm your requested appointment.</p>
           <button class="button button-primary modal-submit" id="booking-submit" type="submit">Send Booking Request</button>
@@ -385,7 +368,7 @@
     <dialog class="app-modal service-editor" id="service-modal" aria-labelledby="service-modal-title" aria-describedby="service-modal-description">
       <form class="modal-frame service-editor-form" id="service-form" novalidate>
         <header class="service-editor-header">
-          <div><p class="eyebrow">YOUR SKILL. SOMEONE'S SOLUTION.</p><h2 id="service-modal-title">Add a service</h2></div>
+          <div><p class="eyebrow">Your skill. Someone’s solution.</p><h2 id="service-modal-title">Add a service</h2></div>
           <button class="modal-close" type="button" data-close aria-label="Close service editor">&times;</button>
           <p id="service-modal-description">Give students a clear picture of what you offer.</p>
           <p class="service-editor-step" id="service-editor-step">1 of 2 &middot; Service details</p>
@@ -426,17 +409,17 @@
             <article class="service-preview-card"><div class="service-preview-cover"><img id="service-review-cover" alt="Service cover" hidden /><span id="service-review-symbol" aria-hidden="true">✦</span></div><div class="service-preview-copy"><p class="eyebrow" id="service-review-category"></p><h4 id="service-review-name"></h4><p id="service-review-description"></p><div class="service-preview-tags" id="service-review-tags"></div><strong id="service-review-price"></strong></div></article>
           </section>
         </div>
-        <footer class="service-editor-footer"><p class="modal-feedback" id="service-form-feedback" role="status" aria-live="polite" hidden></p><div class="service-editor-actions"><button class="button button-outline" id="service-back" type="button" hidden>Back to details</button><span class="service-helper" id="service-footer-hint"><em>Clear details. Confident bookings.</em></span><button class="button button-primary" id="service-submit" type="submit">Preview service <span aria-hidden="true">&rarr;</span></button></div></footer>
+        <footer class="service-editor-footer"><p class="modal-feedback" id="service-form-feedback" role="status" aria-live="polite" hidden></p><div class="service-editor-actions"><button class="button button-outline" id="service-back" type="button" hidden>Back to details</button><span class="service-helper" id="service-footer-hint"><em>Clear details. Confident bookings.</em></span><button class="button button-primary" id="service-submit" type="submit">Preview service</button></div></footer>
       </form>
     </dialog>
-    <dialog class="app-modal" id="profile-modal"><form method="dialog" class="modal-frame" id="profile-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">YOUR CAMPUS PROFILE</p><h2>Edit your profile</h2><p class="modal-description">Help students understand who you are and what you’re good at.</p><label>Your name<input id="profile-name" required minlength="2" maxlength="80" value="Alex Morgan" /></label><label id="profile-university-field" hidden>University or campus<input id="profile-university" maxlength="120" placeholder="Enter your university or campus" /></label><label id="profile-student-id-field" hidden>Student ID number <span class="label-hint">(optional)</span><input id="profile-student-id" minlength="3" maxlength="80" placeholder="Enter your student ID number" /><small>This is stored privately and does not automatically verify student status.</small></label><label>Short bio<textarea id="profile-bio" rows="3" maxlength="500">Graphic designer and laptop fixer who loves helping fellow students.</textarea></label><label>University email<input id="profile-email" type="email" value="alex.m@ug.edu.gh" required /></label><label>Hostel or campus location <span class="label-hint">(optional)</span><input id="profile-location" maxlength="120" placeholder="e.g. Mensah Sarbah Hall" /><small class="location-privacy-note">Only shared with the other person after a booking is confirmed. Use a hostel or campus name, not your room number.</small></label><button class="button button-primary modal-submit" type="submit">Save profile</button></form></dialog>
-    <dialog class="app-modal" id="delete-account-modal"><form method="dialog" class="modal-frame" id="delete-account-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">PERMANENT ACCOUNT CLOSURE</p><h2>Delete your account?</h2><p class="modal-description">Your profile will be anonymized, listings deactivated, and your sign-in disabled. Your booking and safety history will be kept without your profile details. This cannot be undone.</p><label>Type DELETE to confirm<input id="delete-account-confirmation" required autocomplete="off" /></label><p class="modal-feedback" id="delete-account-feedback" role="status" aria-live="polite" hidden></p><button class="button button-danger modal-submit" id="delete-account-submit" type="submit">Permanently delete account</button></form></dialog>
-    <dialog class="app-modal" id="portfolio-modal"><form method="dialog" class="modal-frame" id="portfolio-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">SHOW YOUR WORK</p><h2>Add to your portfolio</h2><p class="modal-description">Add a project title and a short description to showcase your skills.</p><label>Project title<input id="portfolio-title" required maxlength="50" placeholder="e.g. Society event poster" /></label><label>What did you create?<textarea id="portfolio-description" rows="3" required maxlength="180" placeholder="Tell students about the project..."></textarea></label><label>Choose an image (optional)<input id="portfolio-image" type="file" accept="image/*" /></label><button class="button button-primary modal-submit" type="submit">Add portfolio item</button></form></dialog>
-    <dialog class="app-modal" id="verification-modal"><form method="dialog" class="modal-frame" id="verification-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">CAMPUS COMMUNITY</p><h2>Earn your campus badge</h2><p class="modal-description">Upload a clear photo of your current student ID. An administrator will review it privately, and the photo will be deleted after the review.</p><label>University email<input id="verification-email" type="email" required placeholder="you@university.edu" /></label><label>Photo of your student ID<input id="verification-photo" type="file" accept="image/jpeg,image/png,image/webp" required /><small>JPG, PNG, or WebP · Max 5 MB. Your ID photo is stored privately, not in the database.</small></label><p class="modal-feedback" id="verification-feedback" role="status" aria-live="polite" hidden></p><button class="button button-primary modal-submit" id="verification-submit" type="submit">Submit for review</button><small class="modal-footnote">A green campus badge appears on your profile only after approval.</small></form></dialog>
-    <dialog class="app-modal" id="safety-modal"><form method="dialog" class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">TRUST &amp; SAFETY</p><h2>Your campus, your community.</h2><p class="modal-description">Only meet in appropriate public or campus-approved locations. Keep your messages on-platform, agree on prices before work starts, and use booking records if something goes wrong.</p><div class="safety-actions"><button class="safety-action" type="button" data-open="report-modal">Report a concern</button><button class="safety-action" type="button" data-open="blocked-modal">Manage blocked students</button></div><small class="modal-footnote">Reports are visible to the Skillmate safety team. Blocking also hides the student from your marketplace and messages.</small></form></dialog>
-    <dialog class="app-modal" id="report-modal"><form method="dialog" class="modal-frame" id="report-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">HELP KEEP SKILLMATE SAFE</p><h2>Report a concern</h2><p class="modal-description" id="report-description">Tell us what happened. The safety team will review your report.</p><input type="hidden" id="report-provider-id" /><label>Student you’re reporting<select id="report-target"><option value="">Choose a student</option><option value="daniel">Daniel Owusu</option><option value="akosua">Akosua Appiah</option><option value="nana">Nana Adu</option><option value="michael">Michael Frimpong</option><option value="efua">Efua Boateng</option><option value="kojo">Kojo Asare</option></select></label><label>What’s the issue?<select id="report-reason"><option>Suspicious profile or fraud</option><option>Harassment or inappropriate messages</option><option>Booking or payment disagreement</option><option>Unsafe or poor conduct</option><option>Other safety concern</option></select></label><label>Details<textarea id="report-details" rows="3" required maxlength="400" placeholder="Share only the details needed to understand the concern."></textarea></label><label class="check-label"><input id="report-block" type="checkbox" /> Block this student too</label><button class="button button-danger modal-submit" type="submit"><span aria-hidden="true">&#9888;</span> Submit report</button></form></dialog>
-    <dialog class="app-modal" id="blocked-modal"><form method="dialog" class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">YOUR SAFETY CONTROLS</p><h2>Blocked students</h2><p class="modal-description">Blocked students are hidden from your marketplace and messages. For connected accounts, blocking applies across your devices.</p><div class="blocked-list" id="blocked-list"></div></form></dialog>
-    <dialog class="app-modal" id="review-modal"><form method="dialog" class="modal-frame" id="review-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">HELP STUDENTS CHOOSE WELL</p><h2>Leave a review</h2><p class="modal-description" id="review-description"></p><input type="hidden" id="review-booking-id" /><label>Your rating<select id="review-rating"><option value="5">★★★★★ — Great</option><option value="4">★★★★☆ — Good</option><option value="3">★★★☆☆ — Okay</option><option value="2">★★☆☆☆ — Not great</option><option value="1">★☆☆☆☆ — Poor</option></select></label><label>Share your experience<textarea id="review-text" rows="3" required maxlength="300" placeholder="What should another student know?"></textarea></label><button class="button button-primary modal-submit" type="submit">Post review</button></form></dialog>
+    <dialog class="app-modal" id="profile-modal"><form method="dialog" class="modal-frame" id="profile-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">Your campus profile</p><h2>Edit your profile</h2><p class="modal-description">Help students understand who you are and what you’re good at.</p><label>Your name<input id="profile-name" required minlength="2" maxlength="80" value="Alex Morgan" /></label><label id="profile-university-field" hidden>University or campus<input id="profile-university" maxlength="120" placeholder="Enter your university or campus" /></label><label id="profile-student-id-field" hidden>Student ID number <span class="label-hint">(optional)</span><input id="profile-student-id" minlength="3" maxlength="80" placeholder="Enter your student ID number" /><small>This is stored privately and does not automatically verify student status.</small></label><label>Short bio<textarea id="profile-bio" rows="3" maxlength="500">Graphic designer and laptop fixer who loves helping fellow students.</textarea></label><label>University email<input id="profile-email" type="email" value="alex.m@ug.edu.gh" required /></label><label>Hostel or campus location <span class="label-hint">(optional)</span><input id="profile-location" maxlength="120" placeholder="e.g. Mensah Sarbah Hall" /><small class="location-privacy-note">Only shared with the other person after a booking is confirmed. Use a hostel or campus name, not your room number.</small></label><button class="button button-primary modal-submit" type="submit">Save profile</button></form></dialog>
+    <dialog class="app-modal" id="delete-account-modal"><form method="dialog" class="modal-frame" id="delete-account-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">Permanent account closure</p><h2>Delete your account?</h2><p class="modal-description">Your profile will be anonymized, listings deactivated, and your sign-in disabled. Your booking and safety history will be kept without your profile details. This cannot be undone.</p><label>Type DELETE to confirm<input id="delete-account-confirmation" required autocomplete="off" /></label><p class="modal-feedback" id="delete-account-feedback" role="status" aria-live="polite" hidden></p><button class="button button-danger modal-submit" id="delete-account-submit" type="submit">Permanently delete account</button></form></dialog>
+    <dialog class="app-modal" id="portfolio-modal"><form method="dialog" class="modal-frame" id="portfolio-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">Show your work</p><h2>Add to your portfolio</h2><p class="modal-description">Add a project title and a short description to showcase your skills.</p><label>Project title<input id="portfolio-title" required maxlength="50" placeholder="e.g. Society event poster" /></label><label>What did you create?<textarea id="portfolio-description" rows="3" required maxlength="180" placeholder="Tell students about the project..."></textarea></label><label>Choose an image (optional)<input id="portfolio-image" type="file" accept="image/*" /></label><button class="button button-primary modal-submit" type="submit">Add portfolio item</button></form></dialog>
+    <dialog class="app-modal" id="verification-modal"><form method="dialog" class="modal-frame" id="verification-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">Campus community</p><h2>Earn your campus badge</h2><p class="modal-description">Upload a clear photo of your current student ID. An administrator will review it privately, and the photo will be deleted after the review.</p><label>University email<input id="verification-email" type="email" required placeholder="you@university.edu" /></label><label>Photo of your student ID<input id="verification-photo" type="file" accept="image/jpeg,image/png,image/webp" required /><small>JPG, PNG, or WebP · Max 5 MB. Your ID photo is stored privately, not in the database.</small></label><p class="modal-feedback" id="verification-feedback" role="status" aria-live="polite" hidden></p><button class="button button-primary modal-submit" id="verification-submit" type="submit">Submit for review</button><small class="modal-footnote">A green campus badge appears on your profile only after approval.</small></form></dialog>
+    <dialog class="app-modal" id="safety-modal"><form method="dialog" class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">TRUST &amp; SAFETY</p><h2>Your campus, your community.</h2><p class="modal-description">Only meet in appropriate public or campus-approved locations. Keep your messages on-platform, agree on prices before work starts, and use booking records if something goes wrong.</p><div class="safety-actions"><button class="safety-action" type="button" data-open="report-modal">Report a concern</button><button class="safety-action" type="button" data-open="blocked-modal">Manage blocked students</button></div><small class="modal-footnote">Reports are visible to the Skill Flex safety team. Blocking also hides the student from your marketplace and messages.</small></form></dialog>
+    <dialog class="app-modal" id="report-modal"><form method="dialog" class="modal-frame" id="report-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">Help keep Skill Flex safe</p><h2>Report a concern</h2><p class="modal-description" id="report-description">Tell us what happened. The safety team will review your report.</p><input type="hidden" id="report-provider-id" /><label>Student you’re reporting<select id="report-target"><option value="">Choose a student</option><option value="daniel">Daniel Owusu</option><option value="akosua">Akosua Appiah</option><option value="nana">Nana Adu</option><option value="michael">Michael Frimpong</option><option value="efua">Efua Boateng</option><option value="kojo">Kojo Asare</option></select></label><label>What’s the issue?<select id="report-reason"><option>Suspicious profile or fraud</option><option>Harassment or inappropriate messages</option><option>Booking or payment disagreement</option><option>Unsafe or poor conduct</option><option>Other safety concern</option></select></label><label>Details<textarea id="report-details" rows="3" required maxlength="400" placeholder="Share only the details needed to understand the concern."></textarea></label><label class="check-label"><input id="report-block" type="checkbox" /> Block this student too</label><button class="button button-danger modal-submit" type="submit"><span aria-hidden="true">&#9888;</span> Submit report</button></form></dialog>
+    <dialog class="app-modal" id="blocked-modal"><form method="dialog" class="modal-frame"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">Your safety controls</p><h2>Blocked students</h2><p class="modal-description">Blocked students are hidden from your marketplace and messages. For connected accounts, blocking applies across your devices.</p><div class="blocked-list" id="blocked-list"></div></form></dialog>
+    <dialog class="app-modal" id="review-modal"><form method="dialog" class="modal-frame" id="review-form"><button class="modal-close" type="button" data-close aria-label="Close">×</button><p class="eyebrow">Help students choose well</p><h2>Leave a review</h2><p class="modal-description" id="review-description"></p><input type="hidden" id="review-booking-id" /><label>Your rating<select id="review-rating"><option value="5">★★★★★ — Great</option><option value="4">★★★★☆ — Good</option><option value="3">★★★☆☆ — Okay</option><option value="2">★★☆☆☆ — Not great</option><option value="1">★☆☆☆☆ — Poor</option></select></label><label>Share your experience<textarea id="review-text" rows="3" required maxlength="300" placeholder="What should another student know?"></textarea></label><button class="button button-primary modal-submit" type="submit">Post review</button></form></dialog>
     <div class="loading-indicator" id="loading-indicator" role="status" aria-live="polite" hidden>
       <span class="loading-spinner" aria-hidden="true"></span>
       <span id="loading-label">Working on it…</span>
@@ -446,13 +429,14 @@
       </span>
     </div>
 
-    <dialog class="app-modal" id="request-post-modal"><form class="modal-frame" id="request-post-form"><button class="modal-close" type="button" data-close aria-label="Close">&times;</button><p class="eyebrow">ASK YOUR CAMPUS</p><h2>What do you need?</h2><label>Request title<input id="request-title" required minlength="5" maxlength="100" placeholder="A poster for our club event" /></label><label>Category<select id="request-category" required></select></label><label>Describe the task<textarea id="request-description" required minlength="20" maxlength="2000" rows="4" placeholder="Include the work you need and what a good result looks like. Keep personal contact and payment details out of your post."></textarea></label><div class="form-row"><label>Budget (GH&#8373;)<input id="request-budget" type="number" min="1" max="999999" step="0.01" placeholder="Optional" /></label><label>Needed by<input id="request-deadline" type="date" required /></label></div><label>Delivery<select id="request-delivery"><option value="in_person">In person</option><option value="online">Online</option><option value="both">Either</option></select></label><small class="growth-feedback">Requests are shared on your campus and expire on your chosen date (up to 30 days). Agree on the scope and price before booking.</small><p id="request-post-feedback" class="growth-feedback" role="status" aria-live="polite"></p><button class="button button-primary" type="submit">Publish request</button></form></dialog>
+    <dialog class="app-modal" id="request-post-modal"><form class="modal-frame" id="request-post-form"><button class="modal-close" type="button" data-close aria-label="Close">&times;</button><p class="eyebrow">Ask your campus</p><h2>What do you need?</h2><label>Request title<input id="request-title" required minlength="5" maxlength="100" placeholder="A poster for our club event" /></label><label>Category<select id="request-category" required></select></label><label>Describe the task<textarea id="request-description" required minlength="20" maxlength="2000" rows="4" placeholder="Include the work you need and what a good result looks like. Keep personal contact and payment details out of your post."></textarea></label><div class="form-row"><label>Budget (GH&#8373;)<input id="request-budget" type="number" min="1" max="999999" step="0.01" placeholder="Optional" /></label><label>Needed by<input id="request-deadline" type="date" required /></label></div><label>Delivery<select id="request-delivery"><option value="in_person">In person</option><option value="online">Online</option><option value="both">Either</option></select></label><small class="growth-feedback">Requests are shared on your campus and expire on your chosen date (up to 30 days). Agree on the scope and price before booking.</small><p id="request-post-feedback" class="growth-feedback" role="status" aria-live="polite"></p><button class="button button-primary" type="submit">Publish request</button></form></dialog>
     <dialog class="app-modal" id="request-reply-modal"><form class="modal-frame" id="request-reply-form"><button class="modal-close" type="button" data-close aria-label="Close">&times;</button><h2>Offer to help</h2><input id="request-reply-id" type="hidden" /><label>Your offer<textarea id="request-reply-message" required minlength="10" maxlength="1000" rows="4" placeholder="Explain how you can help, what is included and when you are available."></textarea></label><label>Suggested price (GH&#8373;)<input id="request-reply-price" type="number" min="1" max="999999" step="0.01" placeholder="Optional" /></label><p id="request-reply-feedback" class="growth-feedback" role="status" aria-live="polite"></p><button class="button button-primary" type="submit">Send response</button></form></dialog>
     <dialog class="app-modal" id="request-report-modal"><form class="modal-frame" id="request-report-form"><button class="modal-close" type="button" data-close aria-label="Close">&times;</button><h2>Report this request</h2><input id="request-report-id" type="hidden" /><label>What happened?<textarea id="request-report-message" required minlength="10" maxlength="1000" rows="4" placeholder="Explain why this request needs review."></textarea></label><p id="request-report-feedback" class="growth-feedback" role="status" aria-live="polite"></p><button class="button button-danger" type="submit">Send report</button></form></dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script defer src="/assets/vendor/supabase-js-2.119.0.js" integrity="sha384-uteMfOloLDGt042uDz+xHGF3ym63/WQ6rFq7murQRG8Ih7QrXGEGNtWd8688sb4O"></script>
     <script defer src="supabase-config.js"></script>
-    <script defer src="supabase-client.js?v=4"></script>
+    <script defer src="api-client.js?v=2"></script>
+    <script defer src="supabase-client.js?v=6"></script>
     <script defer src="smart-search.js"></script>
     <script defer src="profile-completeness.js?v=2"></script>
     <script defer src="service-form-utils.js?v=3"></script>

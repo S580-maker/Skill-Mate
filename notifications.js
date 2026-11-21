@@ -1,6 +1,7 @@
 (() => {
   let offset = 0;
   let loading = false;
+  let retryReset = false;
   const dialog = document.querySelector("#notifications-modal");
   const status = document.querySelector("#notifications-status");
   const list = document.querySelector("#notifications-list");
@@ -275,10 +276,11 @@
 
   async function load({ reset = false } = {}) {
     if (loading) return;
-    if (reset) { offset = 0; list.replaceChildren(); }
+    reset = reset || retryReset;
+    const requestOffset = reset ? 0 : offset;
     loading = true;
-    const finishLoading = typeof window !== "undefined" && window.skillmateLoading
-      ? window.skillmateLoading.show(list, { count: 3, label: "Loading notifications" })
+    const finishLoading = typeof window !== "undefined" && window.skillflexLoading
+      ? window.skillflexLoading.show(list, { count: 3, variant: "notifications", label: "Loading notifications", delay: 150, preserve: reset && list.children.length > 0 })
       : () => {};
     more.disabled = true;
     status.textContent = "Loading notifications…";
@@ -346,7 +348,7 @@
           open.textContent = "Open booking";
           open.addEventListener("click", () => {
             dialog.close();
-            document.dispatchEvent(new CustomEvent("skillmate:open-booking", {
+            document.dispatchEvent(new CustomEvent("skillflex:open-booking", {
               detail: { bookingId: item.booking_id },
             }));
           });
@@ -359,7 +361,7 @@
           open.textContent = "Open conversation";
           open.addEventListener("click", () => {
             dialog.close();
-            document.dispatchEvent(new CustomEvent("skillmate:open-conversation", {
+            document.dispatchEvent(new CustomEvent("skillflex:open-conversation", {
               detail: { conversationId: item.conversation_id },
             }));
           });
@@ -379,6 +381,7 @@
       status.textContent = offset ? "Swipe right to read, left or down to dismiss." : "No notifications yet.";
       void refreshUnreadCount();
     } catch {
+      retryReset = reset;
       status.textContent = "Could not load notifications. Please try again.";
       more.hidden = false;
       more.textContent = "Try again";

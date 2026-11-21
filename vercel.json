@@ -1,10 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "crons": [{ "path": "/api/booking-reminders", "schedule": "0 8 * * *" }],
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/public",
+  "crons": [
+    {
+      "path": "/api/booking-reminders",
+      "schedule": "0 8 * * *"
+    }
+  ],
   "functions": {
     "api/admin.js": {
-      "includeFiles": "api/_lib/admin.html"
+      "includeFiles": "dist/api/_lib/admin.html"
     }
   },
   "redirects": [
@@ -51,6 +58,10 @@
         {
           "key": "X-Frame-Options",
           "value": "DENY"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self';script-src 'self';script-src-attr 'none';style-src 'self' 'unsafe-inline';img-src 'self' data: blob: https:;font-src 'self';connect-src 'self' https: wss:;media-src 'self' blob: https:;worker-src 'self';object-src 'none';base-uri 'self';form-action 'self';frame-ancestors 'self'"
         }
       ]
     }

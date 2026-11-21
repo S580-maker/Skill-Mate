@@ -75,6 +75,7 @@ test("notifications expose manual and swipe actions and failed read saves can be
   let finishWrite;
   const deletes = [];
   const context = {
+    window: { skillflexLoading: { show: () => () => {}, withTimeout: request => Promise.resolve(request) } },
     document: {
       querySelector: get,
       createElement: element,
@@ -407,13 +408,13 @@ test("dashboard skeleton appears immediately and stays visible with progress dur
   const source = read("user.js");
   const elements = new Map();
   const get = selector => {
-    if (!elements.has(selector)) elements.set(selector, { hidden: true, textContent: "", value: 0 });
+    if (!elements.has(selector)) elements.set(selector, { hidden: true, textContent: "", value: 0, removeAttribute() {} });
     return elements.get(selector);
   };
   let now = 100;
   const timers = new Map();
   const intervals = new Map();
-  const estimates = new Map([["skillmate-dashboard-load-estimate-ms-v1", "15000"]]);
+  const estimates = new Map([["skillflex-dashboard-load-estimate-ms-v1", "15000"]]);
   const context = {
     performance: { now: () => now },
     localStorage: {
@@ -431,7 +432,7 @@ test("dashboard skeleton appears immediately and stays visible with progress dur
       clearInterval(id) { intervals.delete(id); },
     },
     dashboardLoadEstimateMs: 15000,
-    DASHBOARD_LOAD_ESTIMATE_KEY: "skillmate-dashboard-load-estimate-ms-v1",
+    DASHBOARD_LOAD_ESTIMATE_KEY: "skillflex-dashboard-load-estimate-ms-v1",
     dashboardLoadingStartedAt: 0,
     dashboardLoadingProgress: 10,
     dashboardLoadingPhase: "Checking your session…",
@@ -741,8 +742,8 @@ test("chat realtime subscribes only to the open conversation and refreshes the t
   vm.createContext(context);
   vm.runInContext(source.slice(start, end), context);
   context.syncMessageChannels();
-  assert.deepEqual([...channels.keys()], ["skillmate-chat:open-chat"]);
-  const firstChannel = channels.get("skillmate-chat:open-chat");
+  assert.deepEqual([...channels.keys()], ["skillflex-chat:open-chat"]);
+  const firstChannel = channels.get("skillflex-chat:open-chat");
   await firstChannel.statusCallback("CHANNEL_ERROR", new Error("offline"));
   assert.ok(context.realtimeFallbackChatIds.has("open-chat"));
   assert.equal(presence.get("open-chat").connection, "connecting");
@@ -755,7 +756,7 @@ test("chat realtime subscribes only to the open conversation and refreshes the t
   assert.equal(messageRefreshes, 1);
 
   [...timers.values()][0].callback();
-  const recoveredChannel = channels.get("skillmate-chat:open-chat");
+  const recoveredChannel = channels.get("skillflex-chat:open-chat");
   await recoveredChannel.statusCallback("SUBSCRIBED");
   assert.equal(context.realtimeFallbackChatIds.has("open-chat"), false);
   assert.equal(presence.get("open-chat").connection, "restored");
@@ -816,7 +817,7 @@ test("vanilla profile card updates progress, dispatches edit, and clears complet
   assert.equal(parts.get(".profile-completeness-value strong").textContent, "67%");
   assert.equal(parts.get("[role=progressbar]").attributes["aria-valuenow"], 67);
   parts.get("button").handlers.click();
-  assert.deepEqual(events, ["skillmate:edit-profile"]);
+  assert.deepEqual(events, ["skillflex:edit-profile"]);
   context.window.renderProfileCompleteness({ identityComplete: true });
   assert.equal(container.children.length, 0);
 });

@@ -162,11 +162,11 @@ document.querySelector("#export-button").addEventListener("click", () => {
       ];
     }),
   ];
-  const csv = rows.map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\r\n");
+  const csv = window.skillflexCsv.encode(rows);
   const downloadUrl = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const downloadLink = document.createElement("a");
   downloadLink.href = downloadUrl;
-  downloadLink.download = "skillmate-bookings.csv";
+  downloadLink.download = "skillflex-bookings.csv";
   downloadLink.click();
   window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
   showToast("Bookings report exported.");

@@ -1,6 +1,6 @@
 const { randomBytes } = require("node:crypto");
 
-const accountClosedEmail = (userId) => `closed+${userId}@deleted.skillmate.invalid`;
+const accountClosedEmail = (userId) => `closed+${userId}@deleted.skillflex.invalid`;
 
 async function requestSupabase(url, serviceRoleKey, path, options = {}) {
   const response = await fetch(`${url}${path}`, {
@@ -146,7 +146,7 @@ async function handleAccountDelete(request, response, accessToken) {
     response.setHeader("Cache-Control", "no-store");
     return response.status(200).json({ message: "Your account was anonymized and permanently disabled." });
   } catch (error) {
-    console.error("Could not anonymize and disable the Skillmate account.", { userId: closingUserId, error });
+    console.error("Could not anonymize and disable the Skill Flex account.", { userId: closingUserId, error });
     return response.status(503).json({
       error: "Account closure could not finish. Sign-in may already be disabled. Contact support to complete closure before retrying.",
     });

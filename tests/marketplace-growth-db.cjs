@@ -32,7 +32,7 @@ async function main() {
     create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text,owner uuid,metadata jsonb default '{}');
     create function storage.foldername(text) returns text[] language sql immutable as $$ select string_to_array($1,'/') $$;
     create table realtime.messages(id uuid,topic text);
-    create function realtime.topic() returns text language sql stable as $$ select ''::text $$;
+    create function realtime.topic() returns text language sql stable as $$ select coalesce(current_setting('request.realtime.topic',true),'') $$;
     grant usage on schema auth,storage,realtime,public to authenticated,anon,service_role;
     grant execute on all functions in schema auth to authenticated,anon,service_role;
   `);
@@ -750,11 +750,36 @@ async function main() {
   const messageConversation = (await rows("insert into public.conversations default values returning id"))[0].id;
   await db.query("insert into public.conversation_members(conversation_id,user_id) values($1,$2),($1,$3)", [messageConversation, users.customer, users.provider]);
   await asUser("customer");
+  const canAccessTopic = async (prefix = "skillflex-chat") => {
+    await db.query("select set_config('request.realtime.topic',$1,false)", [`${prefix}:${messageConversation}`]);
+    return (await rows("select public.can_access_chat_realtime_topic() as allowed"))[0].allowed;
+  };
+  assert.equal(await canAccessTopic(), true, "verified members may join the renamed private topic");
+  assert.equal(await canAccessTopic("skillmate-chat"), false, "legacy clients require coordinated rollout or rollback");
+  await asUser("outsider");
+  assert.equal(await canAccessTopic(), false, "a verified non-member cannot join");
+  await asUser("customer", false);
+  assert.equal(await canAccessTopic(), false, "membership does not bypass session verification");
+  await asUser("customer");
+  await db.query("insert into public.user_blocks(blocker_id,blocked_id) values(auth.uid(),$1)", [users.provider]);
+  assert.equal(await canAccessTopic(), false, "blocking a participant revokes topic access");
+  await asUser("provider");
+  assert.equal(await canAccessTopic(), false, "the blocked participant also loses topic access");
+  await asUser("customer");
+  await db.query("delete from public.user_blocks where blocker_id=auth.uid() and blocked_id=$1", [users.provider]);
+  assert.equal(await canAccessTopic(), true, "unblocking restores verified member access");
   const messageId = (await rows(
     "insert into public.messages(conversation_id,sender_id,body) values($1,auth.uid(),'Hello from a database test') returning id",
     [messageConversation],
   ))[0].id;
   await db.exec("reset role");
+  const notification = (await rows("select id,body from public.notifications where kind='message' and conversation_id=$1 and user_id=$2", [messageConversation, users.provider]))[0];
+  assert.equal(notification.body, "Open Skill Flex to read your new message.", "new message notifications use the renamed copy");
+  await db.query("update public.notifications set body='Open Skillmate to read your new message.' where id=$1", [notification.id]);
+  await db.exec(renameMigration);
+  await db.exec(renameMigration);
+  assert.deepEqual(await rows("select id,body from public.notifications where kind='message' and conversation_id=$1 and user_id=$2", [messageConversation, users.provider]), [{ id: notification.id, body: "Open Skill Flex to read your new message." }], "reapplying the rename updates existing notification copy without duplicating rows");
+  console.log("PASS rename migration preserves verified private-topic authorization and updates notification copy idempotently");
   assert.equal((await rows(
     "select count(*)::integer as count from public.marketplace_email_outbox where message_id=$1 and recipient_id=$2 and available_at > now()+interval '9 minutes'",
     [messageId, users.provider],
@@ -848,5 +873,52 @@ async function main() {
   assert.equal(snapshots[0].auth_ok, true);
   assert.equal(snapshots[0].database_probe_ms, 40);
   console.log("PASS system telemetry captures live database/storage health, retains samples and is service-only");
+
+  // A complete negotiated booking across real customer/provider security contexts.
+  await db.exec("reset role");
+  const negotiatedService = (await rows("insert into public.services(provider_id,title,category,description,price,currency,negotiation_mode) values($1,'Laptop consultation','Tech help','One hour of setup help.',80,'GHS','negotiation') returning id", [users.provider]))[0].id;
+  await asUser("customer");
+  const bookingConversation = (await rows("select public.start_conversation($1) as id", [users.provider]))[0].id;
+  const negotiation = (await rows("select public.create_price_negotiation($1,$2,65,'One hour of setup help.') as id", [negotiatedService, bookingConversation]))[0].id;
+  const offer = (await rows("select id from public.price_offers where negotiation_id=$1", [negotiation]))[0].id;
+  await rejects("select public.decide_price_offer($1,'accept')", [offer], /offer|own|respond/i);
+  await asUser("provider");
+  await db.query("select public.decide_price_offer($1,'accept')", [offer]);
+  await asUser("customer");
+  const agreed = (await rows("select (public.create_booking_from_price_agreement($1,$2,'Please bring setup notes','On campus')).*", [negotiation, `${day}T11:00:00Z`]))[0];
+  assert.equal(Number(agreed.agreed_price), 65);
+  assert.equal(agreed.status, "pending");
+  assert.ok(agreed.scope_snapshot);
+  const duplicate = (await rows("select (public.create_booking_from_price_agreement($1,$2,'Retry','On campus')).id as id", [negotiation, `${day}T11:00:00Z`]))[0].id;
+  assert.equal(duplicate, agreed.id, "retrying an agreement returns the same booking");
+  await asUser("provider");
+  await db.query("select public.update_booking_status($1,'confirmed')", [agreed.id]);
+  await db.query("select public.start_booking_work($1)", [agreed.id]);
+  await db.query("select public.update_booking_status($1,'completed')", [agreed.id]);
+  await asUser("customer");
+  await rejects("insert into public.reviews(booking_id,reviewer_id,provider_id,rating,body) values($1,auth.uid(),$2,5,'Helpful session')", [agreed.id, users.provider]);
+  await db.query("select public.update_booking_status($1,'completed')", [agreed.id]);
+  await db.query("insert into public.reviews(booking_id,reviewer_id,provider_id,rating,body) values($1,auth.uid(),$2,5,'Helpful session')", [agreed.id, users.provider]);
+  await rejects("insert into public.reviews(booking_id,reviewer_id,provider_id,rating,body) values($1,auth.uid(),$2,5,'Duplicate review')", [agreed.id, users.provider]);
+  const cancelled = await makeBooking("11:00");
+  await db.query("select public.update_booking_status($1,'cancelled')", [cancelled]);
+  assert.equal((await rows("select status from public.booking_directory where id=$1", [cancelled]))[0].status, "cancelled");
+  console.log("PASS customer/provider negotiation, agreement retry, booking, verified completion, reviews and cancellation");
+
+  await db.query("select public.record_marketplace_journey('search')");
+  await db.query("select public.record_marketplace_journey('search')");
+  await rejects("select public.record_marketplace_journey('private search text')", [], /Unknown journey/);
+  await rejects("select * from public.marketplace_journey_daily", [], /permission denied/);
+  await rejects("select * from public.read_marketplace_journey()", [], /Administrator/);
+  await asUser("customer", false);
+  await rejects("select public.record_marketplace_journey('search')", [], /verified session/);
+  await asUser("admin");
+  assert.equal(Number((await rows("select * from public.read_marketplace_journey()"))[0].students), 1);
+  await db.exec("reset role");
+  await db.query("insert into public.marketplace_journey_daily(user_id,event_name,event_day) values($1,'discover',current_date-91)", [users.customer]);
+  await asUser("customer"); await db.query("select public.record_marketplace_journey('discover')");
+  await db.exec("reset role");
+  assert.equal((await rows("select count(*)::integer as count from public.marketplace_journey_daily where event_day<current_date-90"))[0].count, 0);
+  console.log("PASS activity aggregates deduplicate stages, reject private text, enforce admin reads and expire old data");
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; }).finally(() => db.close());

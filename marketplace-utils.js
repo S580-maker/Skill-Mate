@@ -1,7 +1,7 @@
 (function (root, factory) {
   const utils = factory();
   if (typeof module === "object" && module.exports) module.exports = utils;
-  else root.skillmateMarketplace = utils;
+  else root.skillflexMarketplace = utils;
 })(typeof window === "undefined" ? globalThis : window, function () {
   const categoryFamilies = {
     Writing: ["Writing", "Writing & editing"],

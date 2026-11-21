@@ -1,4 +1,4 @@
-const storageKey = "skillmate-student-demo-v1";
+const storageKey = "skillflex-student-demo-v1";
 const sidebar = document.querySelector("#sidebar");
 const menuToggle = document.querySelector("#menu-toggle");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
@@ -149,6 +149,7 @@ let globalSearchTimer;
 let pendingActionCount = 0;
 let activityRefreshInProgress = false;
 let dashboardDataLoaded = false;
+let dashboardLoadError = null;
 const pendingProviderSaves = new Set();
 const pendingGroupActions = new Set();
 const pendingServiceToggles = new Set();
@@ -169,7 +170,7 @@ const legacyMessageColumns = "id, conversation_id, sender_id, body, created_at, 
 const olderMessagesAvailable = new Map();
 
 function chatMessagesStorageKey() {
-  return `skillmate-chat-messages:${appUser?.id || "demo"}`;
+  return `skillflex-chat-messages:${appUser?.id || "demo"}`;
 }
 
 function loadCachedConversationMessages() {
@@ -179,7 +180,7 @@ function loadCachedConversationMessages() {
     return cached.filter((chat) => chat && typeof chat.id === "string" && Array.isArray(chat.messages))
       .map((chat) => ({ ...chat, messages: chat.messages.slice(-MESSAGE_PAGE_SIZE) }));
   } catch (error) {
-    console.error("Could not load cached Skillmate conversations.", error);
+    console.error("Could not load cached Skill Flex conversations.", error);
     return [];
   }
 }
@@ -194,7 +195,7 @@ function cacheConversationMessages(conversations) {
     }));
     localStorage.setItem(chatMessagesStorageKey(), JSON.stringify(cached));
   } catch (error) {
-    console.error("Could not cache Skillmate conversation history.", error);
+    console.error("Could not cache Skill Flex conversation history.", error);
   }
 }
 
@@ -215,7 +216,7 @@ async function loadConversationMessageGroups(conversations) {
   try {
     return await loadConversationMessagePages(conversations);
   } finally {
-    performance.measure("skillmate:message-load", { start: started, end: performance.now() });
+    performance.measure("skillflex:message-load", { start: started, end: performance.now() });
   }
 }
 
@@ -282,19 +283,50 @@ async function loadConversationMessagePages(conversations) {
 }
 
 function chatDraftStorageKey() {
-  return `skillmate-chat-drafts:${appUser?.id || "demo"}`;
+  return `skillflex-chat-drafts:${appUser?.id || "demo"}`;
 }
 function setActiveConversation(conversationId) {
   activeConversationId = conversationId;
   syncMessageChannels();
 }
 function pendingMessageStorageKey() {
-  return `skillmate-pending-messages:${appUser?.id || "demo"}`;
+  return `skillflex-pending-messages:${appUser?.id || "demo"}`;
+}
+const chatStorageMemory = new Map();
+function writeChatStorage(key, value) {
+  chatStorageMemory.set(key, value);
+  const legacyKey = key.replace(/^skillflex-/, "skillmate-");
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    // A full store may fit an update to the old slot, but not a second copy.
+    try {
+      if (localStorage.getItem(key) === null && localStorage.getItem(legacyKey) !== null) {
+        localStorage.setItem(legacyKey, value);
+        return;
+      }
+    } catch { /* Keep the in-page value and report the original write failure. */ }
+    throw error;
+  }
+  try { localStorage.removeItem(legacyKey); } catch { /* The current key is authoritative. */ }
+}
+function readChatStorage(key) {
+  if (chatStorageMemory.has(key)) return chatStorageMemory.get(key);
+  let value = localStorage.getItem(key);
+  if (value === null) {
+    value = localStorage.getItem(key.replace(/^skillflex-/, "skillmate-"));
+    if (value !== null) {
+      // Never discard the old slot before the replacement has been saved.
+      try { writeChatStorage(key, value); } catch { /* Restore in memory if storage is full. */ }
+    }
+  }
+  if (value !== null) chatStorageMemory.set(key, value);
+  return value;
 }
 function loadChatDrafts() {
   chatDrafts.clear();
   try {
-    const saved = JSON.parse(localStorage.getItem(chatDraftStorageKey()) || "{}");
+    const saved = JSON.parse(readChatStorage(chatDraftStorageKey()) || "{}");
     if (saved && typeof saved === "object" && !Array.isArray(saved)) {
       Object.entries(saved).forEach(([conversationId, text]) => {
         if (typeof text === "string" && text) chatDrafts.set(conversationId, text);
@@ -309,7 +341,7 @@ function saveChatDraft(conversationId, text) {
   if (text) chatDrafts.set(conversationId, text);
   else chatDrafts.delete(conversationId);
   try {
-    localStorage.setItem(chatDraftStorageKey(), JSON.stringify(Object.fromEntries(chatDrafts)));
+    writeChatStorage(chatDraftStorageKey(), JSON.stringify(Object.fromEntries(chatDrafts)));
   } catch (error) {
     console.error("Could not save the chat draft.", error);
     showToast("This draft could not be saved on this device.");
@@ -317,7 +349,7 @@ function saveChatDraft(conversationId, text) {
 }
 function persistPendingMessages() {
   try {
-    localStorage.setItem(pendingMessageStorageKey(), JSON.stringify([...pendingOutgoingMessages.values()]));
+    writeChatStorage(pendingMessageStorageKey(), JSON.stringify([...pendingOutgoingMessages.values()]));
   } catch (error) {
     console.error("Could not save pending chat messages.", error);
     showToast("A failed message could not be saved for retry on this device.");
@@ -326,7 +358,7 @@ function persistPendingMessages() {
 function loadPendingMessages() {
   pendingOutgoingMessages.clear();
   try {
-    const saved = JSON.parse(localStorage.getItem(pendingMessageStorageKey()) || "[]");
+    const saved = JSON.parse(readChatStorage(pendingMessageStorageKey()) || "[]");
     if (!Array.isArray(saved)) throw new TypeError("Pending messages must be stored as a list.");
     for (const message of saved) {
       if (typeof message?.id !== "string" || typeof message.conversationId !== "string"
@@ -372,6 +404,14 @@ function createChatMessageId() {
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   return [...bytes].map((byte, index) => `${[4, 6, 8, 10].includes(index) ? "-" : ""}${byte.toString(16).padStart(2, "0")}`).join("");
 }
+function createOutgoingMessage(text, replyTo = null) {
+  const createdAt = new Date();
+  return {
+    id: createChatMessageId(), sender: "You", senderId: appUser.id, text,
+    createdAt: createdAt.toISOString(), time: formatChatTime(createdAt),
+    replyTo, sendStatus: navigator.onLine ? "sending" : "failed",
+  };
+}
 function queuePendingMessage(chat, message) {
   const pending = { ...message, conversationId: chat.id, senderId: appUser.id, sendStatus: "failed" };
   pendingOutgoingMessages.set(String(pending.id), pending);
@@ -416,9 +456,10 @@ async function sendPendingMessage(chat, message) {
     }
     if (result.error?.code === "23505") {
       const existing = await appSupabase.from("messages")
-        .select(legacyMessageColumns).eq("id", message.id).maybeSingle();
+        .select(legacyMessageColumns).eq("id", message.id).eq("conversation_id", chat.id).maybeSingle();
       if (existing.error) throw existing.error;
-      if (existing.data?.sender_id === appUser.id && existing.data.body === message.text) {
+      if (existing.data?.sender_id === appUser.id && existing.data.conversation_id === chat.id
+          && existing.data.body === message.text) {
         result = { data: existing.data, error: null };
       }
     }
@@ -470,13 +511,13 @@ async function retryQueuedMessages() {
 }
 
 function loadState() {
-  if (window.skillmateSupabase) return { ...structuredClone(defaultState), bookings: [], services: [], groups: [], saved: [], blocked: [], reviews: [], portfolio: [], messages: [] };
+  if (window.skillflexSupabase) return { ...structuredClone(defaultState), bookings: [], services: [], groups: [], saved: [], blocked: [], reviews: [], portfolio: [], messages: [] };
   try {
     const saved = localStorage.getItem(storageKey);
     if (!saved) return structuredClone(defaultState);
     return { ...structuredClone(defaultState), ...JSON.parse(saved) };
   } catch (error) {
-    console.error("Could not load the Skillmate demo state.", error);
+    console.error("Could not load the Skill Flex demo state.", error);
     return structuredClone(defaultState);
   }
 }
@@ -485,7 +526,7 @@ function saveState() {
   try {
     localStorage.setItem(storageKey, JSON.stringify(state));
   } catch (error) {
-    console.error("Could not save the Skillmate demo state.", error);
+    console.error("Could not save the Skill Flex demo state.", error);
     showToast("Your browser could not save this change. Check available storage.");
   }
 }
@@ -504,7 +545,7 @@ function getProvider(id) {
         initials: state.profile.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
         campus: state.profile.university, course: state.profile.course || "Student provider",
         category: "Other", verified: state.profile.verified, color: "blue",
-        description: state.profile.bio || "Student on Skillmate", service: "", price: 0, rating: 0, reviews: 0,
+        description: state.profile.bio || "Student on Skill Flex", service: "", price: 0, rating: 0, reviews: 0,
         bookings: 0, available: "Ask about availability", groups: false, portfolio: [],
         skills: state.profile.skills || [], cvPath: state.profile.cvPath || "", cvName: state.profile.cvName || "",
       };
@@ -514,12 +555,12 @@ function getProvider(id) {
     const conversation = state.messages.find((item) => item.providerId === id);
     if (conversation) {
       const name = conversation.name || "Student";
-      return { id, name, initials: initialsFor(name), campus: "Skillmate student", course: "Student", category: "Other", verified: false, color: "sky" };
+      return { id, name, initials: initialsFor(name), campus: "Skill Flex student", course: "Student", category: "Other", verified: false, color: "sky" };
     }
     const booking = state.bookings.find((item) => item.id === id || `customer:${item.id}` === id);
     if (booking && id.startsWith("customer:")) {
       const name = booking.customer || "Student";
-      return { id, name, initials: name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase(), campus: "Skillmate student", course: "Student", category: "Other", verified: false, color: "sky" };
+      return { id, name, initials: name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase(), campus: "Skill Flex student", course: "Student", category: "Other", verified: false, color: "sky" };
     }
   }
   if (id === ownProviderId()) return {
@@ -583,7 +624,7 @@ window.visualViewport?.addEventListener("scroll", syncChatVisualViewport);
 document.addEventListener("focusin", syncChatVisualViewport);
 document.addEventListener("focusout", () => requestAnimationFrame(syncChatVisualViewport));
 function hiddenMessageStorageKey() {
-  return `skillmate-hidden-messages:${appUser?.id || "demo"}`;
+  return `skillflex-hidden-messages:${appUser?.id || "demo"}`;
 }
 function loadHiddenMessages() {
   hiddenMessageIds.clear();
@@ -591,14 +632,14 @@ function loadHiddenMessages() {
     const saved = JSON.parse(localStorage.getItem(hiddenMessageStorageKey()) || "[]");
     if (Array.isArray(saved)) saved.forEach((id) => hiddenMessageIds.add(String(id)));
   } catch (error) {
-    console.error("Could not load locally hidden Skillmate messages.", error);
+    console.error("Could not load locally hidden Skill Flex messages.", error);
   }
 }
 function saveHiddenMessages() {
   try {
     localStorage.setItem(hiddenMessageStorageKey(), JSON.stringify([...hiddenMessageIds]));
   } catch (error) {
-    console.error("Could not save locally hidden Skillmate messages.", error);
+    console.error("Could not save locally hidden Skill Flex messages.", error);
     showToast("This message could not be hidden on this device.");
   }
 }
@@ -700,8 +741,8 @@ function retryMessageChannel(chatId, channel) {
     syncMessageChannels();
   }, delay));
   appSupabase.removeChannel(channel).then((status) => {
-    if (status !== "ok") console.warn("Could not remove a failed Skillmate chat channel.", status, chatId);
-  }).catch((error) => console.error("Could not clean up a failed Skillmate chat channel.", error, chatId));
+    if (status !== "ok") console.warn("Could not remove a failed Skill Flex chat channel.", status, chatId);
+  }).catch((error) => console.error("Could not clean up a failed Skill Flex chat channel.", error, chatId));
 }
 function syncMessageChannels() {
   if (!appSupabase || !appUser) return;
@@ -724,20 +765,20 @@ function syncMessageChannels() {
       messagePresence.delete(id);
       clearChatConnectionStatusTimer(id);
       appSupabase.removeChannel(channel).then((status) => {
-        if (status !== "ok") console.warn("Could not remove an inactive Skillmate chat channel.", status, id);
-      }).catch((error) => console.error("Could not clean up an inactive Skillmate chat channel.", error, id));
+        if (status !== "ok") console.warn("Could not remove an inactive Skill Flex chat channel.", status, id);
+      }).catch((error) => console.error("Could not clean up an inactive Skill Flex chat channel.", error, id));
     }
   }
   for (const chat of conversations) {
     if (messageChannels.has(chat.id) || messageChannelRetryTimers.has(chat.id)) continue;
     setChatPresenceStatus(chat.id, { connection: "connecting" });
-    const channel = appSupabase.channel(`skillmate-chat:${chat.id}`, { config: { private: true, presence: { key: appUser.id } } })
+    const channel = appSupabase.channel(`skillflex-chat:${chat.id}`, { config: { private: true, presence: { key: appUser.id } } })
       .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${chat.id}` }, (payload) => {
         const delivery = payload.eventType === "INSERT" && payload.new?.sender_id !== appUser.id
           ? markConversationMessagesDelivered(chat.id)
           : Promise.resolve();
         delivery.then(() => refreshConversationMessages(chat.id, { force: true }))
-          .catch((error) => console.error("Could not refresh a realtime Skillmate conversation.", error));
+          .catch((error) => console.error("Could not refresh a realtime Skill Flex conversation.", error));
       })
       .on("presence", { event: "sync" }, () => {
         const members = Object.values(channel.presenceState()).flat();
@@ -755,8 +796,10 @@ function syncMessageChannels() {
             presenceTypingTimers.delete(chat.id);
           }, 2500));
         }
-      })
-      .subscribe(async (status, error) => {
+      });
+    // Register before subscribing: a transport may report its status immediately.
+    messageChannels.set(chat.id, channel);
+    channel.subscribe(async (status, error) => {
         if (messageChannels.get(chat.id) !== channel) return;
         if (status === "SUBSCRIBED") {
           messageChannelRetryAttempts.delete(chat.id);
@@ -770,28 +813,27 @@ function syncMessageChannels() {
             }
           }, 3000));
           const { error } = await channel.track({ user_id: appUser.id, typing: false, online_at: new Date().toISOString() });
-          if (error) console.error("Could not publish Skillmate chat presence.", error);
+          if (error) console.error("Could not publish Skill Flex chat presence.", error);
           try {
             await markConversationMessagesDelivered(chat.id);
           } catch (deliveryError) {
-            console.error("Could not mark existing Skillmate messages delivered.", deliveryError);
+            console.error("Could not mark existing Skill Flex messages delivered.", deliveryError);
           }
           if (activeConversationId === chat.id && state.activePage === "messages" && !document.hidden) {
-            markConversationMessagesRead(chat.id).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
+            markConversationMessagesRead(chat.id).catch((error) => console.error("Could not mark Skill Flex messages as read.", error));
           }
         } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
-          console.warn(`Skillmate chat realtime channel ${status.toLowerCase()}; fallback polling is enabled while it reconnects.`, chat.id, error || "");
+          console.warn(`Skill Flex chat realtime channel ${status.toLowerCase()}; fallback polling is enabled while it reconnects.`, chat.id, error || "");
           retryMessageChannel(chat.id, channel);
         }
       });
-    messageChannels.set(chat.id, channel);
   }
 }
 async function broadcastTyping(chatId, typing) {
   const channel = messageChannels.get(chatId);
   if (!channel) return;
   const status = await channel.send({ type: "broadcast", event: "typing", payload: { sender_id: appUser.id, typing } });
-  if (status !== "ok") console.error("Could not update Skillmate typing status.", status);
+  if (status !== "ok") console.error("Could not update Skill Flex typing status.", status);
 }
 async function markConversationMessagesDelivered(chatId) {
   if (!appSupabase || !appUser || messageMetadataAvailable === false) return;
@@ -940,9 +982,9 @@ function categoryOutlineIcon(category) {
 }
 function renderServiceCategories() {
   const strip = document.querySelector("#category-strip");
-  const currentCategory = [...serviceCategories, ...window.skillmateMarketplace.popularCategories].includes(selectedCategory) ? selectedCategory : "All";
+  const currentCategory = [...serviceCategories, ...window.skillflexMarketplace.popularCategories].includes(selectedCategory) ? selectedCategory : "All";
   selectedCategory = currentCategory;
-  const popular = window.skillmateMarketplace.popularCategories;
+  const popular = window.skillflexMarketplace.popularCategories;
   const categoryButton = (category) => `
     <button class="category-chip ${category === currentCategory ? "selected" : ""}" data-category="${escapeHTML(category)}" type="button" aria-pressed="${category === currentCategory}">
       ${categoryOutlineIcon(category)} <span>${category === "All" ? "All Services" : escapeHTML(category)}</span>
@@ -986,7 +1028,7 @@ function openBookingReview(booking) {
   openModal("review-modal");
 }
 function marketplaceSearchScore(provider, query) {
-  const normalizedQuery = window.skillmateSmartSearch.normalize(query);
+  const normalizedQuery = window.skillflexSmartSearch.normalize(query);
   const fields = [
     [provider.service, 12],
     [provider.category, 9],
@@ -994,21 +1036,21 @@ function marketplaceSearchScore(provider, query) {
     [[provider.description, provider.course, provider.campus].join(" "), 2],
   ];
   return fields.reduce((score, [value, weight]) => {
-    const text = window.skillmateSmartSearch.normalize(value);
+    const text = window.skillflexSmartSearch.normalize(value);
     if (text.includes(normalizedQuery)) return score + weight * 2;
     return score + normalizedQuery.split(" ").filter((term) => text.split(" ").some((word) => word.startsWith(term))).length * weight;
   }, 0);
 }
 function providerAvatarMarkup(provider) {
-  const image = window.skillmateMarketplace.safeImageUrl(provider.avatarUrl);
+  const image = window.skillflexMarketplace.safeImageUrl(provider.avatarUrl);
   return `<span class="provider-avatar avatar-${escapeHTML(provider.color)}${provider.verified ? " is-verified" : ""}"><span>${escapeHTML(provider.initials)}</span>${image ? `<img src="${escapeHTML(image)}" alt="" loading="lazy" decoding="async" />` : ""}</span>`;
 }
 function listingImage(provider) {
   const work = (provider.portfolio || []).find(item => typeof item === "object" && item.image);
-  return window.skillmateMarketplace.safeImageUrl(serviceCoverUrl(provider) || work?.image);
+  return window.skillflexMarketplace.safeImageUrl(serviceCoverUrl(provider) || work?.image);
 }
 function marketplaceEntries(providers) {
-  if (appSupabase) return window.skillmateMarketplace.expandListings(providers, connectedServices);
+  if (appSupabase) return window.skillflexMarketplace.expandListings(providers, connectedServices);
   const activeServices = (state.services || []).filter((service) => service.active !== false)
     .map((service) => ({ ...service, providerId: ownProviderId() }));
   if (!activeServices.length) return providers;
@@ -1026,7 +1068,7 @@ function marketplaceEntries(providers) {
     bookings: 0,
     portfolio: state.portfolio || [],
   };
-  return window.skillmateMarketplace.expandListings(
+  return window.skillflexMarketplace.expandListings(
     [...providers.filter((provider) => provider.id !== providerId), ownProvider],
     activeServices,
   );
@@ -1076,7 +1118,7 @@ function publishServiceToMarketplace(service) {
       available: "Message to ask",
       groups: publishedService.groups,
       portfolio: [],
-      ...window.skillmateServiceUtils.metadata({
+      ...window.skillflexServiceUtils.metadata({
         cover_image_path: publishedService.coverImagePath,
         delivery_method: publishedService.deliveryMethod,
         estimated_delivery: publishedService.estimatedDelivery,
@@ -1086,30 +1128,74 @@ function publishServiceToMarketplace(service) {
   }
   renderMarketplace();
 }
-window.skillmateOnServicePublished = publishServiceToMarketplace;
+window.skillflexOnServicePublished = publishServiceToMarketplace;
 function latestMarketplaceListings(listings) {
   return listings.slice(0, 2);
+}
+// Shown instead of an empty state when account data could not be loaded, so a failure never reads as "nothing here".
+const pendingDataRegions = new Map();
+function renderPendingData(target, count, variant) {
+  if (!target) return false;
+  if (appSupabase && !dashboardDataLoaded && !count) {
+    if (!pendingDataRegions.has(target)) {
+      target.replaceChildren();
+      pendingDataRegions.set(target, window.skillflexLoading.show(target, { variant, count: 3, label: "Loading your account data" }));
+    }
+    return true;
+  }
+  pendingDataRegions.get(target)?.();
+  pendingDataRegions.delete(target);
+  return false;
+}
+function renderLoadFailure(target, { focus = false } = {}) {
+  if (!appSupabase || !dashboardLoadError || !target) return false;
+  window.skillflexLoading.showError(target, {
+    title: "We couldn’t load this",
+    message: "Your Skill Flex data didn’t load. Check your connection and try again.",
+    focus,
+    onRetry: () => retryDashboardData(),
+  });
+  return true;
+}
+async function retryDashboardData() {
+  if (dashboardRefreshPromise) return;
+  const originId = document.activeElement?.closest?.("#marketplace-grid, #saved-grid, #user-booking-list, #earnings-list, #listing-list, #conversation-list")?.id;
+  dashboardLoadError = null;
+  dashboardDataLoaded = false;
+  renderAll();
+  try {
+    await refreshSupabaseState();
+  } catch (retryError) {
+    dashboardLoadError = retryError;
+    console.error("Could not refresh Skill Flex account data.", retryError);
+  }
+  dashboardDataLoaded = true;
+  renderAll();
+  // The retry button was replaced, so hand focus to the retry button again or to the refreshed region.
+  const origin = originId && document.getElementById(originId);
+  if (origin && (document.activeElement === document.body || origin.contains(document.activeElement))) {
+    const nextRetry = origin.querySelector("[data-loading-retry]");
+    if (nextRetry) nextRetry.focus();
+    else { origin.tabIndex = -1; origin.focus({ preventScroll: true }); }
+  }
 }
 function renderMarketplace(targetId = "marketplace-grid", providers = appSupabase ? connectedProviders : seedProviders) {
   const target = document.getElementById(targetId);
   if (!target) return;
-  if (appSupabase && !dashboardDataLoaded && targetId === "marketplace-grid") {
-    target.setAttribute("aria-busy", "true");
-    target.innerHTML = window.skillmateLoading.markup({ count: 6, variant: "cards", label: "Finding services on your campus" });
-    return;
-  }
+  if (["marketplace-grid", "saved-grid"].includes(targetId) && renderPendingData(target, connectedProviders.length, "cards")) return;
   target.removeAttribute("aria-busy");
+  if (["marketplace-grid", "saved-grid"].includes(targetId) && dashboardLoadError && !connectedProviders.length && renderLoadFailure(target)) return;
   const query = targetId === "saved-grid" ? "" : document.querySelector("#global-search").value.trim();
   const campus = state.profile?.university || "";
   const matching = marketplaceEntries(providers).filter((provider) => {
     if (state.blocked.includes(provider.id)) return false;
     if (targetId === "recent-grid" && !Number.isFinite(Date.parse(provider.createdAt))) return false;
-    if (targetId !== "saved-grid" && window.skillmateMarketplace.campusRank(provider, campus) === null) return false;
-    if (targetId !== "saved-grid" && !window.skillmateMarketplace.matchesCategory(provider.category, selectedCategory)) return false;
-    return (targetId === "saved-grid" || !window.skillmateGrowth || window.skillmateGrowth.matches(provider)) && window.skillmateSmartSearch.matches(provider, query);
+    if (targetId !== "saved-grid" && window.skillflexMarketplace.campusRank(provider, campus) === null) return false;
+    if (targetId !== "saved-grid" && !window.skillflexMarketplace.matchesCategory(provider.category, selectedCategory)) return false;
+    return (targetId === "saved-grid" || !window.skillflexGrowth || window.skillflexGrowth.matches(provider)) && window.skillflexSmartSearch.matches(provider, query);
   });
-  let visible = window.skillmateMarketplace.sortByCampus(matching, campus, (left, right) => (
-    (targetId !== "saved-grid" && window.skillmateGrowth?.compare(left, right)) || (query
+  let visible = window.skillflexMarketplace.sortByCampus(matching, campus, (left, right) => (
+    (targetId !== "saved-grid" && window.skillflexGrowth?.compare(left, right)) || (query
       ? marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query)
       : Number(right.bookings || 0) - Number(left.bookings || 0))
   ));
@@ -1146,6 +1232,10 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   const emptyCard = `<div class="empty-card"><span aria-hidden="true">⌕</span><strong>${targetId === "saved-grid" ? "Your shortlist starts here" : "No services found"}</strong><small>${targetId === "saved-grid" ? "Tap the heart on a service to save its provider for later." : "Try another skill or browse all categories."}</small><button class="button button-outline" type="button" ${targetId === "saved-grid" ? 'data-page-link="home"' : 'data-clear-search'}>Explore services</button></div>`;
   target.innerHTML = serviceCards || requestCards ? `${serviceCards}${requestCards}` : emptyCard;
   if (targetId === "recent-grid" && !visible.length) target.innerHTML = '<p class="recent-empty">No recently published services to show yet.</p>';
+  if (!visible.length && ["marketplace-grid", "saved-grid"].includes(targetId)) {
+    const empty = target.querySelector(".empty-card");
+    window.skillflexIllustrations?.mount(empty, targetId === "saved-grid" ? "saved" : "search", empty?.querySelector(":scope > span"));
+  }
   if (targetId === "marketplace-grid") { renderMarketplace("recent-grid", providers); renderMarketplaceActivity(); }
 }
 function renderSearchSuggestions() {
@@ -1163,7 +1253,7 @@ function renderSearchSuggestions() {
     target.hidden = false;
     return;
   }
-  if (window.skillmateSmartSearch.normalize(query).length < 2) {
+  if (window.skillflexSmartSearch.normalize(query).length < 2) {
     target.innerHTML = `<p class="search-suggestions-empty">Type at least 2 letters to find a service.</p>`;
     target.hidden = false;
     return;
@@ -1171,11 +1261,11 @@ function renderSearchSuggestions() {
 
   const providers = appSupabase ? connectedProviders : seedProviders;
   const campus = state.profile?.university || "";
-  const matches = window.skillmateMarketplace.sortByCampus(marketplaceEntries(providers)
+  const matches = window.skillflexMarketplace.sortByCampus(marketplaceEntries(providers)
     .filter((provider) => !state.blocked.includes(provider.id)
-      && window.skillmateMarketplace.campusRank(provider, campus) !== null
-      && window.skillmateMarketplace.matchesCategory(provider.category, selectedCategory)
-      && window.skillmateSmartSearch.matches(provider, query)), campus,
+      && window.skillflexMarketplace.campusRank(provider, campus) !== null
+      && window.skillflexMarketplace.matchesCategory(provider.category, selectedCategory)
+      && window.skillflexSmartSearch.matches(provider, query)), campus,
   (left, right) => marketplaceSearchScore(right, query) - marketplaceSearchScore(left, query))
     .slice(0, 6);
 
@@ -1199,7 +1289,7 @@ function renderGroups() {
     const joined = appSupabase ? Boolean(group.joinedByMe) : state.joinedGroups.includes(group.id);
     const full = group.joined >= group.capacity;
     const percent = Math.min(100, group.joined / group.capacity * 100);
-    return `<article class="group-card"><div class="group-card-heading"><span class="group-icon">${getCategoryIcon(provider?.category || "Other")}</span><span class="group-open">${full ? "Full" : "Open to join"}</span></div><h3>${escapeHTML(group.title)}</h3><p>${escapeHTML(group.service)} <span>· hosted by ${escapeHTML(group.host)}</span></p><div class="group-date">◷ ${formatDate(group.date)}</div><div class="group-progress"><span style="width:${percent}%"></span></div><div class="group-seats"><span>${group.joined} of ${group.capacity} students joined</span><strong>${currency(group.price)} <small>/ person</small></strong></div><button class="button ${joined ? "button-joined" : "button-outline"} group-join" type="button" data-join-group="${escapeHTML(group.id)}" ${pendingGroupActions.has(group.id) || full && !joined ? "disabled" : ""}>${joined ? "✓ You’re in — leave group" : full ? "Group is full" : "Join group"}</button><button class="group-message-link" type="button" data-message="${escapeHTML(group.providerId)}">Ask ${escapeHTML(provider?.name || "provider")} a question</button></article>`;
+    return `<article class="group-card"><div class="group-card-heading"><span class="group-icon">${getCategoryIcon(provider?.category || "Other")}</span><span class="group-open">${full ? "Full" : "Open to join"}</span></div><h3>${escapeHTML(group.title)}</h3><p>${escapeHTML(group.service)} <span>· hosted by ${escapeHTML(group.host)}</span></p><div class="group-date">${formatDate(group.date)}</div><div class="group-progress"><span style="width:${percent}%"></span></div><div class="group-seats"><span>${group.joined} of ${group.capacity} students joined</span><strong>${currency(group.price)} <small>/ person</small></strong></div><button class="button ${joined ? "button-joined" : "button-outline"} group-join" type="button" data-join-group="${escapeHTML(group.id)}" ${pendingGroupActions.has(group.id) || full && !joined ? "disabled" : ""}>${joined ? "✓ You’re in — leave group" : full ? "Group is full" : "Join group"}</button><button class="group-message-link" type="button" data-message="${escapeHTML(group.providerId)}">Ask ${escapeHTML(provider?.name || "provider")} a question</button></article>`;
   }).join("") : '<div class="empty-card"><strong>No open groups yet</strong><small>Start one and invite students on your campus.</small></div>';
 }
 function formatDate(dateString) {
@@ -1325,6 +1415,8 @@ function openMessageContextMenu(message, x, y) {
 }
 function renderConversations(options = {}) {
   const target = document.querySelector("#conversation-list");
+  if (renderPendingData(target, state.messages.length, "conversations")) return;
+  if (!state.messages.length && renderLoadFailure(target)) return;
   const layout = document.querySelector("#messages-layout");
   state.messages.forEach((chat) => chat.messages.forEach((message, index) => {
     if (!message.id) message.id = `legacy-${chat.id}-${index}`;
@@ -1413,6 +1505,7 @@ function renderEmptyChat() {
   description.textContent = "Choose a chat to pick up where you left off, or message a student to start a new conversation.";
   empty.append(icon, heading, description);
   target.append(empty);
+  window.skillflexIllustrations?.mount(empty, "messages", icon);
 }
 function chatMessageRenderKey(message, grouped) {
   return JSON.stringify([
@@ -1855,7 +1948,7 @@ function renderChat(options = {}) {
       empty.append(spinner, label);
     } else {
       empty.removeAttribute("role");
-      empty.textContent = "No messages yet 👋 Say hi!";
+      empty.textContent = "No messages yet. Send a message below to introduce yourself.";
     }
     orderedChildren.push(empty);
   }
@@ -1943,7 +2036,7 @@ function renderChat(options = {}) {
     : wasNearBottom ? messages.scrollHeight : previousScrollTop;
   newMessages.hidden = wasNearBottom || (!hasNewMessages && (previousNewMessages?.hidden ?? true));
   if (activeConversationId === chat.id && state.activePage === "messages" && !document.hidden) {
-    markConversationMessagesRead(chat.id).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
+    markConversationMessagesRead(chat.id).catch((error) => console.error("Could not mark Skill Flex messages as read.", error));
   }
 }
 function serviceCoverUrl(service) {
@@ -1964,11 +2057,14 @@ function serviceUsesPriceRange(service) {
   return service?.priceType === "range";
 }
 function serviceDetailLabel(service) {
-  return [window.skillmateServiceUtils.deliveryLabels[service.deliveryMethod], service.estimatedDelivery].filter(Boolean).join(" · ");
+  return [window.skillflexServiceUtils.deliveryLabels[service.deliveryMethod], service.estimatedDelivery].filter(Boolean).join(" · ");
 }
 function renderListings() {
   const target = document.querySelector("#listing-list");
+  if (renderPendingData(target, state.services.length, "listings")) return;
+  if (!state.services.length && renderLoadFailure(target)) return;
   target.innerHTML = state.services.length ? state.services.map((service) => `<article class="listing-card">${serviceCoverUrl(service) ? `<img class="service-list-cover" src="${escapeHTML(serviceCoverUrl(service))}" alt="" loading="lazy" />` : `<span class="service-list-icon">${getCategoryIcon(service.category)}</span>`}<div class="listing-copy"><div class="listing-title"><strong>${escapeHTML(service.title)}</strong><span class="listing-status ${service.active ? "listing-active" : "listing-paused"}">${service.pending ? "Saving..." : service.active ? "Active" : "Paused"}</span></div><small>${escapeHTML(service.category)} ${service.groups ? "· Open to groups" : ""}</small><p>${escapeHTML(service.description)}</p><small>${escapeHTML(serviceDetailLabel(service))}</small></div><strong class="listing-price">${servicePriceLabel(service)}</strong><div class="listing-actions"><button class="button button-small button-outline" type="button" data-edit-service="${escapeHTML(service.id)}" ${service.pending ? "disabled" : ""}>Edit</button><button class="subtle-button" type="button" data-toggle-service="${escapeHTML(service.id)}" ${service.pending || pendingServiceToggles.has(service.id) ? "disabled aria-busy=\"true\"" : ""}>${service.active ? "Pause" : "Activate"}</button></div></article>`).join("") : '<div class="empty-card"><strong>Your first service starts here</strong><small>List a skill to help students find and book you.</small><button class="button button-primary button-small" type="button" data-open="service-modal">Add a service</button></div>';
+  if (!state.services.length) window.skillflexIllustrations?.mount(target.querySelector(".empty-card"), "listings");
 }
 function renderPortfolio() {
   const target = document.querySelector("#portfolio-grid");
@@ -2197,7 +2293,7 @@ async function refreshPayoutState(loadBanks = true) {
   }
 }
 function bookingsForActiveFilter() {
-  const bookings = window.skillmateMarketplace.filterBookings(state.bookings, { direction: bookingDirection, filter: activeBookingFilter, ownId: ownProviderId() });
+  const bookings = window.skillflexMarketplace.filterBookings(state.bookings, { direction: bookingDirection, filter: activeBookingFilter, ownId: ownProviderId() });
   document.querySelector("#all-booking-count").textContent = String(state.bookings.filter(booking => isOwnBooking(booking) === (bookingDirection === "received")).length);
   const newRequests = state.bookings.filter(booking => isOwnBooking(booking) && booking.status === "Pending" && !booking.providerAcceptedAt).length;
   const requestCount = document.querySelector("[data-booking-request-count]");
@@ -2210,11 +2306,11 @@ function renderBookingActivity() {
   for (const booking of state.bookings) {
     if (pendingBookingStatuses.has(booking.id)) booking.status = pendingBookingStatuses.get(booking.id);
   }
-  window.skillmateGrowth?.render();
+  window.skillflexGrowth?.render();
   renderBookingList("user-booking-list", bookingsForActiveFilter());
   const pendingReviews = pendingCustomerReviews();
   const reviewReminder = document.querySelector("#required-review-reminder");
-  reviewReminder.hidden = pendingReviews.length === 0 || Boolean(window.skillmateGrowth?.reviewDismissed());
+  reviewReminder.hidden = pendingReviews.length === 0 || Boolean(window.skillflexGrowth?.reviewDismissed());
   reviewReminder.innerHTML = pendingReviews.length
     ? `<span><strong>${pendingReviews.length} completed ${pendingReviews.length === 1 ? "booking needs" : "bookings need"} your review</strong><small>Your feedback helps other students. You can book again at any time.</small></span><button class="button button-primary button-small" type="button" data-review="${escapeHTML(pendingReviews[0].id)}">Write review</button><button class="subtle-button" type="button" data-dismiss-reviews>Not now</button>`
     : "";
@@ -2234,7 +2330,7 @@ function renderBookingActivity() {
 }
 function renderMarketplaceActivity() {
   const profile = state.profile || {};
-  const bookings = window.skillmateMarketplace.filterBookings(state.bookings, {
+  const bookings = window.skillflexMarketplace.filterBookings(state.bookings, {
     direction: "made", filter: "upcoming", ownId: ownProviderId(),
   }).length;
   const messages = state.messages.filter(chat => !state.blocked.includes(chat.providerId))
@@ -2254,7 +2350,7 @@ function renderAll() {
   for (const booking of state.bookings) {
     if (pendingBookingStatuses.has(booking.id)) booking.status = pendingBookingStatuses.get(booking.id);
   }
-  window.skillmateGrowth?.render();
+  window.skillflexGrowth?.render();
   if (typeof window.renderProfileCompleteness === "function") {
     window.renderProfileCompleteness(state.profile);
   }
@@ -2266,6 +2362,7 @@ function renderAll() {
   }).format(new Date()).toUpperCase();
   syncSellerNavigation();
   renderMarketplace();
+  renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders).filter(provider => state.saved.includes(provider.id)));
   renderGroups();
   renderBookingList("user-booking-list", bookingsForActiveFilter());
   renderListings();
@@ -2424,8 +2521,15 @@ async function refreshSupabaseState(scope = "all") {
   if (scope === "messages" || scope === "negotiations") return refreshLiveMessages();
   if (dashboardRefreshPromise) return dashboardRefreshPromise;
   const started = performance.now();
-  dashboardRefreshPromise = loadSupabaseState().finally(() => {
-    performance.measure("skillmate:dashboard-refresh", { start: started, end: performance.now() });
+  const deadline = started + 20000;
+  // Each awaited read shares one deadline. A timed-out response never reaches
+  // the state assignment below its await, even if the transport completes later.
+  const read = request => window.skillflexLoading.withTimeout(request, Math.max(0, deadline - performance.now()));
+  dashboardRefreshPromise = loadSupabaseState(read).then((result) => {
+    dashboardLoadError = null;
+    return result;
+  }).finally(() => {
+    performance.measure("skillflex:dashboard-refresh", { start: started, end: performance.now() });
     dashboardRefreshPromise = null;
   });
   return dashboardRefreshPromise;
@@ -2439,7 +2543,7 @@ async function reconcileSavedChange() {
     showToast("Your change was saved. Some details could not refresh; reload to sync them.", "error");
   }
 }
-async function refreshPriceNegotiations() {
+async function refreshPriceNegotiations(read = request => Promise.resolve(request)) {
   if (!negotiationBackendAvailable) return;
   const { data: negotiations, error: negotiationError } = await appSupabase
     .from("price_negotiations").select("*")
@@ -2447,18 +2551,18 @@ async function refreshPriceNegotiations() {
   if (negotiationError) {
     negotiationBackendAvailable = ["42P01", "42703", "PGRST205"].includes(negotiationError.code);
     priceNegotiations = [];
-    console.error("Could not load Skillmate price negotiations. Apply the price negotiation migration.", negotiationError);
+    console.error("Could not load Skill Flex price negotiations. Apply the price negotiation migration.", negotiationError);
     return;
   }
   const rows = negotiations || [];
   let offers = [];
   if (rows.length) {
-    const result = await appSupabase.from("price_offers").select("*")
-      .in("negotiation_id", rows.map(item => item.id)).order("created_at", { ascending: true });
+    const result = await read(appSupabase.from("price_offers").select("*")
+      .in("negotiation_id", rows.map(item => item.id)).order("created_at", { ascending: true }));
     if (result.error) {
       negotiationBackendAvailable = ["42P01", "42703", "PGRST205"].includes(result.error.code);
       priceNegotiations = [];
-      console.error("Could not load Skillmate price offers.", result.error);
+      console.error("Could not load Skill Flex price offers.", result.error);
       return;
     }
     offers = result.data || [];
@@ -2538,7 +2642,7 @@ async function loadAllRows(createQuery, pageSize = DATA_PAGE_SIZE) {
     if (page.length < pageSize) return { data: rows, error: null };
   }
 }
-async function loadSupabaseState() {
+async function loadSupabaseState(read = request => Promise.resolve(request)) {
   const conversationDirectoryRequest = loadAllRows(() => appSupabase.from("conversation_directory")
     .select("conversation_id, other_user_id, other_user_name").order("conversation_id", { ascending: true }));
   const groupedMessagesRequest = conversationDirectoryRequest.then(({ data, error }) => {
@@ -2549,7 +2653,7 @@ async function loadSupabaseState() {
     ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations,
     savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory,
     verification, groupedMessages, ownStudentIdentifier, ownNegotiationSettings,
-  ] = await Promise.all([
+  ] = await read(Promise.all([
     loadAccountProfile(appUser.id),
     loadAllRows(() => appSupabase.from("provider_directory").select("*").order("service_id", { ascending: true })),
     loadAllRows(() => appSupabase.from("services").select("*").eq("provider_id", appUser.id)
@@ -2576,11 +2680,11 @@ async function loadSupabaseState() {
     appSupabase.from("student_identifiers").select("student_id_number").eq("student_id", appUser.id).maybeSingle(),
     loadAllRows(() => appSupabase.from("service_negotiation_settings")
       .select("service_id, minimum_price").eq("provider_id", appUser.id).order("service_id", { ascending: true })),
-  ]);
+  ]));
   const results = [ownProfile, directory, ownServices, bookings, groups, joinedGroups, userLocations, savedServices, blocks, ownReviews, ownPortfolio, portfolioDirectory, conversationDirectory, verification, ownStudentIdentifier, ownNegotiationSettings];
   const failed = results.find((result) => result.error);
   if (failed) throw failed.error;
-  await refreshPriceNegotiations();
+  await refreshPriceNegotiations(read);
   const ownMinimumByService = new Map((ownNegotiationSettings.data || [])
     .map(item => [item.service_id, Number(item.minimum_price)]));
 
@@ -2607,11 +2711,11 @@ async function loadSupabaseState() {
   connectedServices = (directory.data || []).map((row) => ({
     id: row.service_id, providerId: row.provider_id, title: row.service_title, category: row.category, createdAt: row.service_created_at || "",
     description: row.service_description, price: Number(row.price), groups: row.accepts_groups,
-    active: true, currency: row.currency, negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(row.negotiation_mode), ...window.skillmateServiceUtils.metadata(row),
+    active: true, currency: row.currency, negotiationMode: window.skillflexServiceUtils.normalizeNegotiationMode(row.negotiation_mode), ...window.skillflexServiceUtils.metadata(row),
   })).concat((ownServices.data || []).filter((service) => !(directory.data || []).some((row) => row.service_id === service.id)).map((service) => ({
     id: service.id, providerId: service.provider_id, title: service.title, category: service.category, createdAt: service.created_at || "",
     description: service.description, price: Number(service.price), groups: service.accepts_groups,
-    active: service.is_active, currency: service.currency, negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(service.negotiation_mode), ...window.skillmateServiceUtils.metadata(service),
+    active: service.is_active, currency: service.currency, negotiationMode: window.skillflexServiceUtils.normalizeNegotiationMode(service.negotiation_mode), ...window.skillflexServiceUtils.metadata(service),
     minimumPrice: ownMinimumByService.get(service.id) ?? null,
   })));
   const providerMap = new Map();
@@ -2621,9 +2725,9 @@ async function loadSupabaseState() {
       course: row.course || "Student", category: row.category, service: row.service_title,
       description: row.service_description, bio: row.bio || "", price: Number(row.price), currency: row.currency,
       rating: 0, reviews: 0, bookings: Number(row.completed_bookings) || 0, color: "blue", verified: row.campus_verified,
-      available: "Message to ask", groups: row.accepts_groups, portfolio: [], ...window.skillmateServiceUtils.metadata(row),
+      available: "Message to ask", groups: row.accepts_groups, portfolio: [], ...window.skillflexServiceUtils.metadata(row),
       skills: row.skills || [], cvPath: row.cv_path || "", cvName: row.cv_name || "",
-      negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(row.negotiation_mode),
+      negotiationMode: window.skillflexServiceUtils.normalizeNegotiationMode(row.negotiation_mode),
     });
   }
   const ownActiveService = (ownServices.data || []).find((service) => service.is_active);
@@ -2635,7 +2739,7 @@ async function loadSupabaseState() {
       description: ownActiveService.description, price: Number(ownActiveService.price),
       currency: ownActiveService.currency, rating: 0, reviews: 0, bookings: 0,
       color: "blue", verified: profile.campus_verified, available: "Message to ask",
-      groups: ownActiveService.accepts_groups, portfolio: [], negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(ownActiveService.negotiation_mode), ...window.skillmateServiceUtils.metadata(ownActiveService),
+      groups: ownActiveService.accepts_groups, portfolio: [], negotiationMode: window.skillflexServiceUtils.normalizeNegotiationMode(ownActiveService.negotiation_mode), ...window.skillflexServiceUtils.metadata(ownActiveService),
       minimumPrice: ownMinimumByService.get(ownActiveService.id) ?? null,
       skills: profile.skills || [], cvPath: profile.cv_path || "", cvName: profile.cv_name || "",
     });
@@ -2681,6 +2785,7 @@ async function loadSupabaseState() {
       reviewed: (ownReviews.data || []).some((review) => review.booking_id === booking.id),
     };
   });
+  const refreshedBookingStatuses = new Map(state.bookings.map(booking => [booking.id, booking.status]));
   const joinedSet = new Set((joinedGroups.data || []).map((item) => item.group_booking_id));
   state.groups = (groups.data || []).map((group) => ({
     id: group.id, hostId: group.host_id, providerId: group.provider_id, serviceId: group.service_id,
@@ -2706,7 +2811,7 @@ async function loadSupabaseState() {
   state.services = (ownServices.data || []).map((service) => ({
     id: service.id, title: service.title, category: service.category, price: Number(service.price),
     description: service.description, groups: service.accepts_groups, active: service.is_active,
-    negotiationMode: window.skillmateServiceUtils.normalizeNegotiationMode(service.negotiation_mode), ...window.skillmateServiceUtils.metadata(service),
+    negotiationMode: window.skillflexServiceUtils.normalizeNegotiationMode(service.negotiation_mode), ...window.skillflexServiceUtils.metadata(service),
   }));
   state.portfolio = (ownPortfolio.data || []).map((item) => ({
     id: item.id, title: item.title, description: item.description,
@@ -2725,11 +2830,12 @@ async function loadSupabaseState() {
   cacheConversationMessages(messages);
   const verificationButton = document.querySelector("#verification-open");
   verificationButton.dataset.requested = verification.data?.status || "";
-  await window.skillmateGrowth?.refresh();
+  await window.skillflexGrowth?.refresh({ read });
   const reportTarget = document.querySelector("#report-target");
   reportTarget.innerHTML = '<option value="">Choose a student</option>' + connectedProviders
     .filter((provider) => provider.id !== appUser.id)
     .map((provider) => `<option value="${escapeHTML(provider.id)}">${escapeHTML(provider.name)}</option>`).join("");
+  return refreshedBookingStatuses;
 }
 let liveBookingsRefreshPromise = null;
 let liveMessagesRefreshPromise = null;
@@ -3134,7 +3240,7 @@ function handleAppointmentActions(event) {
   const proposalButton = event.target.closest("[data-propose-appointment]");
   if (proposalButton) {
     if (!appSupabase) {
-      showToast("Appointment suggestions require a connected Skillmate account.", "error");
+      showToast("Appointment suggestions require a connected Skill Flex account.", "error");
       return true;
     }
     const booking = state.bookings.find(item => item.id === proposalButton.dataset.proposeAppointment);
@@ -3152,7 +3258,7 @@ function handleAppointmentActions(event) {
   const responseButton = event.target.closest("[data-appointment-response]");
   if (!responseButton) return false;
   if (!appSupabase) {
-    showToast("Appointment responses require a connected Skillmate account.", "error");
+    showToast("Appointment responses require a connected Skill Flex account.", "error");
     return true;
   }
   const accept = responseButton.dataset.appointmentResponse === "accept";
@@ -3212,7 +3318,7 @@ function handleNegotiationChatAction(event) {
     showToast("The price conversation for this booking is unavailable.", "error");
     return true;
   }
-  document.dispatchEvent(new CustomEvent("skillmate:open-conversation", {
+  document.dispatchEvent(new CustomEvent("skillflex:open-conversation", {
     detail: { conversationId: negotiation.conversationId },
   }));
   return true;
@@ -3373,7 +3479,7 @@ async function runAction(action, failureMessage, loadingMessage = "Saving your c
         rollback();
         renderOptimistic?.();
       } catch (rollbackError) {
-        console.error("Could not roll back an optimistic Skillmate update.", rollbackError);
+        console.error("Could not roll back an optimistic Skill Flex update.", rollbackError);
         showToast("This change could not be saved or restored. Refresh the page to reload your account.", "error");
       }
     }
@@ -3410,6 +3516,7 @@ function showConnectedApp() {
   document.body.classList.remove("app-auth-pending");
   document.querySelector("#app-shell").hidden = false;
   status.hidden = true;
+  document.dispatchEvent(new CustomEvent("skillflex:workspace-ready"));
 }
 function syncSellerNavigation() {
   const isSeller = state.services.length > 0;
@@ -3437,18 +3544,18 @@ function initializeDashboard() {
 }
 async function bootstrapStudentApp() {
   if (!appSupabase) {
-    throw new Error(window.skillmateSupabaseError
-      || "Skillmate could not connect to Supabase. Start the Express server and check its .env configuration.");
+    throw new Error(window.skillflexSupabaseError
+      || "Skill Flex could not connect to Supabase. Start the Express server and check its .env configuration.");
   }
   appSupabase.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_OUT") {
-      window.clearSkillmateServerSession()
-        .catch((sessionError) => console.error("Could not clear the secure Skillmate session.", sessionError))
+      window.clearSkillflexServerSession()
+        .catch((sessionError) => console.error("Could not clear the secure Skill Flex session.", sessionError))
         .finally(() => window.location.replace("/"));
     }
     if (event === "TOKEN_REFRESHED" && session) {
-      window.syncSkillmateServerSession(session).catch((syncError) => {
-        console.error("Could not refresh the secure Skillmate session.", syncError);
+      window.syncSkillflexServerSession(session).catch((syncError) => {
+        console.error("Could not refresh the secure Skill Flex session.", syncError);
         if (syncError.code === "OTP_VERIFICATION_REQUIRED") {
           window.location.replace("login.html?verify=required");
         }
@@ -3470,7 +3577,7 @@ async function bootstrapStudentApp() {
   }
   setDashboardLoadingPhase(28, "Securing your session…");
   try {
-    await window.syncSkillmateServerSession(data.session);
+    await window.syncSkillflexServerSession(data.session);
   } catch (sessionError) {
     if (sessionError.code === "OTP_VERIFICATION_REQUIRED") {
       window.location.replace("login.html?verify=required");
@@ -3541,8 +3648,9 @@ async function bootstrapStudentApp() {
     document.querySelector(".campus-card small").textContent = state.profile.course || "Student account";
   } catch (refreshError) {
     dashboardDataLoaded = true;
-    renderMarketplace();
-    console.error("Could not refresh Skillmate account data.", refreshError);
+    dashboardLoadError = refreshError;
+    renderAll();
+    console.error("Could not refresh Skill Flex account data.", refreshError);
     showToast("Some account data could not be refreshed. Your cached conversations are still available.", "error");
   }
   setDashboardLoadingPhase(96, "Finishing your dashboard…");
@@ -3557,35 +3665,36 @@ async function bootstrapStudentApp() {
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
   }
   window.setInterval(() => {
-    refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate messages and bookings.", error));
+      refreshLiveActivity().catch((error) => console.error("Could not refresh Skill Flex messages and bookings.", error));
   }, 30000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
-      refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate messages and bookings.", error));
+          refreshLiveActivity().catch((error) => console.error("Could not refresh Skill Flex messages and bookings.", error));
     }
   });
   window.addEventListener("online", () => {
-    retryQueuedMessages().catch((error) => console.error("Could not retry saved Skillmate messages.", error));
+      retryQueuedMessages().catch((error) => console.error("Could not retry saved Skill Flex messages.", error));
   });
   if (navigator.onLine) {
-    retryQueuedMessages().catch((error) => console.error("Could not retry saved Skillmate messages.", error));
+      retryQueuedMessages().catch((error) => console.error("Could not retry saved Skill Flex messages.", error));
   }
 }
 function showPage(page, options = {}) {
   if (page === "profile") page = "profile-settings";
+  if (page !== "bookings") window.skillflexIllustrations?.hideBookingSuccess();
   const view = document.querySelector(`[data-view="${page}"]`);
   if (!view) return;
   const pageTitles = {
     home: "Discover", bookings: "My bookings", messages: "Messages", saved: "Saved providers",
-    provider: "My Listings", earnings: "Estimated earnings", "profile-settings": "Your profile",
-    "help-support": "Help & Support", requests: "Campus requests", activity: "My Activity",
+    provider: "My listings", earnings: "Estimated earnings", "profile-settings": "Your profile",
+    "help-support": "Help & support", requests: "Campus requests", activity: "My activity",
   };
   const pageTitle = pageTitles[page];
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
   const pageHash = `#${page}`;
   if (window.location.hash !== pageHash) {
     persistPageScrollPosition();
-    window.history.pushState({ ...pageHistoryState(), skillmatePage: page, skillmateScrollY: 0 }, "", `${window.location.pathname}${window.location.search}${pageHash}`);
+    window.history.pushState({ ...pageHistoryState(), skillflexPage: page, skillflexScrollY: 0 }, "", `${window.location.pathname}${window.location.search}${pageHash}`);
   }
   if (page === "messages") {
     if (!options.openConversation) {
@@ -3598,7 +3707,7 @@ function showPage(page, options = {}) {
   if (["home", "requests"].includes(page)) window.skillmateGrowth?.refreshBoard();
   document.querySelector(".account-menu")?.removeAttribute("open");
   renderMarketplaceActivity();
-  window.skillmateGrowth?.render();
+    window.skillflexGrowth?.render();
   saveState();
   syncMessageChannels();
   document.querySelectorAll(".view").forEach((element) => element.classList.toggle("active-view", element === view));
@@ -3616,22 +3725,30 @@ function showPage(page, options = {}) {
   globalSearch.setAttribute("aria-expanded", "false");
   document.querySelector("#search-suggestions").hidden = true;
   document.querySelector("#breadcrumb-title").textContent = pageTitle;
-  document.title = `${pageTitle} | Skillmate`;
+  document.title = `${pageTitle} | Skill Flex`;
   closeSidebar(sidebar.classList.contains("open") && sidebar.contains(document.activeElement));
   if (page === "saved") renderMarketplace("saved-grid", (appSupabase ? connectedProviders : seedProviders).filter((provider) => state.saved.includes(provider.id)));
   if (page === "messages") {
     renderConversations();
     if (activeConversationId && !document.hidden) {
       markConversationMessagesRead(activeConversationId)
-        .catch((error) => console.error("Could not mark Skillmate messages as read.", error));
+        .catch((error) => console.error("Could not mark Skill Flex messages as read.", error));
     }
   }
   if (page === "provider") { renderListings(); renderPortfolio(); }
   if (page === "earnings") renderEarnings();
   if (page === "bookings") renderBookingList("user-booking-list", bookingsForActiveFilter());
-  window.scrollTo({ top: Number.isFinite(options.restoreScroll) ? Math.max(0, options.restoreScroll) : 0, behavior: "auto" });
+  if (options.focusHeading) {
+    const heading = view.querySelector("h1, h2");
+    const destination = heading?.getClientRects().length ? heading : view;
+    if (destination === view) destination.setAttribute("aria-label", pageTitle);
+    destination.tabIndex = -1;
+    destination.focus({ preventScroll: true });
+  }
+  // Section switches and history restores jump instantly; a smooth scroll left running from one section would override a restore.
+  window.scrollTo({ top: Number.isFinite(options.restoreScroll) ? Math.max(0, options.restoreScroll) : 0, behavior: "instant" });
   if (appSupabase && appUser && ["home", "bookings", "messages", "provider", "earnings"].includes(page)) {
-    refreshLiveActivity().catch((error) => console.error("Could not refresh Skillmate activity for this page.", error));
+    refreshLiveActivity().catch((error) => console.error("Could not refresh Skill Flex activity for this page.", error));
   }
 }
 let pageScrollSaveTimer = null;
@@ -3644,8 +3761,8 @@ function persistPageScrollPosition() {
   pageScrollSaveTimer = null;
   window.history.replaceState({
     ...pageHistoryState(),
-    skillmatePage: window.location.hash.slice(1) || "home",
-    skillmateScrollY: window.scrollY,
+    skillflexPage: window.location.hash.slice(1) || "home",
+    skillflexScrollY: window.scrollY,
   }, "");
 }
 function openBooking(providerId, serviceId, negotiationId = "") {
@@ -3674,8 +3791,8 @@ function openBooking(providerId, serviceId, negotiationId = "") {
   else if (serviceId && services.some(service => service.id === serviceId)) document.querySelector("#booking-service").value = serviceId;
   document.querySelector("#booking-service-switch").hidden = services.length <= 1 || Boolean(negotiation);
   const selectedService = negotiation ? bookingService : services.find(item => item.id === document.querySelector("#booking-service").value);
-  const savedDraft = !negotiation && selectedService
-    ? bookingDrafts.get(`${providerId}:${selectedService.id}`)
+  const savedDraft = selectedService
+    ? window.skillflexJourney?.bookingDraft(providerId, selectedService.id, negotiationId) || (!negotiation ? bookingDrafts.get(`${providerId}:${selectedService.id}`) : null)
     : null;
   document.querySelector("#booking-confirm-label").hidden = !negotiation;
   document.querySelector("#booking-confirm-details").required = Boolean(negotiation);
@@ -3710,7 +3827,20 @@ function openBooking(providerId, serviceId, negotiationId = "") {
     updateBookingLocationVisibility();
   }
   openModal("booking-modal");
-  window.skillmateGrowth?.refreshSlots();
+  window.skillflexJourney?.bookingOpened(Boolean(savedDraft));
+  const modal = document.querySelector("#booking-modal");
+  const draftRequest = crypto.randomUUID();
+  modal.dataset.draftRequest = draftRequest;
+  const slots = window.skillflexGrowth?.refreshSlots();
+  if (savedDraft?.slot && slots) Promise.resolve(slots).then(() => {
+    const select = document.querySelector("#booking-slot");
+    if (!modal.open || modal.dataset.draftRequest !== draftRequest
+      || document.querySelector("#booking-date").value !== savedDraft.date || select.value) return;
+    if ([...select.options].some(option => option.value === savedDraft.slot)) {
+      select.value = savedDraft.slot;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }).catch(error => console.warn("Could not restore the saved appointment slot.", error));
 }
 function updateBookingLocationVisibility() {
   const isOtherLocation = document.querySelector("#booking-location-type").value === "other";
@@ -3749,7 +3879,7 @@ function updateBookingRequestMode(service, hasAgreement) {
     ? "For example: I’d like 20 edited photos instead of the 10 included. Please quote the extra cost."
     : "Share a helpful detail";
   document.querySelector("#booking-custom-quote-hint").hidden = !isQuoteRequest;
-  document.querySelector("#booking-instructions").open = isQuoteRequest;
+  document.querySelector("#booking-instructions").open = isQuoteRequest || Boolean(document.querySelector("#booking-note").value);
   const instructionsSummary = document.querySelector("#booking-instructions summary");
   instructionsSummary.childNodes[0].textContent = isQuoteRequest ? "Describe your request " : "Add instructions ";
   instructionsSummary.querySelector("span").textContent = isQuoteRequest ? "(required)" : "(optional)";
@@ -3786,7 +3916,7 @@ function updateBookingSummary() {
   agreementReview.hidden = !negotiation;
   document.querySelector("#booking-summary-service").textContent = service.title;
   document.querySelector("#booking-provider-name").textContent = getProvider(providerId)?.name || "";
-  const negotiationMode = window.skillmateServiceUtils.normalizeNegotiationMode(service.negotiationMode);
+  const negotiationMode = window.skillflexServiceUtils.normalizeNegotiationMode(service.negotiationMode);
   const isNegotiable = ["negotiation", "hybrid"].includes(negotiationMode);
   const isRangeQuote = serviceUsesPriceRange(service) && !negotiation;
   document.querySelector("#booking-negotiable-badge").textContent = negotiation ? "Agreed" : isRangeQuote ? "Quote required" : isNegotiable ? "Negotiable" : "Fixed price";
@@ -3804,7 +3934,10 @@ function updateBookingSummary() {
     document.querySelector("#booking-agreed-price").textContent = currency(negotiation.agreedPrice);
   }
 }
-document.querySelector("#booking-service").addEventListener("change", updateBookingSummary);
+document.querySelector("#booking-service").addEventListener("change", () => {
+  if (!document.querySelector("#booking-modal").open) { updateBookingSummary(); return; }
+  openBooking(document.querySelector("#booking-provider-id").value, document.querySelector("#booking-service").value);
+});
 document.querySelector("#booking-location-type").addEventListener("change", updateBookingLocationVisibility);
 document.querySelector("#booking-negotiate").addEventListener("click", (event) => {
   const providerId = document.querySelector("#booking-provider-id").value;
@@ -3825,7 +3958,7 @@ document.querySelector("#booking-negotiate").addEventListener("click", (event) =
 });
 function openPriceOfferForm({ providerId, serviceId, action = "initial", negotiationId = "", offerId = "", conversationId = "", amount = "", description = "", chatProposal = false }) {
   if (!appSupabase) {
-    showToast("Price negotiation requires a connected Skillmate account.", "error");
+    showToast("Price negotiation requires a connected Skill Flex account.", "error");
     return;
   }
   if (!negotiationBackendAvailable) {
@@ -3876,7 +4009,7 @@ function exposePriceActionError(error) {
 }
 async function openServiceDiscussion(providerId, serviceId, triggerButton, initialMessage = "") {
   if (!appSupabase) {
-    showToast("Price discussion requires a connected Skillmate account.", "error");
+    showToast("Price discussion requires a connected Skill Flex account.", "error");
     return;
   }
   if (!negotiationBackendAvailable) {
@@ -3906,6 +4039,7 @@ async function openServiceDiscussion(providerId, serviceId, triggerButton, initi
     showPage("messages", { openConversation: true });
     let quoteRequestSent = false;
     let quoteMessageSent = false;
+    let quoteMessageQueued = false;
     try {
       const { data: negotiationId, error: negotiationError } = await appSupabase.rpc("create_price_negotiation", {
         p_service_id: serviceId, p_conversation_id: conversationId,
@@ -3914,14 +4048,15 @@ async function openServiceDiscussion(providerId, serviceId, triggerButton, initi
       if (negotiationError) throw negotiationError;
       if (initialMessage) {
         const service = connectedServices.find(item => item.id === serviceId);
-        const { error: messageError } = await appSupabase.from("messages").insert({
-          conversation_id: conversationId, sender_id: appUser.id,
-          body: `Custom quote request for ${service?.title || "this service"}: ${initialMessage}`,
-        });
-        if (messageError) throw messageError;
+        const message = createOutgoingMessage(`Custom quote request for ${service?.title || "this service"}: ${initialMessage}`);
+        chat.messages.push(message);
+        queuePendingMessage(chat, message);
+        cacheConversationMessages(state.messages);
+        quoteMessageQueued = true;
+        await sendPendingMessage(chat, message);
         quoteMessageSent = true;
       }
-      chat.messages = await loadConversationMessages(conversationId, provider.name);
+      chat.messages = retainLocalOutgoingMessages(chat.messages, await loadConversationMessages(conversationId, provider.name));
       conversationMessageRefreshTimes.set(conversationId, Date.now());
       cacheConversationMessages(state.messages);
       const negotiation = await loadConversationPriceNegotiation(negotiationId);
@@ -3931,11 +4066,13 @@ async function openServiceDiscussion(providerId, serviceId, triggerButton, initi
       ];
       quoteRequestSent = Boolean(initialMessage);
     } catch (error) {
-      console.error("Could not finish loading the Skillmate price discussion.", error);
+      console.error("Could not finish loading the Skill Flex price discussion.", error);
       showToast(initialMessage
         ? quoteMessageSent
           ? "Quote request sent, but the conversation could not refresh. Reopen it to see the provider’s response."
-          : "Chat is open, but your quote request could not be sent. Try again from this conversation."
+          : quoteMessageQueued
+            ? "Your quote message was not confirmed as sent. It is saved in this conversation; tap Retry to send it."
+            : "Chat is open, but your quote request could not be sent. Try again from this conversation."
         : "Chat is open, but the price discussion could not finish loading. You can still message the provider.", "error");
     } finally {
       conversationsOpeningNegotiation.delete(conversationId);
@@ -3953,7 +4090,7 @@ document.querySelector("#price-offer-form").addEventListener("submit", event => 
   const amountInput = document.querySelector("#price-offer-amount");
   if (!form.reportValidity()) return;
   const amount = Number(amountInput.value);
-  if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100) {
+  if (!Number.isFinite(amount) || amount <= 0 || !/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(amountInput.value)) {
     showToast("Enter a price with no more than two decimal places.", "error");
     amountInput.focus();
     return;
@@ -4025,68 +4162,11 @@ document.querySelector("#price-offer-form").addEventListener("submit", event => 
     friendlyFailureMessage: "The price proposal could not be sent. Check the conversation and current offer status, then try again.",
   });
 });
-async function openProviderProfile(providerId, serviceId) {
-  const provider = getProvider(providerId);
-  if (!provider) return;
-  const rating = providerReviewSummary(provider);
-  const services = providerServices(providerId);
-  const selectedService = services.find(service => service.id === serviceId) || services[0];
-  const profile = document.querySelector("#provider-detail-content");
-  const requestId = crypto.randomUUID();
-  profile.dataset.requestId = requestId;
-  profile.innerHTML = window.skillmateLoading.markup({ count: 4, label: "Loading provider details" });
-  document.querySelector("#provider-detail-title").textContent = selectedService?.title || provider.service;
-  document.querySelector("#provider-detail-book").disabled = true;
-  document.querySelector("#provider-detail-message").disabled = true;
-  document.querySelector("#provider-detail-report").disabled = true;
-  openModal("provider-detail-modal");
-  let cvUrl = "";
-  if (appSupabase && provider.cvPath
-    && /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.pdf$/i.test(provider.cvPath)
-    && provider.cvPath.startsWith(`${providerId}/`)) {
-    let data, error;
-    try {
-      ({ data, error } = await appSupabase.storage.from("provider-cvs").createSignedUrl(provider.cvPath, 900));
-    } catch (failure) { error = failure; }
-    if (profile.dataset.requestId !== requestId) return;
-    if (error) {
-      console.error("Could not create a signed provider CV link.", error);
-      showToast("This provider’s CV could not be opened right now.", "error");
-    } else {
-      cvUrl = data.signedUrl;
-    }
-  }
-  const skills = (provider.skills || []).filter(Boolean);
-  const reviews = providerReviews(providerId);
-  const portfolioMarkup = (provider.portfolio || []).map(item => {
-    const work = typeof item === "string" ? { title: item } : item;
-    const image = window.skillmateMarketplace.safeImageUrl(work.image);
-    return `<article class="showcase-work-card">${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(work.title)}" loading="lazy" decoding="async" />` : `<div class="portfolio-placeholder" aria-hidden="true">${getCategoryIcon(provider.category)}</div>`}<div><strong>${escapeHTML(work.title)}</strong>${work.description ? `<p>${escapeHTML(work.description)}</p>` : ""}</div></article>`;
-  }).join("");
-  const reviewMarkup = reviews.map(review => `<article class="showcase-review-card"><div class="showcase-review-heading"><span aria-label="${Number(review.rating)} out of 5 stars">${"★".repeat(Number(review.rating))}${"☆".repeat(5 - Number(review.rating))}</span><time>${escapeHTML(new Date(review.date).toLocaleDateString(undefined, { month: "short", year: "numeric" }))}</time></div><p>${escapeHTML(review.text)}</p><small>Verified completed booking</small></article>`).join("");
-  profile.innerHTML = `
-    <header class="showcase-hero">
-      <div class="showcase-orbit" aria-hidden="true"></div>
-      <div class="showcase-identity">${providerAvatarMarkup(provider)}<div><span class="showcase-kicker">${provider.verified ? "✦ CAMPUS VERIFIED" : "SKILLMATE PROVIDER"}</span><h2>${escapeHTML(provider.name)}</h2><p>${escapeHTML(provider.course || "Student provider")} · ${escapeHTML(provider.campus)}</p></div></div>
-      <p class="showcase-bio">${escapeHTML(provider.bio || provider.description || "A student sharing their skills with the campus community.")}</p>
-      <div class="showcase-stats"><div><strong>${escapeHTML(rating.rating)}</strong><span>${rating.count} ${rating.count === 1 ? "review" : "reviews"}</span></div><i></i><div><strong>${Number(provider.bookings) || 0}</strong><span>completed works</span></div><i></i><div><strong>${services.length}</strong><span>${services.length === 1 ? "service" : "services"}</span></div></div>
-    </header>
-    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>01</span><h3>Services</h3></div>${services.map((service) => `<div class="detail-service"><span><strong>${escapeHTML(service.title)}</strong><small>${escapeHTML(service.category)} · ${servicePriceLabel(service)}</small><small>${escapeHTML(serviceDetailLabel(service))}</small>${service.providerId !== appUser?.id ? `<small>${service.priceType === "range" ? "Price range · custom quote required" : service.negotiationMode === "fixed" ? "Fixed Price" : service.negotiationMode === "hybrid" ? "Custom price & scope" : "Negotiation · price only"}</small>${service.negotiationMode !== "fixed" ? `<span class="detail-negotiation-actions"><button class="button button-small button-outline" type="button" data-negotiation-action="offer" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Make an offer</button><button class="button button-small button-outline" type="button" data-negotiation-action="discuss" data-provider="${escapeHTML(providerId)}" data-service="${escapeHTML(service.id)}">Discuss price</button></span>` : ""}` : ""}</span>${service.groups ? '<span class="detail-group-tag">Group bookings welcome</span>' : ""}</div>`).join("")}</section>
-    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>02</span><h3>Education &amp; skills</h3></div><p class="showcase-education"><strong>${escapeHTML(provider.course || "Student")}</strong><span>${escapeHTML(provider.campus)}</span></p><div class="showcase-skills">${skills.length ? skills.map(skill => `<span>${escapeHTML(skill)}</span>`).join("") : '<span>Skills and specialities shared through listed services</span>'}</div>${cvUrl ? `<a class="showcase-cv-link" href="${escapeHTML(cvUrl)}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">↗</span><span><strong>View professional CV</strong><small>${escapeHTML(provider.cvName || "PDF document")} · Secure link expires in 15 minutes</small></span></a>` : ""}</section>
-    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>03</span><h3>Selected work</h3></div><div class="showcase-work-grid">${portfolioMarkup || '<p class="detail-empty">No work samples added yet. Ask the provider about their experience.</p>'}</div></section>
-    <section class="detail-section showcase-section"><div class="showcase-section-heading"><span>04</span><h3>Student reviews</h3><span class="showcase-review-score">${rating.count ? `★ ${escapeHTML(rating.rating)}` : "NEW"}</span></div><div class="showcase-review-list">${reviewMarkup || '<p class="detail-empty">No reviews yet. Completed work can be reviewed by the customer.</p>'}</div></section>
-    ${services.some(service => service.groups) ? `<section class="detail-section group-detail-callout"><div><h3>Need help as a group?</h3><p>This provider welcomes group requests.</p></div><button class="button button-outline" type="button" data-open="groups-modal" data-group-provider="${escapeHTML(providerId)}">Book with friends</button></section>` : ""}`;
-  document.querySelector("#provider-detail-title").textContent = selectedService?.title || provider.service;
-  document.querySelector("#provider-detail-book").dataset.book = providerId;
-  document.querySelector("#provider-detail-book").dataset.service = selectedService?.id || "";
-  document.querySelector("#provider-detail-message").dataset.message = providerId;
-  document.querySelector("#provider-detail-message").dataset.service = selectedService?.id || "";
-  document.querySelector("#provider-detail-report").dataset.report = providerId;
-  document.querySelector("#provider-detail-book").disabled = false;
-  document.querySelector("#provider-detail-message").disabled = false;
-  document.querySelector("#provider-detail-report").disabled = false;
-}
 function openMessage(providerId, messageFor = "provider", serviceId) {
+  if (document.querySelector("#message-form").dataset.sending) {
+    showToast("Your conversation is still opening. Please wait before starting another.");
+    return;
+  }
   const provider = providerId.startsWith("customer:") ? getProvider(providerId) : getProvider(providerId);
   if (!provider || state.blocked.includes(providerId)) { showToast("You can’t message this student."); return; }
   const service = serviceId && providerServices(providerId).find(item => item.id === serviceId);
@@ -4174,6 +4254,8 @@ function openBookingConversation(bookingId) {
   }, "Could not open this booking conversation.", "Opening conversation…");
 }
 async function startConversation(providerId, text) {
+  text = text.trim();
+  if (!text) throw new Error("Write a message before sending.");
   if (appSupabase) {
     let otherUserId = providerId;
     let bookingId = null;
@@ -4188,10 +4270,16 @@ async function startConversation(providerId, text) {
       p_other_user_id: otherUserId, p_booking_id: bookingId,
     });
     if (conversationError) throw conversationError;
-    const { error: messageError } = await appSupabase.from("messages").insert({
-      conversation_id: conversationId, sender_id: appUser.id, body: text,
-    });
-    if (messageError) throw messageError;
+    let chat = state.messages.find(item => item.id === conversationId);
+    if (!chat) {
+      chat = { id: conversationId, providerId: otherUserId, name: getProvider(providerId)?.name || "Student", messages: [] };
+      state.messages.unshift(chat);
+    }
+    // First messages use the same persisted, idempotent outbox as the chat composer.
+    const message = createOutgoingMessage(text);
+    chat.messages.push(message);
+    queuePendingMessage(chat, message);
+    cacheConversationMessages(state.messages);
     setActiveConversation(conversationId);
     await refreshSupabaseState("messages");
     return;
@@ -4245,20 +4333,20 @@ function addGroup(group) {
 
 document.querySelectorAll(".nav-link[data-page]").forEach((link) => link.addEventListener("click", (event) => {
   event.preventDefault();
-  showPage(link.dataset.page);
+  showPage(link.dataset.page, { focusHeading: true });
 }));
 document.addEventListener("click", event => {
   const link = event.target.closest("[data-page-link]");
   if (!link) return;
   event.preventDefault();
-  showPage(link.dataset.pageLink);
+  showPage(link.dataset.pageLink, { focusHeading: true });
 });
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-open]");
   if (!button) return;
   const modalId = button.dataset.open;
   if (modalId === "profile-modal") { openStudentProfileEditor(); return; }
-  if (modalId === "service-modal") window.skillmateServiceEditor.prepare();
+  if (modalId === "service-modal") window.skillflexServiceEditor.prepare();
   if (modalId === "blocked-modal") renderBlocked();
   if (modalId === "groups-modal") {
     groupProviderFilter = button.dataset.groupProvider || null;
@@ -4384,7 +4472,7 @@ window.addEventListener("resize", () => {
   if (window.innerWidth > 768 && mobileNav) mobileNav.classList.remove("is-hidden");
 }, { passive: true });
 window.addEventListener("popstate", (event) => showPage(window.location.hash.slice(1) || "home", {
-  restoreScroll: Number.isFinite(event.state?.skillmateScrollY) ? event.state.skillmateScrollY : 0,
+  restoreScroll: Number.isFinite(event.state?.skillflexScrollY) ? event.state.skillflexScrollY : 0,
 }));
 window.addEventListener("hashchange", () => {
   const page = window.location.hash.slice(1) || "home";
@@ -4481,7 +4569,7 @@ document.querySelector("#recent-view-all").addEventListener("click", () => {
 });
 document.querySelectorAll('[data-activity-count="bookings"]').forEach(node => node.closest("a").addEventListener("click", () => {
   bookingDirection = "made";
-  bookingFilter = "upcoming";
+  activeBookingFilter = "upcoming";
   document.querySelectorAll("[data-booking-direction]").forEach(button => {
     const active = button.dataset.bookingDirection === "made";
     button.classList.toggle("active", active);
@@ -4508,9 +4596,9 @@ document.addEventListener("keydown", event => {
   if (event.key === "Escape" && account.open) { account.open = false; account.querySelector("summary").focus(); }
 });
 document.querySelector("#mode-switch").addEventListener("click", () => {
-  if (state.services.length) showPage("provider");
+  if (state.services.length) showPage("provider", { focusHeading: true });
   else {
-    window.skillmateServiceEditor.prepare();
+    window.skillflexServiceEditor.prepare();
     openModal("service-modal");
   }
 });
@@ -4519,6 +4607,12 @@ document.querySelector("#marketplace-grid").addEventListener("click", handleCard
 document.querySelector("#saved-grid").addEventListener("click", handleCardAction);
 document.querySelector("#recent-grid").addEventListener("click", handleCardAction);
 document.querySelector("#provider-detail-modal").addEventListener("click", (event) => {
+  const jump = event.target.closest("[data-showcase-jump]");
+  if (jump) {
+    const heading = [...document.querySelectorAll("#provider-detail-content h3")].find(item => item.textContent === (jump.dataset.showcaseJump === "work" ? "Selected work" : "Student reviews"));
+    if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); heading.scrollIntoView({ block: "start", behavior: "auto" }); }
+    return;
+  }
   const negotiation = event.target.closest("[data-negotiation-action]");
   if (negotiation) {
     if (negotiation.dataset.negotiationAction === "offer") {
@@ -4546,7 +4640,7 @@ function handleCardAction(event) {
   if (button.dataset.report) openReport(button.dataset.report);
   if (button.dataset.profile) {
     void openProviderProfile(button.dataset.profile, button.dataset.service).catch((error) => {
-      console.error("Could not open the Skillmate provider profile.", error);
+      console.error("Could not open the Skill Flex provider profile.", error);
       showToast("Could not open this provider profile. Please try again.", "error");
     });
   }
@@ -4678,7 +4772,10 @@ document.querySelector("#group-grid").addEventListener("click", (event) => {
 });
 document.querySelector("#booking-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  if (bookingSubmissionPending) return;
+  if (bookingSubmissionPending) {
+    showToast("Another booking request is still sending. Wait for its result before sending this one.");
+    return;
+  }
   if (document.querySelector("#booking-confirm-details").required
       && !document.querySelector("#booking-confirm-details").checked) {
     showToast("Review the booking details and confirm before sending the request.", "error");
@@ -4721,7 +4818,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
   const bookingDraftKey = `${providerId}:${service.id}`;
   const appointmentDate = document.querySelector("#booking-date").value;
   const appointmentTime = document.querySelector("#booking-time").value;
-  const scheduledAt = window.skillmateGrowth ? window.skillmateGrowth.appointment(appointmentDate, appointmentTime) : parseLocalAppointment(appointmentDate, appointmentTime);
+  const scheduledAt = window.skillflexGrowth ? window.skillflexGrowth.appointment(appointmentDate, appointmentTime) : parseLocalAppointment(appointmentDate, appointmentTime);
   if (!scheduledAt || scheduledAt <= new Date()) {
     showToast("Choose a future appointment date and time.");
     return;
@@ -4735,10 +4832,15 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
       showToast("This agreed price is no longer available for this service.", "error");
       return;
     }
+    window.skillflexIllustrations?.hideBookingSuccess();
     bookingSubmissionPending = true;
     const temporaryId = `pending-booking-${Date.now()}`;
+    const submittedDraft = window.skillflexJourney?.bookingDraft(providerId, service.id, negotiationId);
+    const submittedDraftRequest = document.querySelector("#booking-modal").dataset.draftRequest;
+    const bookingRequestId = window.skillflexJourney?.requestId(JSON.stringify([providerId, service.id, scheduledAt.toISOString(), document.querySelector("#booking-note").value.trim(), bookingLocationValue()])) || crypto.randomUUID();
     const pendingBooking = {
       id: temporaryId, serviceId: service.id, providerId, customerId: appUser.id, customer: state.profile.name,
+      scheduledAt: scheduledAt.toISOString(),
       service: service.title, category: service.category, price: negotiation?.agreedPrice ?? Number(service.price),
       listedPrice: negotiation?.listedPrice ?? Number(service.price), priceNegotiationId: negotiationId,
       scopeSnapshot: negotiation?.agreedScope || "",
@@ -4754,7 +4856,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
     showPage("bookings");
     runAction(async () => {
       try {
-        const result = negotiationId
+        let result = negotiationId
           ? await appSupabase.rpc("create_booking_from_price_agreement", {
             p_negotiation_id: negotiationId,
             p_scheduled_at: scheduledAt.toISOString(),
@@ -4762,16 +4864,25 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
             p_location: pendingBooking.requestedLocation,
           })
           : await appSupabase.from("bookings").insert({
+            id: bookingRequestId,
             service_id: service.id, customer_id: appUser.id, provider_id: providerId,
             scheduled_at: scheduledAt.toISOString(), note: pendingBooking.note,
             location: pendingBooking.requestedLocation,
             agreed_price: service.price, listed_price: service.price, currency: service.currency || "GHS",
           });
+        if (!negotiationId && result.error?.code === "23505") {
+          const existing = await appSupabase.from("bookings").select("id").eq("id", bookingRequestId).eq("customer_id", appUser.id).eq("provider_id", providerId).eq("service_id", service.id).maybeSingle();
+          if (!existing.error && existing.data?.id === bookingRequestId) result = { data: existing.data, error: null };
+        }
         const { error } = result;
         if (error) throw error;
+        // A saved request remains usable even if the subsequent read fails.
+        pendingBooking.id = negotiationId ? (Array.isArray(result.data) ? result.data[0]?.id : result.data?.id) || temporaryId : bookingRequestId;
         await reconcileSavedChange();
-        bookingDrafts.delete(bookingDraftKey);
+        if (!window.skillflexJourney) bookingDrafts.delete(bookingDraftKey);
+        document.dispatchEvent(new CustomEvent("skillflex:booking-save", { detail: { state: "saved", providerId, serviceId: service.id, agreementId: negotiationId, requestId: bookingRequestId, submittedDraft } }));
         renderAll();
+        window.skillflexIllustrations?.showBookingSuccess();
         showToast("Booking request sent. You can track it in My bookings.", "success");
       } catch (error) {
         state.bookings = state.bookings.filter((booking) => booking.id !== temporaryId);
@@ -4786,8 +4897,12 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
           return;
         }
         renderAll();
-        window.skillmateGrowth?.refreshSlots();
-        if (!document.querySelector("dialog[open]")) openModal("booking-modal");
+        const sameDraft = document.querySelector("#booking-modal").dataset.draftRequest === submittedDraftRequest;
+        if (sameDraft) {
+          window.skillflexGrowth?.refreshSlots();
+          if (!document.querySelector("dialog[open]")) openModal("booking-modal");
+        }
+        document.dispatchEvent(new CustomEvent("skillflex:booking-save", { detail: { state: "failed", draftRequest: submittedDraftRequest } }));
         throw error;
       }
     }, "Could not send the booking request.").finally(() => {
@@ -4795,6 +4910,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
     });
     return;
   }
+  window.skillflexIllustrations?.hideBookingSuccess();
   bookingSubmissionPending = true;
   state.bookings.unshift({
     id: `booking-${Date.now()}`, serviceId: service.id, scheduledAt: scheduledAt.toISOString(), providerId, service: service.title, price: Number(service.price),
@@ -4809,6 +4925,7 @@ document.querySelector("#booking-form").addEventListener("submit", (event) => {
   event.target.closest("dialog").close();
   renderAll();
   showPage("bookings");
+  window.skillflexIllustrations?.showBookingSuccess({ local: true });
   showToast("Booking request sent. Your booking record is saved on this device.");
 });
 document.querySelector("#group-form").addEventListener("submit", (event) => {
@@ -4850,7 +4967,7 @@ document.querySelector("#group-form").addEventListener("submit", (event) => {
   state.bookings.unshift({
     id: `booking-${Date.now()}`, groupId, providerId, service: service.title,
     price: groupPrice, date, time: "Time to be arranged", customer: state.profile.name,
-    status: "Pending", type: "Group booking", customer: state.profile.name,
+    status: "Pending", type: "Group booking",
     note: "Hosting this group booking", reviewed: false,
   });
   saveState();
@@ -4860,14 +4977,30 @@ document.querySelector("#group-form").addEventListener("submit", (event) => {
 });
 document.querySelector("#message-form").addEventListener("submit", (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
+  if (form.dataset.sending) return;
+  const input = document.querySelector("#message-first-text");
+  const text = input.value.trim();
+  if (!text) {
+    showToast("Write a message before sending.", "error");
+    input.focus();
+    return;
+  }
+  const providerId = document.querySelector("#message-provider-id").value;
+  form.dataset.sending = "true";
   runAction(async () => {
-    await startConversation(document.querySelector("#message-provider-id").value, document.querySelector("#message-first-text").value.trim());
+    const queued = await startConversation(providerId, text);
     event.target.closest("dialog").close();
     document.querySelector("#messages-layout").dataset.chatOpen = "true";
     renderConversations();
     showPage("messages", { openConversation: true });
-    showToast("Conversation started.");
-  }, "Could not send your message.");
+    if (queued) {
+      if (navigator.onLine) sendMessageWithoutBlocking(queued.chat, queued.message, "Message wasn't sent. It is saved on this device; tap Retry to try again.");
+      else showToast("You’re offline. This message is saved on this device; tap Retry when you reconnect.");
+    } else showToast("Conversation started.");
+  }, "Could not open the conversation. Your message is still here.", "Opening conversation…", {
+    submitButton: form.querySelector('button[type="submit"]'),
+  }).finally(() => { delete form.dataset.sending; });
 });
 document.querySelector("#conversation-list").addEventListener("click", (event) => {
   const button = event.target.closest("[data-chat]");
@@ -4876,13 +5009,13 @@ document.querySelector("#conversation-list").addEventListener("click", (event) =
   pendingReplyId = null;
   document.querySelector("#messages-layout").dataset.chatOpen = "true";
   renderConversations();
-  markConversationMessagesRead(activeConversationId).catch((error) => console.error("Could not mark Skillmate messages as read.", error));
+  markConversationMessagesRead(activeConversationId).catch((error) => console.error("Could not mark Skill Flex messages as read.", error));
   refreshConversationMessages(activeConversationId).catch((error) => {
-    console.error("Could not refresh the selected Skillmate conversation.", error);
+    console.error("Could not refresh the selected Skill Flex conversation.", error);
     showToast("Could not refresh this chat’s messages. Check your connection and try again.", "error");
   });
 });
-document.addEventListener("skillmate:open-conversation", event => {
+document.addEventListener("skillflex:open-conversation", event => {
   const conversationId = event.detail?.conversationId;
   if (!conversationId || !appSupabase) return;
   runAction(async () => {
@@ -4897,7 +5030,7 @@ document.addEventListener("skillmate:open-conversation", event => {
     friendlyFailureMessage: "This conversation is no longer available to your account.",
   });
 });
-document.addEventListener("skillmate:open-booking", event => {
+document.addEventListener("skillflex:open-booking", event => {
   const bookingId = event.detail?.bookingId;
   if (!bookingId || !appSupabase) return;
   runAction(async () => {
@@ -4927,7 +5060,7 @@ document.addEventListener("skillmate:open-booking", event => {
 document.querySelector("#chat-panel").addEventListener("scroll", (event) => {
   if (event.target.id !== "chat-messages" || event.target.scrollTop > 32) return;
   loadOlderConversationMessages(activeConversationId).catch((error) => {
-    console.error("Could not load older Skillmate messages.", error);
+    console.error("Could not load older Skill Flex messages.", error);
     showToast("Could not load older messages. Check your connection and try again.", "error");
   });
 }, true);
@@ -5118,16 +5251,7 @@ document.querySelector("#chat-panel").addEventListener("submit", (event) => {
   saveChatDraft(chat.id, "");
   pendingReplyId = null;
   if (appSupabase) {
-    const message = {
-      id: createChatMessageId(),
-      sender: "You",
-      senderId: appUser.id,
-      text,
-      createdAt: new Date().toISOString(),
-      time: formatChatTime(new Date()),
-      replyTo: replyTo || null,
-      sendStatus: navigator.onLine ? "sending" : "failed",
-    };
+    const message = createOutgoingMessage(text, replyTo || null);
     chat.messages.push(message);
     queuePendingMessage(chat, message);
     cacheConversationMessages(state.messages);
@@ -5203,7 +5327,7 @@ document.addEventListener("click", (event) => {
       navigator.clipboard.writeText(message.text).then(
         () => showToast("Message copied."),
         (error) => {
-          console.error("Could not copy the Skillmate message.", error);
+          console.error("Could not copy the Skill Flex message.", error);
           showToast("Could not copy this message.");
         },
       );
@@ -5223,7 +5347,7 @@ document.querySelector("#listing-list").addEventListener("click", (event) => {
   if (edit) {
     const service = state.services.find((item) => item.id === edit.dataset.editService);
     if (!service || service.pending) return;
-    window.skillmateServiceEditor.prepare(service);
+    window.skillflexServiceEditor.prepare(service);
     openModal("service-modal");
   }
   if (toggle) {
@@ -5388,11 +5512,11 @@ function openStudentProfileEditor() {
   document.querySelector("#profile-location").value = state.profile.location || "";
   openModal("profile-modal");
 }
-document.querySelector("#profile-menu").addEventListener("click", () => showPage("profile-settings"));
+document.querySelector("#profile-menu").addEventListener("click", () => showPage("profile-settings", { focusHeading: true }));
 async function updatePushSettingsStatus() {
   const button = document.querySelector("#settings-push-toggle");
   const help = document.querySelector("#settings-push-help");
-  const needsHomeScreenInstall = window.SkillmatePushPlatform.requiresHomeScreenInstall({
+  const needsHomeScreenInstall = window.SkillflexPushPlatform.requiresHomeScreenInstall({
     platform: navigator.platform || "",
     userAgent: navigator.userAgent || "",
     maxTouchPoints: navigator.maxTouchPoints || 0,
@@ -5441,8 +5565,8 @@ function loadAccountSettings() {
   document.querySelector("#settings-university").value = state.profile.university || "";
   document.querySelector("#settings-bio").value = state.profile.bio || "";
   document.querySelector("#settings-cv-current").textContent = state.profile.cvName
-    ? `Current CV: ${state.profile.cvName}. Only signed-in Skillmate students can open it.`
-    : "Add a PDF CV to your provider profile. Only signed-in Skillmate students can open it.";
+    ? `Current CV: ${state.profile.cvName}. Only signed-in Skill Flex students can open it.`
+    : "Add a PDF CV to your provider profile. Only signed-in Skill Flex students can open it.";
   document.querySelector("#settings-cv-file").value = "";
   document.querySelector("#settings-cv-remove").checked = false;
   document.querySelector("#settings-cv-remove-row").hidden = !state.profile.cvPath;
@@ -5453,7 +5577,7 @@ function loadAccountSettings() {
   const avatar = document.querySelector("#settings-avatar-preview");
   if (state.profile.avatarUrl) avatar.src = state.profile.avatarUrl;
   else avatar.removeAttribute("src");
-  const config = window.SKILLMATE_SUPABASE_CONFIG || {};
+  const config = window.SKILLFLEX_SUPABASE_CONFIG || {};
   document.querySelector("#delete-account-open").disabled = !config.accountDeletionAvailable;
   document.querySelector("#account-delete-availability").hidden = Boolean(config.accountDeletionAvailable);
   const contacts = document.querySelector("#support-contact");
@@ -5569,7 +5693,7 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
     if (photo) {
       let compressedPhoto;
       try {
-        compressedPhoto = await window.skillmateServiceUtils.compressImageFile(photo, {
+        compressedPhoto = await window.skillflexServiceUtils.compressImageFile(photo, {
           maxDimension: 512, quality: 0.75, maxOutputBytes: 1_000_000,
         });
       } catch (error) {
@@ -5681,7 +5805,7 @@ document.querySelector("#account-profile-form").addEventListener("submit", (even
     let cvCleanupFailed = false;
     let avatarCleanupFailed = false;
     if (avatarPath && previousAvatarUrl) {
-      const prefix = `${window.SKILLMATE_SUPABASE_CONFIG.url}/storage/v1/object/public/profile-avatars/`;
+      const prefix = `${window.SKILLFLEX_SUPABASE_CONFIG.url}/storage/v1/object/public/profile-avatars/`;
       if (previousAvatarUrl.startsWith(prefix)) {
         const oldPath = previousAvatarUrl.slice(prefix.length).split("?")[0];
         if (oldPath.startsWith(`${appUser.id}/`) && !oldPath.includes("..")) {
@@ -5793,7 +5917,7 @@ document.querySelector("#settings-push-toggle").addEventListener("click", (event
     }
     if (!window.isSecureContext) throw pushSettingsError("Browser notifications require a secure HTTPS connection.");
     if (Notification.permission === "denied") {
-      throw pushSettingsError("Notifications are blocked in your browser settings. Allow them for Skillmate, then try again.");
+      throw pushSettingsError("Notifications are blocked in your browser settings. Allow them for Skill Flex, then try again.");
     }
     if (!await (Notification.permission === "granted" ? Promise.resolve("granted") : Notification.requestPermission())
       .then((permission) => permission === "granted")) {
@@ -5821,7 +5945,7 @@ document.querySelector("#settings-push-toggle").addEventListener("click", (event
         throw pushSettingsError(result.error || "Could not disable browser notifications.");
       }
       if (!await currentSubscription.unsubscribe()) {
-        throw pushSettingsError("Skillmate removed this device, but the browser could not disable its push subscription.");
+        throw pushSettingsError("Skill Flex removed this device, but the browser could not disable its push subscription.");
       }
       setSettingsFeedback(feedback, "Browser notifications are disabled on this device.");
     } else {
@@ -5887,7 +6011,7 @@ document.querySelector("#support-ticket-form").addEventListener("submit", (event
       const { error: setupError } = await appSupabase.from("support_tickets").select("id").limit(0);
       if (setupError) throw setupError;
       if (screenshot) {
-        const compressedScreenshot = await window.skillmateServiceUtils.compressImageFile(screenshot, {
+        const compressedScreenshot = await window.skillflexServiceUtils.compressImageFile(screenshot, {
           maxDimension: 1600, quality: 0.82,
         });
         screenshotPath = `${appUser.id}/${crypto.randomUUID()}.webp`;
@@ -5905,7 +6029,7 @@ document.querySelector("#support-ticket-form").addEventListener("submit", (event
       form.reset();
       setSettingsFeedback(feedback, "Your report was sent. Support will review it shortly.");
     } catch (error) {
-      console.error("Could not submit the Skillmate support ticket.", error);
+      console.error("Could not submit the Skill Flex support ticket.", error);
       if (screenshotPath) {
         const { error: cleanupError } = await appSupabase.storage.from("support-screenshots").remove([screenshotPath]);
         if (cleanupError) console.error("Could not remove the unused support screenshot.", cleanupError);
@@ -5955,7 +6079,7 @@ document.querySelector("#delete-account-form").addEventListener("submit", (event
       console.error("The closed account's local Supabase session could not be cleared.", error);
     }
     try {
-      await window.clearSkillmateServerSession();
+      await window.clearSkillflexServerSession();
     } catch (error) {
       console.error("The closed account's server session could not be cleared.", error);
     }
@@ -5967,7 +6091,7 @@ document.querySelector("#delete-account-form").addEventListener("submit", (event
     button.textContent = "Permanently delete account";
   });
 });
-window.addEventListener("skillmate:edit-profile", openStudentProfileEditor);
+window.addEventListener("skillflex:edit-profile", openStudentProfileEditor);
 document.querySelector("#verification-open").addEventListener("click", () => {
   if (appSupabase && document.querySelector("#verification-open").dataset.requested === "open") {
     showToast("Your campus verification request is waiting for review.");
@@ -6008,7 +6132,7 @@ document.querySelector("#portfolio-form").addEventListener("submit", async (even
     runAction(async () => {
       let imagePath = null;
       if (file) {
-        const compressedImage = await window.skillmateServiceUtils.compressImageFile(file, {
+        const compressedImage = await window.skillflexServiceUtils.compressImageFile(file, {
           maxDimension: 1600, quality: 0.84, maxInputBytes: 5_000_000, maxOutputBytes: 1_000_000,
         });
         imagePath = `${appUser.id}/${crypto.randomUUID()}.webp`;
@@ -6119,7 +6243,7 @@ document.querySelector("#verification-form").addEventListener("submit", (event) 
     return;
   }
   if (!appSupabase) {
-    showToast("Connect your Skillmate account to submit an ID photo securely. Nothing was saved.", "error");
+    showToast("Connect your Skill Flex account to submit an ID photo securely. Nothing was saved.", "error");
     return;
   }
   const submitButton = document.querySelector("#verification-submit");
@@ -6516,10 +6640,10 @@ document.querySelector("#payment-submit").addEventListener("click", async (event
 document.querySelector("#earnings-export").addEventListener("click", () => {
   const completed = state.bookings.filter((booking) => isOwnBooking(booking) && booking.status === "Completed");
   const rows = [["Service", "Customer", "Date", "Amount"], ...completed.map((booking) => [booking.service, booking.customer || state.profile.name, booking.date, currency(booking.price)])];
-  const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\r\n");
+  const csv = window.skillflexCsv.encode(rows);
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
-  link.href = url; link.download = "skillmate-earnings.csv"; link.click();
+  link.href = url; link.download = "skillflex-earnings.csv"; link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   showToast(appSupabase ? "Your completed earnings were exported." : "Your completed demo earnings were exported.");
 });
@@ -6678,7 +6802,7 @@ document.querySelector("#signout-button").addEventListener("click", () => {
     return;
   }
   runAction(async () => {
-    await window.skillmateSignOut();
+    await window.skillflexSignOut();
   }, "Could not sign out.");
 });
 document.addEventListener("keydown", (event) => {
@@ -6697,20 +6821,40 @@ document.addEventListener("keydown", (event) => {
 document.querySelector("#group-service").addEventListener("change", updateGroupPrice);
 renderServiceCategories();
 startDashboardLoading();
-bootstrapStudentApp().catch((error) => {
-  console.error("Could not initialize the Skillmate student dashboard.", error);
+function showStartupFailure(message) {
+  const status = document.querySelector("#app-auth-status");
+  finishDashboardLoading();
+  status.hidden = false;
+  status.querySelectorAll("#dashboard-loading-skeleton, #dashboard-loading-progress").forEach(element => { element.hidden = true; });
+  status.querySelector(".startup-failure")?.remove();
+  const failure = document.createElement("div");
+  failure.className = "startup-failure";
+  status.append(failure);
+  window.skillflexLoading.showError(failure, {
+    title: "We couldn’t load your account",
+    message,
+    linkHref: "login.html",
+    linkLabel: "Return to sign in",
+    page: true,
+    focus: true,
+    onRetry: () => window.location.reload(),
+  });
+}
+// A hung request must never leave the startup skeleton on screen forever.
+const STARTUP_STUCK_MS = 45000;
+const startupStuckTimer = window.setTimeout(() => {
+  if (document.body.classList.contains("app-auth-pending")) {
+    showStartupFailure("This is taking longer than expected. Check your connection and try again.");
+  }
+}, STARTUP_STUCK_MS);
+bootstrapStudentApp().then(() => window.clearTimeout(startupStuckTimer), (error) => {
+  window.clearTimeout(startupStuckTimer);
+  console.error("Could not initialize the Skill Flex student dashboard.", error);
   if (error?.message === "SESSION_CHECK_TIMEOUT") {
     window.location.replace("login.html");
     return;
   }
-  const status = document.querySelector("#app-auth-status");
-  finishDashboardLoading();
-  status.hidden = false;
-  status.replaceChildren(document.createTextNode("We couldn’t load your account right now. Please try again in a moment."));
-  const loginLink = document.createElement("a");
-  loginLink.href = "login.html";
-  loginLink.textContent = "Return to sign in";
-  status.append(loginLink);
+  showStartupFailure("Check your connection and try again. Your data is safe.");
 });
 
 function updateGroupPrice() {

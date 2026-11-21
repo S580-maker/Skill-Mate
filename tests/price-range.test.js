@@ -60,7 +60,7 @@ test("range requests start a quote conversation instead of creating a booking", 
   );
   assert.match(bookingSubmit, /if \(serviceUsesPriceRange\(service\) && !negotiationId\)/);
   assert.match(bookingSubmit, /openServiceDiscussion\(providerId, service\.id,[^,]+, request\)/);
-  assert.match(userScript, /body: `Custom quote request for \$\{service\?\.title \|\| "this service"\}: \$\{initialMessage\}`/);
+  assert.match(userScript, /createOutgoingMessage\(`Custom quote request for \$\{service\?\.title \|\| "this service"\}: \$\{initialMessage\}`\)/);
   assert.match(userScript, /Accept the provider’s exact price and scope before booking/);
 });
 

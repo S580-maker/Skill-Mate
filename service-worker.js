@@ -3,9 +3,9 @@ self.addEventListener("push", (event) => {
   try {
     notification = event.data?.json() || {};
   } catch (error) {
-    console.error("Could not read the Skillmate push notification.", error);
+    console.error("Could not read the Skill Flex push notification.", error);
   }
-  const title = typeof notification.title === "string" ? notification.title : "Skillmate";
+  const title = typeof notification.title === "string" ? notification.title : "Skill Flex";
   const body = typeof notification.body === "string" ? notification.body : "You have a new update.";
   const path = ["/index.html#bookings", "/index.html#messages", "/index.html#requests"].includes(notification.path)
     ? notification.path

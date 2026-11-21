@@ -16,7 +16,7 @@ function getMailer(transportOptions = {}) {
   }
   const port = Number(process.env.SMTP_PORT || 587);
   return {
-    from: from.includes("<") ? from : `Skillmate <${from}>`,
+    from: from.includes("<") ? from : `Skill Flex <${from}>`,
     transport: nodemailer.createTransport({
       host,
       port,
