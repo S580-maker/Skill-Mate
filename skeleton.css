@@ -45,7 +45,7 @@ html[data-theme="dark"] {
 .sk-header-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .sk-header-actions .sk { width: 42px; height: 42px; }
 .sk-menu { display: none; }
-.sk-page { width: 100%; max-width: 1500px; margin: 0 auto; padding: 28px 40px 48px; }
+.sk-page { width: 100%; max-width: 1500px; margin: 0 auto; padding: 28px 40px 48px; box-sizing: border-box; }
 .sk-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
 .sk-heading-copy { display: grid; min-width: 0; flex: 1; gap: 10px; }
 .sk-heading-copy .sk-eyebrow { width: 150px; height: 12px; }
@@ -252,7 +252,7 @@ body.admin-locked .auth-screen.auth-screen--skeleton.is-error { display: grid; p
 /* Startup gate */
 body.app-auth-pending, html:has(body.app-auth-pending) { overflow: hidden; }
 #app-auth-status:has(.dashboard-loading-skeleton:not([hidden])) { display: block; padding: 0; text-align: left; font-weight: 400; }
-.dashboard-loading-skeleton { width: 100%; min-height: 100dvh; background: var(--bg); text-align: left; }
+.dashboard-loading-skeleton { width: 100%; max-width: 100vw; min-height: 100dvh; overflow-x: hidden; box-sizing: border-box; background: var(--bg); text-align: left; }
 /* Reserve geometry immediately, but avoid flashing placeholders for fast initial reads. */
 .dashboard-loading-skeleton, .sk-admin-skeleton { animation: sk-reveal 0s .15s both; }
 @keyframes sk-reveal { from { visibility: hidden; } to { visibility: visible; } }

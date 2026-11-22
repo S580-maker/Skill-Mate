@@ -7,7 +7,7 @@ const express = require("express");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const { contentSecurityPolicy } = require("./api/_lib/content-security-policy");
-const { getSupabaseConfig, getSupabaseUser, isOtpVerifiedSession } = require("./api/_lib/supabase");
+const { clearSessionCookie, getSessionCookie, getSupabaseConfig, getSupabaseUser, isOtpVerifiedSession } = require("./api/_lib/supabase");
 const sessionHandler = require("./api/_lib/routes/session");
 const { apiRateLimit, authRateLimit, endpointRateLimits } = require("./api/_lib/rate-limit");
 const { requestMetrics } = require("./api/_lib/http-metrics");
@@ -15,13 +15,6 @@ const { requestMetrics } = require("./api/_lib/http-metrics");
 const app = express();
 const projectRoot = existsSync(path.join(__dirname, "public")) ? path.join(__dirname, "public") : __dirname;
 const sessionCookieName = "skillflex_session";
-const sessionCookieOptions = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax",
-  path: "/",
-};
-
 app.disable("x-powered-by");
 app.set("trust proxy", process.env.TRUST_PROXY === "1" ? 1 : false);
 // Allow framing (e.g. editor preview panes) outside production only.
@@ -119,53 +112,27 @@ app.all("/api/auth/password-recovery", endpointRateLimits["auth/password-recover
 app.post(
   "/api/session",
   endpointRateLimits.session,
-  async (request, response) => {
-    const accessToken = getBearerToken(request);
-    if (!accessToken) return response.status(401).json({ error: "A valid Supabase sign-in session is required." });
-
-    try {
-      const user = await getSupabaseUser(accessToken);
-      if (!user?.id) {
-        response.clearCookie(sessionCookieName, sessionCookieOptions);
-        return response.status(401).json({ error: "Your sign-in session has expired. Please sign in again." });
-      }
-      if (!await isOtpVerifiedSession(accessToken, user.id)) {
-        response.clearCookie(sessionCookieName, sessionCookieOptions);
-        return response.status(403).json({
-          code: "OTP_VERIFICATION_REQUIRED",
-          error: "Verify your email to continue.",
-        });
-      }
-      response.cookie(sessionCookieName, accessToken, {
-        ...sessionCookieOptions,
-        maxAge: getAccessTokenExpiry(accessToken),
-      });
-      return response.status(204).end();
-    } catch (error) {
-      console.error("Could not validate the Skillmate session.", error);
-      return response.status(503).json({ error: "Skillmate could not validate your session. Please try again." });
-    }
-  },
+  sessionHandler,
 );
 app.delete("/api/session", sessionHandler);
 
 app.post("/api/account/delete", endpointRateLimits["account-delete"], (request, response) => {
   const { handleAccountDelete } = require("./api/_lib/account-delete");
-  return handleAccountDelete(request, response, request.cookies[sessionCookieName]);
+  return handleAccountDelete(request, response, request.cookies[sessionCookieName] || getSessionCookie(request));
 });
 
 app.get("/admin.html", async (request, response) => {
-  const accessToken = request.cookies[sessionCookieName];
+  const accessToken = request.cookies[sessionCookieName] || getSessionCookie(request);
   if (!accessToken) return response.redirect(302, "/login.html?next=admin");
 
   try {
     const user = await getSupabaseUser(accessToken);
     if (!user?.id) {
-      response.clearCookie(sessionCookieName, sessionCookieOptions);
+      clearSessionCookie(response);
       return response.redirect(302, "/login.html?next=admin");
     }
     if (!await isOtpVerifiedSession(accessToken, user.id)) {
-      response.clearCookie(sessionCookieName, sessionCookieOptions);
+      clearSessionCookie(response);
       return response.redirect(302, "/login.html?verify=required&next=admin");
     }
     const role = await getUserRole(user.id, accessToken);

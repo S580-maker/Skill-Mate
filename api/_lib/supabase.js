@@ -192,11 +192,13 @@ function getAccessTokenExpiry(token) {
 
 function getSessionCookie(request) {
   const cookieHeader = request.headers?.cookie || "";
-  const cookie = cookieHeader.split(";").map((part) => part.trim())
-    .find((part) => part.startsWith("skillflex_session="));
+  const cookies = cookieHeader.split(";").map((part) => part.trim());
+  const cookie = cookies.find((part) => part.startsWith("skillmate_session="))
+    || cookies.find((part) => part.startsWith("skillflex_session="));
   if (!cookie) return "";
+  const separator = cookie.indexOf("=");
   try {
-    return decodeURIComponent(cookie.slice("skillflex_session=".length));
+    return decodeURIComponent(cookie.slice(separator + 1));
   } catch {
     return "";
   }
@@ -215,7 +217,10 @@ function clearSessionCookie(response) {
   const secure = process.env.NODE_ENV === "production" || response.req?.protocol !== "http";
   response.setHeader(
     "Set-Cookie",
-    `skillflex_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
+    [
+      `skillmate_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
+      `skillflex_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
+    ],
   );
 }
 

@@ -108,7 +108,7 @@ const server = http.createServer((req, res) => {
     if (name === "onboarding.html") content = content.replace('<script src="ghana-universities.js">', `${onboardingFixture}<script src="ghana-universities.js">`);
   }
   if (name === "user.js") {
-    content = content.replace("const appSupabase = window.skillflexSupabase;", "let appSupabase = window.skillflexSupabase;");
+    content = content.replace(/const appSupabase = window\.(skill(?:flex|mate)Supabase);/, "let appSupabase = window.$1;");
     content = content.replace("function syncMessageChannels() {", "function syncMessageChannels() { if (window.__testDisableRealtime) return;");
     content = content.replace("bootstrapStudentApp().then(() => window.clearTimeout(startupStuckTimer), (error) => {", `Promise.resolve().then(() => {
     state.profile.university = "University of Ghana";
@@ -649,8 +649,8 @@ async function main() {
     }
     if (width === 320 || width === 1440) {
       const skeleton = await evaluate(`(()=>{const screen=document.querySelector("#app-auth-status");screen.hidden=false;screen.classList.remove("is-exiting");document.body.classList.add("app-auth-pending");const shell=document.querySelector("#dashboard-loading-skeleton");const page=shell.querySelector(".sk-page");return{shellWidth:shell.getBoundingClientRect().width,pageWidth:page.getBoundingClientRect().width,hasHeader:Boolean(shell.querySelector(".sk-header")),scrollWidth:shell.scrollWidth,cardCount:shell.querySelectorAll(".sk-card").length};})()`);
-      assert.equal(skeleton.shellWidth <= width + 1, true, `${width}: loading skeleton fits the viewport`);
-      assert.equal(skeleton.pageWidth <= width + 1, true, `${width}: skeleton content has no horizontal overflow`);
+      assert.equal(skeleton.shellWidth <= width + 1, true, `${width}: loading skeleton fits the viewport (${JSON.stringify(skeleton)})`);
+      assert.equal(skeleton.pageWidth <= width + 1, true, `${width}: skeleton content has no horizontal overflow (${JSON.stringify(skeleton)})`);
       assert.equal(skeleton.scrollWidth <= width + 1, true, `${width}: skeleton does not scroll horizontally`);
       assert.equal(skeleton.hasHeader, true, "The skeleton previews the app header");
       assert.equal(skeleton.cardCount > 0, true, "The skeleton previews service cards");
@@ -717,7 +717,9 @@ async function main() {
     assert.equal(await evaluate('document.querySelector("#marketplace-grid .provider-card h3 button") === null'), false, "The service title is an accessible details control");
     if (width === 320) {
       await evaluate('document.querySelector("#marketplace-grid .provider-card .listing-cover-button").click()');
-      assert.equal(await evaluate('document.querySelector("#provider-detail-modal").open'), true, "Clicking the service image opens existing details");
+      await wait(0);
+      const clickedDetail = await evaluate(`(()=>{const button=document.querySelector("#marketplace-grid .provider-card .listing-cover-button");return{open:document.querySelector("#provider-detail-modal").open,providerId:button.dataset.profile,providerExists:Boolean(getProvider(button.dataset.profile)),toast:document.querySelector("#toast").textContent}})()`);
+      assert.equal(clickedDetail.open, true, `Clicking the service image opens existing details (${JSON.stringify(clickedDetail)})`);
       await evaluate('document.querySelector("#provider-detail-modal").close();document.querySelector("#marketplace-grid .provider-card .provider-profile-trigger").click()');
       await wait(250);
       assert.equal(await evaluate('document.querySelector("#provider-detail-modal").open'), true, "Clicking the provider avatar opens their profile");

@@ -274,9 +274,9 @@ async function requestPasswordRecovery(request, response) {
     response.setHeader("Allow", "POST");
     return respondError(response, 405, "Method not allowed.");
   }
-  const email = String(request.body?.email || "").trim().toLowerCase();
+  const email = stringField(request.body, "email").trim().toLowerCase();
   const genericMessage = "No recovery code was sent. Check the email address and try again.";
-  if (!/^\S+@\S+\.\S+$/.test(email)) {
+  if (!validEmail(email)) {
     return response.status(200).json({ message: genericMessage, recoveryStarted: false });
   }
 

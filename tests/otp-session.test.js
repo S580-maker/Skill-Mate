@@ -132,7 +132,8 @@ test("session endpoint requires OTP proof before issuing its server cookie", asy
 
   assert.equal(result.statusCode, 403);
   assert.equal(result.body.code, "OTP_VERIFICATION_REQUIRED");
-  assert.match(result.headers["Set-Cookie"], /Max-Age=0/);
+  assert.ok(result.headers["Set-Cookie"].some((cookie) => /skillmate_session=.*Max-Age=0/.test(cookie)));
+  assert.ok(result.headers["Set-Cookie"].some((cookie) => /skillflex_session=.*Max-Age=0/.test(cookie)));
 });
 
 test("OTP-verified persistent sessions continue to receive the server cookie", async () => {

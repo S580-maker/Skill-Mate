@@ -19,7 +19,10 @@ const newOrderMigration = fs.readFileSync(
   path.join(__dirname, "..", "supabase", "migrations", "20261121100000_new_order_price_negotiation.sql"),
   "utf8",
 );
-const userScript = fs.readFileSync(path.join(__dirname, "..", "user.js"), "utf8");
+const userScript = [
+  fs.readFileSync(path.join(__dirname, "..", "user.js"), "utf8"),
+  fs.readFileSync(path.join(__dirname, "..", "provider-profile.js"), "utf8"),
+].join("\n");
 const index = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 
 test("private minimums are isolated from public service listings", () => {

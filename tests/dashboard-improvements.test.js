@@ -414,7 +414,7 @@ test("dashboard skeleton appears immediately and stays visible with progress dur
   let now = 100;
   const timers = new Map();
   const intervals = new Map();
-  const estimates = new Map([["skillflex-dashboard-load-estimate-ms-v1", "15000"]]);
+  const estimates = new Map([["skillmate-dashboard-load-estimate-ms-v1", "15000"]]);
   const context = {
     performance: { now: () => now },
     localStorage: {
@@ -432,7 +432,7 @@ test("dashboard skeleton appears immediately and stays visible with progress dur
       clearInterval(id) { intervals.delete(id); },
     },
     dashboardLoadEstimateMs: 15000,
-    DASHBOARD_LOAD_ESTIMATE_KEY: "skillflex-dashboard-load-estimate-ms-v1",
+    DASHBOARD_LOAD_ESTIMATE_KEY: "skillmate-dashboard-load-estimate-ms-v1",
     dashboardLoadingStartedAt: 0,
     dashboardLoadingProgress: 10,
     dashboardLoadingPhase: "Checking your session…",

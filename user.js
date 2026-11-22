@@ -1319,7 +1319,10 @@ function parseLocalAppointment(dateValue, timeValue) {
 function renderBookingList(targetId, list, options = {}) {
   const target = document.getElementById(targetId);
   if (!target) return;
-  if (options.provider) list = window.skillmateMarketplace.filterBookings(list, { direction: "received", ownId: ownProviderId() });
+  if (options.provider) {
+    const marketplace = window.skillmateMarketplace || window.skillflexMarketplace;
+    list = marketplace.filterBookings(list, { direction: "received", ownId: ownProviderId() });
+  }
   target.innerHTML = list.length ? list.map((booking) => {
     const provider = getProvider(booking.providerId);
     const status = booking.status;
@@ -2293,7 +2296,8 @@ async function refreshPayoutState(loadBanks = true) {
   }
 }
 function bookingsForActiveFilter() {
-  const bookings = window.skillflexMarketplace.filterBookings(state.bookings, { direction: bookingDirection, filter: activeBookingFilter, ownId: ownProviderId() });
+  const marketplace = window.skillflexMarketplace || window.skillmateMarketplace;
+  const bookings = marketplace.filterBookings(state.bookings, { direction: bookingDirection, filter: activeBookingFilter, ownId: ownProviderId() });
   document.querySelector("#all-booking-count").textContent = String(state.bookings.filter(booking => isOwnBooking(booking) === (bookingDirection === "received")).length);
   const newRequests = state.bookings.filter(booking => isOwnBooking(booking) && booking.status === "Pending" && !booking.providerAcceptedAt).length;
   const requestCount = document.querySelector("[data-booking-request-count]");

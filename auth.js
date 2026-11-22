@@ -357,7 +357,8 @@ async function submitOtpCode(event) {
     }
     if (!session) throw new Error("Your sign-in session could not be restored. Please try again.");
     pendingVerifiedSession = session;
-    await window.syncSkillmateServerSession(session);
+    const syncServerSession = window.syncSkillmateServerSession || window.syncSkillflexServerSession;
+    await syncServerSession(session);
     window.sessionStorage.removeItem("skillmate-google-otp-active");
     sessionOtpStarted = false;
     pendingVerifiedSession = null;

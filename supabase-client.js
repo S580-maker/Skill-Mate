@@ -91,11 +91,17 @@
 
 window.syncSkillflexServerSession = async function syncSkillflexServerSession(session) {
   if (!session?.access_token) throw new Error("Sign in again to continue.");
-  const syncAccessToken = (accessToken) => window.skillflexApi.request("/api/session", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}` },
-    credentials: "same-origin",
-  });
+  const syncAccessToken = (accessToken) => window.skillflexApi
+    ? window.skillflexApi.request("/api/session", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: "same-origin",
+    })
+    : fetch("/api/session", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: "same-origin",
+    });
   let response = await syncAccessToken(session.access_token);
   if (response.status === 401 && session.refresh_token && window.skillflexSupabase) {
     const { data, error } = await window.skillflexSupabase.auth.refreshSession({
@@ -123,6 +129,7 @@ window.syncSkillflexServerSession = async function syncSkillflexServerSession(se
     throw error;
   }
 };
+window.syncSkillmateServerSession = window.syncSkillflexServerSession;
 
 let serverSessionClearPromise = null;
 
@@ -141,6 +148,7 @@ window.clearExpiredSkillflexSession = async function clearExpiredSkillflexSessio
     console.error("Could not clear the expired Skill Flex server session.", error);
   }
 };
+window.clearExpiredSkillmateSession = window.clearExpiredSkillflexSession;
 
 window.clearSkillflexServerSession = function clearSkillflexServerSession() {
   if (!serverSessionClearPromise) {
