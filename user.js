@@ -4286,7 +4286,7 @@ async function startConversation(providerId, text) {
     cacheConversationMessages(state.messages);
     setActiveConversation(conversationId);
     await refreshSupabaseState("messages");
-    return;
+    return { chat, message };
   }
   let chat = state.messages.find((item) => item.providerId === providerId);
   if (!chat) {

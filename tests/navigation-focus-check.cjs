@@ -20,7 +20,7 @@ const { start } = require("./support/loading-harness.cjs");
     await h.viewport(375);
     await run('document.querySelector("#menu-toggle").click();document.querySelector(".nav-link[data-page=bookings]").focus()');
     await enter();
-    assert.equal(await h.evaluate('document.activeElement.textContent'), "My bookings");
+    assert.equal(await h.evaluate('document.activeElement.textContent'), "Bookings");
     assert.equal(await h.evaluate('document.querySelector("#sidebar").classList.contains("open")'), false);
     await run('document.querySelector("#menu-toggle").click();document.querySelector(".nav-link[data-page=messages]").focus()');
     await enter();

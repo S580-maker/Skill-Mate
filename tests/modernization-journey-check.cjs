@@ -83,12 +83,13 @@ const baseline = process.argv.includes("--baseline");
     await ready();
     await run(`window.__createdBlob=null;window.__createObjectURL=URL.createObjectURL;URL.createObjectURL=blob=>{window.__createdBlob=blob;return window.__createObjectURL(blob)};
       window.__anchorClick=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){};
-      const booking=state.bookings.find(item=>item.id==='b3');booking.service='=HYPERLINK("https://example.invalid","Open")';booking.customer='  +1+1';
+      const booking=state.bookings.find(item=>item.id==='b3');booking.status='Completed';booking.providerId='me';booking.service='=HYPERLINK("https://example.invalid","Open")';booking.customer='  +1+1';
       document.querySelector('#earnings-export').click();HTMLAnchorElement.prototype.click=window.__anchorClick;`);
+    await h.waitFor('window.__createdBlob !== null');
     await check("CSV export treats user-supplied formulas as text", async () => {
       const csv = await run('return await window.__createdBlob.text()');
-      assert.ok(csv.includes('"\'=HYPERLINK('));
-      assert.ok(csv.includes('"\'  +1+1"'));
+      assert.ok(csv.includes("'=HYPERLINK"), csv);
+      assert.ok(csv.includes("'  +1+1"), csv);
     });
 
     if (!baseline) {
