@@ -4,7 +4,21 @@ const { start } = require("./support/loading-harness.cjs");
 (async () => {
   const h = await start();
   const run = source => h.evaluate(`(async()=>{${source}})()`);
-  const ready = () => h.waitFor('!document.body.classList.contains("app-auth-pending")');
+  const ready = async () => {
+    try {
+      await h.waitFor('!document.body.classList.contains("app-auth-pending")');
+    } catch (error) {
+      const state = await h.evaluate(`(() => ({
+        pending: document.body.classList.contains("app-auth-pending"),
+        appHidden: document.querySelector("#app-shell")?.hidden,
+        statusHidden: document.querySelector("#app-auth-status")?.hidden,
+        bodyText: document.body.innerText.slice(0, 1000),
+      }))()`);
+      console.error("Journey startup state:", state);
+      console.error("Journey page errors:", h.pageErrors);
+      throw error;
+    }
+  };
   const pressKey = async (key, keyCode) => {
     await h.call("Input.dispatchKeyEvent", { type: "keyDown", key, code: key, windowsVirtualKeyCode: keyCode, ...(key === "Enter" ? { text: "\r" } : {}) });
     await h.call("Input.dispatchKeyEvent", { type: "keyUp", key, code: key, windowsVirtualKeyCode: keyCode });
@@ -13,9 +27,7 @@ const { start } = require("./support/loading-harness.cjs");
     for (const width of [320, 375, 768, 1280, 1920]) {
       await h.viewport(width);
       await h.open("index.html#bookings"); await ready();
-      assert.ok(await h.evaluate('document.querySelector(".booking-next-action").textContent.includes("Provider")'));
-      await run('document.querySelector(".booking-contract").open=true');
-      assert.ok(await h.evaluate('document.querySelector(".booking-contract").textContent.includes("Appointment")'));
+      assert.ok(await h.evaluate('document.querySelector(".booking-card")?.innerText.includes("Awaiting confirmation")'));
       await run('await openProviderProfile("p1","s1")');
       assert.ok(await h.evaluate('document.querySelector(".provider-evidence").textContent.includes("does not guarantee service quality")'));
       await run('document.querySelector("[data-showcase-jump=reviews]").click()');

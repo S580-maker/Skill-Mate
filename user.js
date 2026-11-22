@@ -101,7 +101,7 @@ const defaultState = {
   },
 };
 let state = loadState();
-const appSupabase = window.skillmateSupabase;
+const appSupabase = window.skillflexSupabase;
 let payoutState = null;
 let payoutBanks = [];
 let payoutWithdrawalInFlight = false;
@@ -1203,7 +1203,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
   if (newestFirst && targetId !== "saved-grid") visible.sort((left, right) => (Date.parse(right.createdAt) || 0) - (Date.parse(left.createdAt) || 0));
   if (targetId === "recent-grid") visible = latestMarketplaceListings(visible);
   const featuredRequests = targetId === "marketplace-grid" && !query && selectedCategory === "All" && !newestFirst
-    ? window.skillmateGrowth?.featuredRequests() || [] : [];
+    ? window.skillflexGrowth?.featuredRequests() || [] : [];
   if (targetId === "marketplace-grid") {
     const serviceCount = `${visible.length} ${visible.length === 1 ? "service" : "services"}`;
     document.querySelector("#marketplace-result-count").textContent = featuredRequests.length
@@ -1228,7 +1228,7 @@ function renderMarketplace(targetId = "marketplace-grid", providers = appSupabas
         <div class="provider-card-footer"><span class="price"><small>Price</small>${escapeHTML(servicePriceLabel(provider))}</span>${provider.id === appUser?.id ? '<span class="own-listing-label">Your listing</span>' : `<span class="card-actions"><button type="button" class="icon-button card-message" data-message="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}" aria-label="Message ${escapeHTML(provider.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12 7.7L3 21l1.8-6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 11h8"/></svg></button><button type="button" class="button button-small button-primary" data-book="${escapeHTML(provider.id)}" data-service="${escapeHTML(provider.serviceId || "")}">${provider.priceType === "range" ? "Request a quote" : "Request booking"}</button></span>`}</div>
       </div>
     </article>`).join("");
-  const requestCards = featuredRequests.map(request => window.skillmateGrowth.featuredRequestCard(request)).join("");
+  const requestCards = featuredRequests.map(request => window.skillflexGrowth.featuredRequestCard(request)).join("");
   const emptyCard = `<div class="empty-card"><span aria-hidden="true">⌕</span><strong>${targetId === "saved-grid" ? "Your shortlist starts here" : "No services found"}</strong><small>${targetId === "saved-grid" ? "Tap the heart on a service to save its provider for later." : "Try another skill or browse all categories."}</small><button class="button button-outline" type="button" ${targetId === "saved-grid" ? 'data-page-link="home"' : 'data-clear-search'}>Explore services</button></div>`;
   target.innerHTML = serviceCards || requestCards ? `${serviceCards}${requestCards}` : emptyCard;
   if (targetId === "recent-grid" && !visible.length) target.innerHTML = '<p class="recent-empty">No recently published services to show yet.</p>';
@@ -1339,7 +1339,7 @@ function renderBookingList(targetId, list, options = {}) {
     const customerCanCancel = !booking.groupId && !booking.providerAcceptedAt
       && (status === "Pending" || status === "Confirmed" && ["not_due", "legacy"].includes(booking.paymentStatus));
     const actions = providerView
-      ? `${providerCanCancelUnpaid ? `<button class="button button-small button-outline" data-cancel-unpaid-booking="${escapeHTML(booking.id)}">Cancel booking</button>` : acceptedAwaitingPayment ? "" : booking.status === "Pending" ? `${appointmentProposalPending ? "" : `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button>`}<button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : ["Confirmed", "In progress"].includes(booking.status) ? `${booking.status === "Confirmed" && window.skillmateGrowth?.canStartWork() ? `<button class="button button-small button-primary" data-decision="In progress" data-booking-id="${escapeHTML(booking.id)}">Start work</button>` : ""}<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : ""}${["Pending", "Confirmed"].includes(status) && !appointmentProposalPending && !acceptedAwaitingPayment ? `<button class="subtle-button" data-propose-appointment="${escapeHTML(booking.id)}">Suggest another time</button>` : ""}<button class="subtle-button" data-booking-message="${escapeHTML(booking.id)}">Message</button>`
+      ? `${providerCanCancelUnpaid ? `<button class="button button-small button-outline" data-cancel-unpaid-booking="${escapeHTML(booking.id)}">Cancel booking</button>` : acceptedAwaitingPayment ? "" : booking.status === "Pending" ? `${appointmentProposalPending ? "" : `<button class="button button-small button-primary" data-decision="Confirmed" data-booking-id="${escapeHTML(booking.id)}">Accept</button>`}<button class="button button-small button-outline" data-decision="Declined" data-booking-id="${escapeHTML(booking.id)}">Decline</button>` : ["Confirmed", "In progress"].includes(booking.status) ? `${booking.status === "Confirmed" && window.skillflexGrowth?.canStartWork() ? `<button class="button button-small button-primary" data-decision="In progress" data-booking-id="${escapeHTML(booking.id)}">Start work</button>` : ""}<button class="button button-small button-outline" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Mark complete</button>` : ""}${["Pending", "Confirmed"].includes(status) && !appointmentProposalPending && !acceptedAwaitingPayment ? `<button class="subtle-button" data-propose-appointment="${escapeHTML(booking.id)}">Suggest another time</button>` : ""}<button class="subtle-button" data-booking-message="${escapeHTML(booking.id)}">Message</button>`
       : `${canPay ? `<button class="button button-small button-primary" data-payment-booking-id="${escapeHTML(booking.id)}">${booking.paymentStatus === "failed" ? "Retry payment" : "Pay now"}</button>` : ""}${canCheckPayment ? `<button class="button button-small button-outline" data-check-payment-booking-id="${escapeHTML(booking.id)}">Check payment</button>` : ""}${status === "Awaiting verification" ? `<button class="button button-small button-primary" data-decision="Completed" data-booking-id="${escapeHTML(booking.id)}">Verify completion</button>` : ""}${status === "Completed" && !booking.reviewed ? `<button class="button button-small button-primary review-required-button" data-review="${escapeHTML(booking.id)}">Leave review</button>` : ""}${appointmentProposalPending ? `<button class="button button-small button-primary" data-appointment-response="accept" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Accept suggested time</button><button class="button button-small button-outline" data-appointment-response="reject" data-proposal-id="${escapeHTML(booking.pendingAppointmentProposalId)}">Keep original time</button>` : ""}${customerCanCancel ? `<button class="subtle-button" data-decision="Cancelled" data-booking-id="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}${customerCanCancelUnpaid ? `<button class="subtle-button" data-cancel-customer-unpaid-booking="${escapeHTML(booking.id)}">Cancel booking</button>` : ""}`;
     const statusLabel = status === "Awaiting verification"
       ? providerView ? "Awaiting client verification" : "Verify completion"
@@ -1354,7 +1354,7 @@ function renderBookingList(targetId, list, options = {}) {
           : booking.paymentStatus === "action_required" ? "payment-needs-attention" : "awaiting-payment"
       : status.toLowerCase().replaceAll(" ", "-");
     const repeatAction = !providerView && status === "Completed" ? `<button class="button button-small button-outline" data-rebook="${escapeHTML(booking.id)}">Book again</button>` : "";
-    const progress = window.skillmateGrowth?.progress(booking, providerView) || "";
+    const progress = window.skillflexGrowth?.progress(booking, providerView) || "";
     const paymentNotice = bookingPaymentNotices.get(booking.id);
     const priceChatAction = booking.priceNegotiationId
       ? `<button class="subtle-button" data-negotiation-chat="${escapeHTML(booking.priceNegotiationId)}">Open price chat</button>` : "";
@@ -3708,7 +3708,7 @@ function showPage(page, options = {}) {
   }
   state.activePage = page;
   if (page === "earnings") void refreshPayoutState();
-  if (["home", "requests"].includes(page)) window.skillmateGrowth?.refreshBoard();
+  if (["home", "requests"].includes(page)) window.skillflexGrowth?.refreshBoard();
   document.querySelector(".account-menu")?.removeAttribute("open");
   renderMarketplaceActivity();
     window.skillflexGrowth?.render();
