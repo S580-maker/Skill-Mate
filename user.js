@@ -3221,6 +3221,16 @@ async function persistBookingStatus(bookingId, status) {
       const result = await requestSkillmatePayment("/api/payments/verify", {
         reference: booking.latestPaymentReference,
       });
+      if (result.status === "failed") {
+        const currentBooking = state.bookings.find(item => item.id === booking.id) || booking;
+        if (!isTerminalBookingStatus(currentBooking) && isBookingAwaitingPayment(currentBooking)) {
+          currentBooking.paymentStatus = "failed";
+          currentBooking.latestPaymentStatus = "failed";
+          renderAll();
+        }
+        showToast("Payment failed. You can try again from this booking.", "error");
+        return;
+      }
       await refreshSupabaseState("bookings");
       const currentBooking = state.bookings.find(item => item.id === booking.id);
       if (isTerminalBookingStatus(currentBooking)) {
@@ -3232,9 +3242,7 @@ async function persistBookingStatus(bookingId, status) {
         ? "Payment confirmed. Your booking is confirmed."
         : result.status === "processing"
           ? "Payment is processing. Check again shortly."
-          : result.status === "failed"
-            ? "Payment failed. You can retry from the booking."
-            : "Payment status updated.", result.status === "paid" ? "success" : "info");
+          : "Payment status updated.", result.status === "paid" ? "success" : "info");
     } catch (error) {
       console.error("Could not check the Skillmate booking payment.", error);
       showToast(error.message || "Could not check this payment right now.", "error");

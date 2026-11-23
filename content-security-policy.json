@@ -1,6 +1,7 @@
 {
   "default-src": ["'self'"],
-  "script-src": ["'self'"],
+  "script-src": ["'self'", "https://js.paystack.co"],
+  "frame-src": ["https://checkout.paystack.com"],
   "script-src-attr": ["'none'"],
   "style-src": ["'self'", "'unsafe-inline'"],
   "img-src": ["'self'", "data:", "blob:", "https:"],
@@ -10,6 +11,6 @@
   "worker-src": ["'self'"],
   "object-src": ["'none'"],
   "base-uri": ["'self'"],
-  "form-action": ["'self'"],
+  "form-action": ["'self'", "https://checkout.paystack.com"],
   "frame-ancestors": ["'self'"]
 }

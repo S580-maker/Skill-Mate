@@ -31,6 +31,13 @@ test("loading placeholders preserve existing content and clean up on success or 
   }
 });
 
+test("home startup placeholder does not show a skeleton for the welcome illustration", () => {
+  const context = { window: {}, document: {} };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "loading-ui.js"), "utf8"), context);
+  const home = context.window.skillflexLoading.pageMarkup("home");
+  assert.doesNotMatch(home, /sk-welcome-art|sk dashboard-welcome-illustration/);
+});
+
 test("loading ownership cancels obsolete timers and never steals focus or deletes cached content", () => {
   const timers = new Map(); let id = 0;
   const children = [], attributes = {};

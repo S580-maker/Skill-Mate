@@ -5,7 +5,9 @@ const vercel = require("../vercel.json");
 
 test("hosted and Express production CSP agree and block executable inline content", () => {
   const policy = contentSecurityPolicy({ production: true, supabaseUrl: "https://example.supabase.co" });
-  assert.deepEqual(policy["script-src"], ["'self'"]);
+  assert.deepEqual(policy["script-src"], ["'self'", "https://js.paystack.co"]);
+  assert.deepEqual(policy["frame-src"], ["https://checkout.paystack.com"]);
+  assert.deepEqual(policy["form-action"], ["'self'", "https://checkout.paystack.com"]);
   assert.deepEqual(policy["script-src-attr"], ["'none'"]);
   assert.deepEqual(policy["object-src"], ["'none'"]);
   assert.ok(policy["connect-src"].includes("wss:"));

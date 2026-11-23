@@ -345,6 +345,11 @@ async function main() {
     await evaluate('appUser={id:"provider-fixture"};renderBookingList("user-booking-list",state.bookings,{provider:true})');
     assert.equal(await evaluate('document.querySelector("#user-booking-list [data-booking-card-id=\\"accepted-unpaid-fixture\\"] .status").textContent'), "Cancelled", "The provider sees the cancelled booking too");
     assert.equal(await evaluate('document.querySelector("#user-booking-list [data-booking-card-id=\\"accepted-unpaid-fixture\\"]").classList.contains("booking-card-cancelled")'), true);
+    await evaluate(`(()=>{const booking=state.bookings[0];booking.status="Pending";booking.providerAcceptedAt="2026-11-11T13:03:00Z";booking.paymentStatus="processing";booking.latestPaymentStatus="pending";booking.latestPaymentReference="test-reference";appUser={id:"customer-fixture"};window.__paymentVerifyResult="failed";renderBookingList("user-booking-list",[booking])})()`);
+    await evaluate('document.querySelector("#user-booking-list [data-check-payment-booking-id]").click()');
+    await wait(100);
+    assert.equal(await evaluate('document.querySelector("#user-booking-list [data-payment-booking-id]")?.textContent'), "Retry payment", "A confirmed failed payment immediately offers a retry");
+    assert.equal(await evaluate('document.querySelector("#toast").textContent'), "Payment failed. You can try again from this booking.", "A failed payment tells the customer they can retry");
     await evaluate('appUser={id:"customer-fixture"};renderBookingList("user-booking-list",state.bookings)');
     await evaluate(`(()=>{const booking=state.bookings[0];booking.status="Confirmed";booking.paymentStatus="paid";renderBookingList("user-booking-list",[booking])})()`);
     assert.equal(await evaluate('document.querySelector("#user-booking-list [data-booking-card-id=\\"accepted-unpaid-fixture\\"] .status").textContent'), "Confirmed");
