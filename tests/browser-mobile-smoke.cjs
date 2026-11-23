@@ -793,7 +793,7 @@ async function main() {
   const restoredDiscoverScroll = await evaluate("window.scrollY");
   assert.ok(Math.abs(restoredDiscoverScroll - savedDiscoverScroll) <= 3,
     `Browser Back restores the previous section's scroll position (${restoredDiscoverScroll} vs ${savedDiscoverScroll})`);
-  assert.equal(await evaluate("document.title"), "Discover | Skillmate", "Restored sections retain a matching page title");
+  assert.equal(await evaluate("document.title"), "Discover | Skill Flex", "Restored sections retain a matching page title");
   await evaluate('showPage("profile-settings")');
   await evaluate('showPage("home");renderAll()');
   assert.equal(await evaluate('document.querySelector("#verification-cta").hidden'), false, "Unverified students see the campus verification prompt");
