@@ -817,6 +817,7 @@ async function protectAdminDashboard() {
     );
     document.body.classList.remove("admin-locked");
     document.body.classList.add("admin-ready");
+    document.querySelector("#admin-auth-gate")?.removeAttribute("aria-busy");
     adminStatus.hidden = true;
     refreshAdminNotificationBadge();
     document.querySelector("#demand-gap-refresh").addEventListener("click", refreshAdminDemandGaps);
