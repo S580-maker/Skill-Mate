@@ -20,9 +20,9 @@
     return match ? Math.max(1, Number(match[1])) : 30;
   }
 
-  async function requestAuth(url, options) {
+  async function requestAuth(url, options, config) {
     try {
-      return await root.skillflexApi.request(url, options);
+      return await root.skillflexApi.request(url, options, config);
     } catch (error) {
       if (error?.name === "TimeoutError") {
         throw new Error("That request took too long. Check your connection, then try again.", { cause: error });

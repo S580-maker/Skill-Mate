@@ -464,6 +464,18 @@ async function main() {
     assert.equal(await evaluate('sessionStorage.getItem("skillflex-google-otp-pending")'), null);
     assert.equal(await evaluate('new URL(location.href).searchParams.has("skillflex-google-otp")'), false);
   };
+  const verifyStaleGoogleOtpCallback = async () => {
+    await evaluate('window.__googleSessionMissing=false');
+    await evaluate('sessionStorage.setItem("skillflex-google-otp-active","1")');
+    await navigate("login.html?skillflex-google-otp=1");
+    assert.equal(await evaluate('sessionStorage.getItem("skillflex-google-otp-active")'), null, "A new OAuth callback clears the stale active flag");
+    await evaluate('sessionStorage.setItem("skillflex-google-otp-pending","1");redirectForSession({access_token:"google-access",refresh_token:"google-refresh",expires_in:3600})');
+    await wait(100);
+    assert.equal(await evaluate('sessionStorage.getItem("skillflex-google-otp-active")'), "1", "The active flag is restored only after starting a new challenge");
+    assert.equal(await evaluate('window.__googleOtpCalls.length'), 1);
+    assert.equal(await evaluate('document.querySelector("#auth-otp").hidden'), false, "A stale Google verification flag does not block the callback challenge");
+    await evaluate('sessionStorage.removeItem("skillflex-google-otp-active");sessionStorage.removeItem("skillflex-google-otp-pending")');
+  };
   await call("Page.enable"); await call("Runtime.enable"); await call("Network.enable");
   await call("Page.bringToFront");
   await call("Network.setBlockedURLs", { urls: ["*supabase.co*", "*supabase.in*", "*fonts.googleapis.com*", "*fonts.gstatic.com*"] });
@@ -615,6 +627,7 @@ async function main() {
     await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await verifyGoogleOtpFlow();
     await verifyMissingGoogleSessionFeedback();
+    await verifyStaleGoogleOtpCallback();
     console.log("PASS Google sign-in: OAuth, six-digit verification and preserved-session app entry");
     return;
   }

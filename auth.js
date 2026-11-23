@@ -18,6 +18,7 @@ const googleOtpCallbackParam = "skillflex-google-otp";
 
 if (new URLSearchParams(window.location.search).get(googleOtpCallbackParam) === "1") {
   window.sessionStorage.setItem("skillflex-google-otp-pending", "1");
+  window.sessionStorage.removeItem("skillflex-google-otp-active");
 }
 
 function clearGoogleOtpCallbackParams() {
@@ -88,7 +89,7 @@ async function startSessionOtp(session) {
         expires_at: session.expires_at,
         token_type: session.token_type,
       }),
-    });
+    }, { timeout: 60000 });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Could not start email verification.");
     if (result.verified) {
@@ -130,7 +131,7 @@ async function startGoogleOtp(session) {
         expires_at: session.expires_at,
         token_type: session.token_type,
       }),
-    });
+    }, { timeout: 60000 });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Could not start Google verification.");
     window.sessionStorage.removeItem("skillflex-google-otp-pending");
@@ -359,7 +360,7 @@ async function submitOtpCode(event) {
     pendingVerifiedSession = session;
     const syncServerSession = window.syncSkillmateServerSession || window.syncSkillflexServerSession;
     await syncServerSession(session);
-    window.sessionStorage.removeItem("skillmate-google-otp-active");
+    window.sessionStorage.removeItem("skillflex-google-otp-active");
     sessionOtpStarted = false;
     pendingVerifiedSession = null;
     verificationSucceeded = true;

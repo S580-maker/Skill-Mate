@@ -65,12 +65,17 @@ test("auth timeouts use actionable feedback and preserve HTTP failures for calle
   const timer = setTimeout(() => {}, 1000);
   try {
     let calls = 0;
-    const { context } = fixture((_url, { signal }) => {
+    const { context, deadlines } = fixture((_url, { signal }) => {
       calls++;
       return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
     });
-    await assert.rejects(context.skillflexAuthUtils.requestAuth("/api/auth/sign-in", { method: "POST" }), /took too long.*try again/);
+    await assert.rejects(context.skillflexAuthUtils.requestAuth(
+      "/api/auth/google-2fa",
+      { method: "POST" },
+      { timeout: 60000 },
+    ), /took too long.*try again/);
     assert.equal(calls, 1);
+    assert.deepEqual(deadlines, [60000]);
     const errorResponse = new Response('{"error":"Too many requests"}', { status: 429 });
     const failed = fixture(async () => errorResponse);
     assert.equal(await failed.context.skillflexAuthUtils.requestAuth("/api/auth/sign-in", { method: "POST" }), errorResponse);
