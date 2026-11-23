@@ -26,7 +26,7 @@ as $$
 begin
   insert into public.notifications (user_id, kind, title, body, target_path, conversation_id)
   select member.user_id, 'message', 'New messages',
-    'Open Skillmate to read your unread messages.', 'messages', new.conversation_id
+    'Open Skill Flex to read your new message.', 'messages', new.conversation_id
   from public.conversation_members member
   join public.profiles recipient on recipient.id = member.user_id and recipient.notify_messages
   where member.conversation_id = new.conversation_id

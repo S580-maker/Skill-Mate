@@ -3517,6 +3517,8 @@ async function runAction(action, failureMessage, loadingMessage = "Saving your c
 function showConnectedApp() {
   const status = document.querySelector("#app-auth-status");
   finishDashboardLoading();
+  document.querySelector("#dashboard-loading-skeleton")?.removeAttribute("aria-busy");
+  document.querySelector("#dashboard-loading-skeleton")?.removeAttribute("aria-label");
   document.body.classList.remove("app-auth-pending");
   document.querySelector("#app-shell").hidden = false;
   status.hidden = true;

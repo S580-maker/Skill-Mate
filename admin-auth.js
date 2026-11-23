@@ -438,6 +438,7 @@ async function fetchSupportTickets() {
     const { data, error, count } = await adminClient.from("support_tickets")
       .select("id, user_id, category, message, status, screenshot_url, created_at", { count: "exact" })
       .in("status", ["open", "reviewing"]).order("created_at", { ascending: true }).limit(50);
+    if (requestId !== supportTicketsRequest) return;
     if (error) throw error;
     updateAdminNavCount("support-tickets", count);
     rows.replaceChildren();
@@ -629,13 +630,24 @@ async function fetchAdminDashboard() {
     : null);
   updateAdminNavCount("verification", verificationCount);
   updateAdminNavCount("safety", openReportCount);
-  document.querySelector(".welcome-row .demo-pill").textContent = "LIVE DATA";
-  document.querySelector("#admin-date").firstChild.textContent = new Date().toLocaleDateString("en-GB", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
-  document.querySelector(".welcome-row h1").textContent = `${timeOfDay}, ${firstName}`;
-  document.querySelector(".profile-copy strong").textContent = window.adminProfile.full_name;
-  document.querySelector(".profile-avatar").textContent = initials(window.adminProfile.full_name);
+  const demoPill = document.querySelector(".welcome-row .demo-pill");
+  if (demoPill) demoPill.textContent = "LIVE DATA";
+  const adminDate = document.querySelector("#admin-date");
+  if (adminDate) {
+    if (!adminDate.firstChild) adminDate.append(document.createTextNode(""));
+    adminDate.firstChild.textContent = new Date().toLocaleDateString("en-GB", {
+      weekday: "long", day: "numeric", month: "long", year: "numeric",
+    });
+  }
+  const overviewTitle = document.querySelector(".welcome-row h1");
+  const hour = new Date().getHours();
+  const timeOfDay = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const firstName = String(window.adminProfile?.full_name || "Admin").trim().split(/\s+/)[0] || "Admin";
+  if (overviewTitle) overviewTitle.textContent = `${timeOfDay}, ${firstName}`;
+  const profileName = document.querySelector(".profile-copy strong");
+  if (profileName) profileName.textContent = window.adminProfile.full_name;
+  const profileAvatar = document.querySelector(".profile-avatar");
+  if (profileAvatar) profileAvatar.textContent = initials(window.adminProfile.full_name);
   const rows = bookings.data || [];
   document.querySelector("#booking-rows").innerHTML = rows.length ? rows.map((booking) => {
     const customer = booking.customer?.full_name || "Student account";

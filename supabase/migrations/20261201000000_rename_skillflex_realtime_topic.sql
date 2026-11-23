@@ -43,16 +43,27 @@ set search_path = ''
 as $$
 begin
   insert into public.notifications (user_id, kind, title, body, target_path, conversation_id)
-  select member.user_id, 'message', 'New message', 'Open Skill Flex to read your new message.',
+  select member.user_id, 'message', 'New messages', 'Open Skill Flex to read your new message.',
     'messages', new.conversation_id
   from public.conversation_members member
   join public.profiles recipient on recipient.id = member.user_id and recipient.notify_messages
   where member.conversation_id = new.conversation_id
-    and member.user_id <> new.sender_id;
+    and member.user_id <> new.sender_id
+  on conflict (user_id, conversation_id)
+    where kind = 'message' and conversation_id is not null
+    do update set
+      title = excluded.title,
+      body = excluded.body,
+      target_path = excluded.target_path,
+      read_at = null,
+      created_at = now();
   return new;
 end;
 $$;
 
 update public.notifications
-set body = 'Open Skill Flex to read your new message.'
-where kind = 'message' and body is distinct from 'Open Skill Flex to read your new message.';
+set title = 'New messages',
+    body = 'Open Skill Flex to read your new message.'
+where kind = 'message'
+  and (title is distinct from 'New messages'
+    or body is distinct from 'Open Skill Flex to read your new message.');

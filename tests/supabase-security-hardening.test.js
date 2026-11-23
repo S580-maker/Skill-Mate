@@ -38,7 +38,7 @@ test("performance migration keeps message evidence and avoids copying message te
   assert.match(performanceMigration, /revoke delete on public\.messages from authenticated/);
   assert.match(performanceMigration, /create trigger preserve_chat_message_evidence/);
   assert.match(performanceMigration, /create trigger preserve_chat_conversation_evidence/);
-  assert.match(performanceMigration, /'Open Skillmate to read your new message\.'/);
+  assert.match(performanceMigration, /'Open Skill Flex to read your new message\.'/);
   assert.match(performanceMigration, /conversation_id uuid references public\.conversations\(id\) on delete set null/);
   assert.match(performanceMigration, /update public\.notifications[\s\S]*where kind = 'message'/);
 });

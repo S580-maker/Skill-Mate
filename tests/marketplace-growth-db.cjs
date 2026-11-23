@@ -5,6 +5,7 @@ const path = require("node:path");
 const assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "..");
 const db = new PGlite();
+const renameMigration = fs.readFileSync(path.join(root, "supabase", "migrations", "20261201000000_rename_skillflex_realtime_topic.sql"), "utf8");
 const users = {
   provider: "11111111-1111-4111-8111-111111111111",
   customer: "22222222-2222-4222-8222-222222222222",
@@ -46,6 +47,7 @@ async function main() {
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261107120000_client_completion_verification.sql"), "utf8"));
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261108180000_admin_moderation.sql"), "utf8"));
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261110120000_paystack_test_payments.sql"), "utf8"));
+  await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261111100000_marketplace_journey.sql"), "utf8"));
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261111120000_cancel_unpaid_bookings.sql"), "utf8"));
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261111130000_accept_booking_requests.sql"), "utf8"));
   await db.exec(fs.readFileSync(path.join(root, "supabase/migrations/20261111140000_finalize_verified_payments.sql"), "utf8"));
@@ -876,10 +878,10 @@ async function main() {
 
   // A complete negotiated booking across real customer/provider security contexts.
   await db.exec("reset role");
-  const negotiatedService = (await rows("insert into public.services(provider_id,title,category,description,price,currency,negotiation_mode) values($1,'Laptop consultation','Tech help','One hour of setup help.',80,'GHS','negotiation') returning id", [users.provider]))[0].id;
+  const negotiatedBookingService = (await rows("insert into public.services(provider_id,title,category,description,price,currency,negotiation_mode) values($1,'Laptop consultation','Tech help','One hour of setup help.',80,'GHS','negotiation') returning id", [users.provider]))[0].id;
   await asUser("customer");
   const bookingConversation = (await rows("select public.start_conversation($1) as id", [users.provider]))[0].id;
-  const negotiation = (await rows("select public.create_price_negotiation($1,$2,65,'One hour of setup help.') as id", [negotiatedService, bookingConversation]))[0].id;
+  const negotiation = (await rows("select public.create_price_negotiation($1,$2,65,'One hour of setup help.') as id", [negotiatedBookingService, bookingConversation]))[0].id;
   const offer = (await rows("select id from public.price_offers where negotiation_id=$1", [negotiation]))[0].id;
   await rejects("select public.decide_price_offer($1,'accept')", [offer], /offer|own|respond/i);
   await asUser("provider");
@@ -892,7 +894,9 @@ async function main() {
   const duplicate = (await rows("select (public.create_booking_from_price_agreement($1,$2,'Retry','On campus')).id as id", [negotiation, `${day}T11:00:00Z`]))[0].id;
   assert.equal(duplicate, agreed.id, "retrying an agreement returns the same booking");
   await asUser("provider");
-  await db.query("select public.update_booking_status($1,'confirmed')", [agreed.id]);
+  await db.exec("reset role");
+  await db.query("update public.bookings set status='confirmed', payment_status='paid' where id=$1", [agreed.id]);
+  await asUser("provider");
   await db.query("select public.start_booking_work($1)", [agreed.id]);
   await db.query("select public.update_booking_status($1,'completed')", [agreed.id]);
   await asUser("customer");

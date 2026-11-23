@@ -12,7 +12,7 @@ set search_path = ''
 as $$
 begin
   insert into public.notifications (user_id, kind, title, body, target_path, conversation_id)
-  select member.user_id, 'message', 'New message', 'Open Skillmate to read your new message.',
+  select member.user_id, 'message', 'New message', 'Open Skill Flex to read your new message.',
     'messages', new.conversation_id
   from public.conversation_members member
   join public.profiles recipient on recipient.id = member.user_id and recipient.notify_messages
@@ -23,8 +23,8 @@ end;
 $$;
 
 update public.notifications
-set body = 'Open Skillmate to read your new message.'
-where kind = 'message' and body is distinct from 'Open Skillmate to read your new message.';
+set body = 'Open Skill Flex to read your new message.'
+where kind = 'message' and body is distinct from 'Open Skill Flex to read your new message.';
 
 drop policy if exists "Message senders delete their own messages" on public.messages;
 revoke delete on public.messages from authenticated;
