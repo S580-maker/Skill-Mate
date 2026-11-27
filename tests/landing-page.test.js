@@ -40,7 +40,8 @@ test("public homepage serves without a session while existing app routes remain 
     for (const asset of ["/landing.css", "/landing.js", "/aurora.css", "/aurora.js"]) {
       assert.equal((await fetch(base + asset)).status, 200, asset);
     }
-    assert.equal((html.match(/data-aurora/g) || []).length, 4);
+    // The noticeboard redesign replaced the ambient aurora backgrounds.
+    assert.equal((html.match(/data-aurora/g) || []).length, 0);
     assert.match(html, /landing-home\.css/);
     assert.equal((await fetch(base + "/landing-home.css")).status, 200);
     const aurora = await (await fetch(base + "/aurora.css")).text();
